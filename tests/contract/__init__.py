@@ -1,0 +1,1 @@
+# Contract-level tests for CAP-MAS

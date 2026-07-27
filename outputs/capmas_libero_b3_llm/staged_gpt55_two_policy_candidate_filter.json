@@ -1,0 +1,2495 @@
+{
+  "arbitrations": {
+    "sg_abort_mission": {
+      "considered": [
+        {
+          "candidate_id": "sg_abort_mission:policy-0:0",
+          "confidence": 0.5,
+          "evidence": null,
+          "parent_scene_version": 0,
+          "producer_agent": "policy-0",
+          "rationale": "",
+          "subgraph": {
+            "assigned_agent": "mission_manager",
+            "bindings": [],
+            "checkpoints": [
+              {
+                "name": "abort_mission_verified",
+                "predicates": [
+                  "mission is classified as failed within declared topology"
+                ],
+                "validate": true,
+                "weight": 1.0
+              }
+            ],
+            "description": "Terminal failure state for unmet prerequisites, unsafe transfer bounds, or failed verification.",
+            "edges": [],
+            "entry_node": "abort_mission_action",
+            "failure_nodes": [
+              "abort_mission_action"
+            ],
+            "inputs": [],
+            "loops": [],
+            "nodes": [
+              {
+                "description": "Open the gripper and declare the mission failed within the declared topology.",
+                "inputs": [],
+                "max_duration_ms": 2000,
+                "max_sim_steps": 120,
+                "node_id": "abort_mission_action",
+                "node_type": "action",
+                "outputs": [],
+                "postconditions": [
+                  "mission is classified as failed within declared topology"
+                ],
+                "preconditions": [],
+                "proposed_by": "mission_manager",
+                "recovery_policy": "terminal_failure",
+                "resources": [
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "robot_arm"
+                  },
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "gripper"
+                  }
+                ],
+                "skill_calls": [
+                  {
+                    "args": {},
+                    "skill": {
+                      "skill_id": "open_gripper",
+                      "version": "capx-compat-1"
+                    }
+                  }
+                ]
+              }
+            ],
+            "output_bindings": [],
+            "outputs": [],
+            "subgoal_id": "abort_mission",
+            "subgraph_id": "sg_abort_mission",
+            "success_nodes": [
+              "abort_mission_action"
+            ]
+          }
+        }
+      ],
+      "rejections": [],
+      "selected": {
+        "candidate_id": "sg_abort_mission:policy-0:0",
+        "confidence": 0.5,
+        "evidence": null,
+        "parent_scene_version": 0,
+        "producer_agent": "policy-0",
+        "rationale": "",
+        "subgraph": {
+          "assigned_agent": "mission_manager",
+          "bindings": [],
+          "checkpoints": [
+            {
+              "name": "abort_mission_verified",
+              "predicates": [
+                "mission is classified as failed within declared topology"
+              ],
+              "validate": true,
+              "weight": 1.0
+            }
+          ],
+          "description": "Terminal failure state for unmet prerequisites, unsafe transfer bounds, or failed verification.",
+          "edges": [],
+          "entry_node": "abort_mission_action",
+          "failure_nodes": [
+            "abort_mission_action"
+          ],
+          "inputs": [],
+          "loops": [],
+          "nodes": [
+            {
+              "description": "Open the gripper and declare the mission failed within the declared topology.",
+              "inputs": [],
+              "max_duration_ms": 2000,
+              "max_sim_steps": 120,
+              "node_id": "abort_mission_action",
+              "node_type": "action",
+              "outputs": [],
+              "postconditions": [
+                "mission is classified as failed within declared topology"
+              ],
+              "preconditions": [],
+              "proposed_by": "mission_manager",
+              "recovery_policy": "terminal_failure",
+              "resources": [
+                {
+                  "mode": "exclusive",
+                  "resource_id": "robot_arm"
+                },
+                {
+                  "mode": "exclusive",
+                  "resource_id": "gripper"
+                }
+              ],
+              "skill_calls": [
+                {
+                  "args": {},
+                  "skill": {
+                    "skill_id": "open_gripper",
+                    "version": "capx-compat-1"
+                  }
+                }
+              ]
+            }
+          ],
+          "output_bindings": [],
+          "outputs": [],
+          "subgoal_id": "abort_mission",
+          "subgraph_id": "sg_abort_mission",
+          "success_nodes": [
+            "abort_mission_action"
+          ]
+        }
+      }
+    },
+    "sg_locate_targets": {
+      "considered": [
+        {
+          "candidate_id": "sg_locate_targets:policy-0:0",
+          "confidence": 0.5,
+          "evidence": null,
+          "parent_scene_version": 0,
+          "producer_agent": "policy-0",
+          "rationale": "",
+          "subgraph": {
+            "assigned_agent": "mission_manager",
+            "bindings": [],
+            "checkpoints": [
+              {
+                "name": "locate_targets_validation",
+                "predicates": [
+                  "akita_black_bowl track is present with confidence 1.0",
+                  "plate track is present with confidence 1.0",
+                  "no ambiguity or staleness is reported for either target"
+                ],
+                "validate": true,
+                "weight": 1.0
+              }
+            ],
+            "description": "Confirm the declared source object akita_black_bowl and destination object plate are present, current, and unambiguous in scene version 0.",
+            "edges": [],
+            "entry_node": "validate_locate_targets",
+            "failure_nodes": [
+              "validate_locate_targets"
+            ],
+            "inputs": [],
+            "loops": [],
+            "nodes": [
+              {
+                "description": "Validate target presence and freshness from the provided scene snapshot.",
+                "inputs": [],
+                "max_duration_ms": 1000,
+                "max_sim_steps": 1,
+                "node_id": "validate_locate_targets",
+                "node_type": "checkpoint",
+                "outputs": [],
+                "postconditions": [
+                  "akita_black_bowl track is present with confidence 1.0",
+                  "plate track is present with confidence 1.0",
+                  "no ambiguity or staleness is reported for either target"
+                ],
+                "preconditions": [
+                  "SceneSnapshot scene_version 0 is available"
+                ],
+                "proposed_by": "cap-mas-local-policy-agent",
+                "recovery_policy": "fail subgoal if any target predicate is not satisfied",
+                "resources": [
+                  {
+                    "mode": "shared",
+                    "resource_id": "scene_snapshot"
+                  }
+                ],
+                "skill_calls": []
+              }
+            ],
+            "output_bindings": [],
+            "outputs": [],
+            "subgoal_id": "locate_targets",
+            "subgraph_id": "sg_locate_targets",
+            "success_nodes": [
+              "validate_locate_targets"
+            ]
+          }
+        },
+        {
+          "candidate_id": "sg_locate_targets:policy-1:1",
+          "confidence": 0.5,
+          "evidence": null,
+          "parent_scene_version": 0,
+          "producer_agent": "policy-1",
+          "rationale": "",
+          "subgraph": {
+            "assigned_agent": "mission_manager",
+            "bindings": [],
+            "checkpoints": [
+              {
+                "name": "locate_targets_scene_snapshot_validation",
+                "predicates": [
+                  "akita_black_bowl track is present with confidence 1.0",
+                  "plate track is present with confidence 1.0",
+                  "no ambiguity or staleness is reported for either target"
+                ],
+                "validate": true,
+                "weight": 1.0
+              }
+            ],
+            "description": "Confirm the declared source object akita_black_bowl and destination object plate are present, current, and unambiguous in scene version 0.",
+            "edges": [],
+            "entry_node": "validate_locate_targets",
+            "failure_nodes": [
+              "validate_locate_targets"
+            ],
+            "inputs": [],
+            "loops": [],
+            "nodes": [
+              {
+                "description": "Validate target presence and freshness from the provided SceneSnapshot.",
+                "inputs": [],
+                "max_duration_ms": 1000,
+                "max_sim_steps": 1,
+                "node_id": "validate_locate_targets",
+                "node_type": "checkpoint",
+                "outputs": [],
+                "postconditions": [
+                  "akita_black_bowl track is present with confidence 1.0",
+                  "plate track is present with confidence 1.0",
+                  "no ambiguity or staleness is reported for either target"
+                ],
+                "preconditions": [],
+                "proposed_by": "local_policy_agent",
+                "recovery_policy": "fail_fast",
+                "resources": [
+                  {
+                    "mode": "shared",
+                    "resource_id": "scene_snapshot"
+                  }
+                ],
+                "skill_calls": []
+              }
+            ],
+            "output_bindings": [],
+            "outputs": [],
+            "subgoal_id": "locate_targets",
+            "subgraph_id": "sg_locate_targets",
+            "success_nodes": [
+              "validate_locate_targets"
+            ]
+          }
+        }
+      ],
+      "rejections": [],
+      "selected": {
+        "candidate_id": "sg_locate_targets:policy-1:1",
+        "confidence": 0.5,
+        "evidence": null,
+        "parent_scene_version": 0,
+        "producer_agent": "policy-1",
+        "rationale": "",
+        "subgraph": {
+          "assigned_agent": "mission_manager",
+          "bindings": [],
+          "checkpoints": [
+            {
+              "name": "locate_targets_scene_snapshot_validation",
+              "predicates": [
+                "akita_black_bowl track is present with confidence 1.0",
+                "plate track is present with confidence 1.0",
+                "no ambiguity or staleness is reported for either target"
+              ],
+              "validate": true,
+              "weight": 1.0
+            }
+          ],
+          "description": "Confirm the declared source object akita_black_bowl and destination object plate are present, current, and unambiguous in scene version 0.",
+          "edges": [],
+          "entry_node": "validate_locate_targets",
+          "failure_nodes": [
+            "validate_locate_targets"
+          ],
+          "inputs": [],
+          "loops": [],
+          "nodes": [
+            {
+              "description": "Validate target presence and freshness from the provided SceneSnapshot.",
+              "inputs": [],
+              "max_duration_ms": 1000,
+              "max_sim_steps": 1,
+              "node_id": "validate_locate_targets",
+              "node_type": "checkpoint",
+              "outputs": [],
+              "postconditions": [
+                "akita_black_bowl track is present with confidence 1.0",
+                "plate track is present with confidence 1.0",
+                "no ambiguity or staleness is reported for either target"
+              ],
+              "preconditions": [],
+              "proposed_by": "local_policy_agent",
+              "recovery_policy": "fail_fast",
+              "resources": [
+                {
+                  "mode": "shared",
+                  "resource_id": "scene_snapshot"
+                }
+              ],
+              "skill_calls": []
+            }
+          ],
+          "output_bindings": [],
+          "outputs": [],
+          "subgoal_id": "locate_targets",
+          "subgraph_id": "sg_locate_targets",
+          "success_nodes": [
+            "validate_locate_targets"
+          ]
+        }
+      }
+    },
+    "sg_place_on_plate": {
+      "considered": [
+        {
+          "candidate_id": "sg_place_on_plate:policy-0:0",
+          "confidence": 0.5,
+          "evidence": null,
+          "parent_scene_version": 0,
+          "producer_agent": "policy-0",
+          "rationale": "",
+          "subgraph": {
+            "assigned_agent": "mission_manager",
+            "bindings": [],
+            "checkpoints": [
+              {
+                "name": "validate_place_on_plate",
+                "predicates": [
+                  "akita_black_bowl final support relation is on plate",
+                  "bowl remains identifiable after placement",
+                  "plate remains present after placement"
+                ],
+                "validate": true,
+                "weight": 1.0
+              }
+            ],
+            "description": "Complete the bounded placement objective so the akita_black_bowl is on the plate.",
+            "edges": [],
+            "entry_node": "place_bowl_on_plate",
+            "failure_nodes": [
+              "place_bowl_on_plate"
+            ],
+            "inputs": [],
+            "loops": [],
+            "nodes": [
+              {
+                "description": "Move to the plate placement pose and release the secured akita black bowl.",
+                "inputs": [],
+                "max_duration_ms": 8000,
+                "max_sim_steps": 240,
+                "node_id": "place_bowl_on_plate",
+                "node_type": "action",
+                "outputs": [],
+                "postconditions": [
+                  "akita_black_bowl final support relation is on plate",
+                  "bowl remains identifiable after placement",
+                  "plate remains present after placement"
+                ],
+                "preconditions": [
+                  "akita_black_bowl is secured by gripper",
+                  "plate remains present before placement"
+                ],
+                "proposed_by": "local_policy_agent",
+                "recovery_policy": "Report placement failure for mission-level recovery.",
+                "resources": [
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "robot_arm"
+                  },
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "gripper"
+                  },
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "akita_black_bowl"
+                  },
+                  {
+                    "mode": "shared",
+                    "resource_id": "plate"
+                  }
+                ],
+                "skill_calls": [
+                  {
+                    "args": {
+                      "position": [
+                        0.7311072690457259,
+                        0.21441666267663156,
+                        0.08
+                      ],
+                      "quaternion_wxyz": [
+                        -6.995296258254999e-06,
+                        0.9995966048795351,
+                        0.0002462128340272596,
+                        -0.02840012048587299
+                      ]
+                    },
+                    "skill": {
+                      "skill_id": "goto_pose",
+                      "version": "capx-compat-1"
+                    }
+                  },
+                  {
+                    "args": {},
+                    "skill": {
+                      "skill_id": "open_gripper",
+                      "version": "capx-compat-1"
+                    }
+                  }
+                ]
+              }
+            ],
+            "output_bindings": [],
+            "outputs": [],
+            "subgoal_id": "place_on_plate",
+            "subgraph_id": "sg_place_on_plate",
+            "success_nodes": [
+              "place_bowl_on_plate"
+            ]
+          }
+        },
+        {
+          "candidate_id": "sg_place_on_plate:policy-1:1",
+          "confidence": 0.5,
+          "evidence": null,
+          "parent_scene_version": 0,
+          "producer_agent": "policy-1",
+          "rationale": "",
+          "subgraph": {
+            "assigned_agent": "mission_manager",
+            "bindings": [],
+            "checkpoints": [
+              {
+                "name": "validate_place_on_plate",
+                "predicates": [
+                  "akita_black_bowl final support relation is on plate",
+                  "bowl remains identifiable after placement",
+                  "plate remains present after placement"
+                ],
+                "validate": true,
+                "weight": 1.0
+              }
+            ],
+            "description": "Complete the bounded placement objective so the akita_black_bowl is on the plate.",
+            "edges": [],
+            "entry_node": "place_akita_black_bowl_on_plate",
+            "failure_nodes": [
+              "place_akita_black_bowl_on_plate"
+            ],
+            "inputs": [],
+            "loops": [],
+            "nodes": [
+              {
+                "description": "Move the secured akita_black_bowl to the plate pose and release it.",
+                "inputs": [],
+                "max_duration_ms": 8000,
+                "max_sim_steps": 240,
+                "node_id": "place_akita_black_bowl_on_plate",
+                "node_type": "action",
+                "outputs": [],
+                "postconditions": [
+                  "akita_black_bowl final support relation is on plate",
+                  "bowl remains identifiable after placement",
+                  "plate remains present after placement"
+                ],
+                "preconditions": [
+                  "akita_black_bowl is secured by gripper",
+                  "plate is present at destination"
+                ],
+                "proposed_by": "policy_agent",
+                "recovery_policy": "bounded_fail_on_unmet_postconditions",
+                "resources": [
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "robot_arm"
+                  },
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "robot_gripper"
+                  },
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "akita_black_bowl"
+                  },
+                  {
+                    "mode": "shared",
+                    "resource_id": "plate"
+                  }
+                ],
+                "skill_calls": [
+                  {
+                    "args": {
+                      "position": [
+                        0.7311072690457259,
+                        0.21441666267663156,
+                        0.08
+                      ],
+                      "quaternion_wxyz": [
+                        -6.995296258254999e-06,
+                        0.9995966048795351,
+                        0.0002462128340272596,
+                        -0.02840012048587299
+                      ]
+                    },
+                    "skill": {
+                      "skill_id": "goto_pose",
+                      "version": "capx-compat-1"
+                    }
+                  },
+                  {
+                    "args": {},
+                    "skill": {
+                      "skill_id": "open_gripper",
+                      "version": "capx-compat-1"
+                    }
+                  }
+                ]
+              }
+            ],
+            "output_bindings": [],
+            "outputs": [],
+            "subgoal_id": "place_on_plate",
+            "subgraph_id": "sg_place_on_plate",
+            "success_nodes": [
+              "place_akita_black_bowl_on_plate"
+            ]
+          }
+        }
+      ],
+      "rejections": [],
+      "selected": {
+        "candidate_id": "sg_place_on_plate:policy-1:1",
+        "confidence": 0.5,
+        "evidence": null,
+        "parent_scene_version": 0,
+        "producer_agent": "policy-1",
+        "rationale": "",
+        "subgraph": {
+          "assigned_agent": "mission_manager",
+          "bindings": [],
+          "checkpoints": [
+            {
+              "name": "validate_place_on_plate",
+              "predicates": [
+                "akita_black_bowl final support relation is on plate",
+                "bowl remains identifiable after placement",
+                "plate remains present after placement"
+              ],
+              "validate": true,
+              "weight": 1.0
+            }
+          ],
+          "description": "Complete the bounded placement objective so the akita_black_bowl is on the plate.",
+          "edges": [],
+          "entry_node": "place_akita_black_bowl_on_plate",
+          "failure_nodes": [
+            "place_akita_black_bowl_on_plate"
+          ],
+          "inputs": [],
+          "loops": [],
+          "nodes": [
+            {
+              "description": "Move the secured akita_black_bowl to the plate pose and release it.",
+              "inputs": [],
+              "max_duration_ms": 8000,
+              "max_sim_steps": 240,
+              "node_id": "place_akita_black_bowl_on_plate",
+              "node_type": "action",
+              "outputs": [],
+              "postconditions": [
+                "akita_black_bowl final support relation is on plate",
+                "bowl remains identifiable after placement",
+                "plate remains present after placement"
+              ],
+              "preconditions": [
+                "akita_black_bowl is secured by gripper",
+                "plate is present at destination"
+              ],
+              "proposed_by": "policy_agent",
+              "recovery_policy": "bounded_fail_on_unmet_postconditions",
+              "resources": [
+                {
+                  "mode": "exclusive",
+                  "resource_id": "robot_arm"
+                },
+                {
+                  "mode": "exclusive",
+                  "resource_id": "robot_gripper"
+                },
+                {
+                  "mode": "exclusive",
+                  "resource_id": "akita_black_bowl"
+                },
+                {
+                  "mode": "shared",
+                  "resource_id": "plate"
+                }
+              ],
+              "skill_calls": [
+                {
+                  "args": {
+                    "position": [
+                      0.7311072690457259,
+                      0.21441666267663156,
+                      0.08
+                    ],
+                    "quaternion_wxyz": [
+                      -6.995296258254999e-06,
+                      0.9995966048795351,
+                      0.0002462128340272596,
+                      -0.02840012048587299
+                    ]
+                  },
+                  "skill": {
+                    "skill_id": "goto_pose",
+                    "version": "capx-compat-1"
+                  }
+                },
+                {
+                  "args": {},
+                  "skill": {
+                    "skill_id": "open_gripper",
+                    "version": "capx-compat-1"
+                  }
+                }
+              ]
+            }
+          ],
+          "output_bindings": [],
+          "outputs": [],
+          "subgoal_id": "place_on_plate",
+          "subgraph_id": "sg_place_on_plate",
+          "success_nodes": [
+            "place_akita_black_bowl_on_plate"
+          ]
+        }
+      }
+    },
+    "sg_plan_transfer": {
+      "considered": [
+        {
+          "candidate_id": "sg_plan_transfer:policy-0:0",
+          "confidence": 0.5,
+          "evidence": null,
+          "parent_scene_version": 0,
+          "producer_agent": "policy-0",
+          "rationale": "",
+          "subgraph": {
+            "assigned_agent": "mission_manager",
+            "bindings": [],
+            "checkpoints": [
+              {
+                "name": "validate_transfer_objective_bound",
+                "predicates": [
+                  "source pose and destination pose are available from scene version 0",
+                  "placement objective is bowl supported by plate",
+                  "transfer constraints are bounded to the two target objects"
+                ],
+                "validate": true,
+                "weight": 1.0
+              }
+            ],
+            "description": "Bound the transfer objective from the akita_black_bowl pose to a stable placement pose on the plate while preserving object identities.",
+            "edges": [],
+            "entry_node": "n_bound_transfer",
+            "failure_nodes": [
+              "n_bound_transfer"
+            ],
+            "inputs": [],
+            "loops": [],
+            "nodes": [
+              {
+                "description": "Sample a grasp pose for the source bowl and validate that the transfer objective is bounded to the source bowl and destination plate from the current scene.",
+                "inputs": [],
+                "max_duration_ms": 3000,
+                "max_sim_steps": 60,
+                "node_id": "n_bound_transfer",
+                "node_type": "action",
+                "outputs": [],
+                "postconditions": [
+                  "source pose and destination pose are available from scene version 0",
+                  "placement objective is bowl supported by plate",
+                  "transfer constraints are bounded to the two target objects"
+                ],
+                "preconditions": [
+                  "akita_black_bowl is present in scene version 0",
+                  "plate is present in scene version 0"
+                ],
+                "proposed_by": "cap-mas-local-policy-agent",
+                "recovery_policy": "fail_fast",
+                "resources": [
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "robot:manipulator"
+                  },
+                  {
+                    "mode": "shared",
+                    "resource_id": "object:akita_black_bowl"
+                  },
+                  {
+                    "mode": "shared",
+                    "resource_id": "object:plate"
+                  }
+                ],
+                "skill_calls": [
+                  {
+                    "args": {
+                      "object_name": "akita black bowl"
+                    },
+                    "skill": {
+                      "skill_id": "sample_grasp_pose",
+                      "version": "capx-compat-1"
+                    }
+                  }
+                ]
+              }
+            ],
+            "output_bindings": [],
+            "outputs": [],
+            "subgoal_id": "plan_transfer",
+            "subgraph_id": "sg_plan_transfer",
+            "success_nodes": [
+              "n_bound_transfer"
+            ]
+          }
+        },
+        {
+          "candidate_id": "sg_plan_transfer:policy-1:1",
+          "confidence": 0.5,
+          "evidence": null,
+          "parent_scene_version": 0,
+          "producer_agent": "policy-1",
+          "rationale": "",
+          "subgraph": {
+            "assigned_agent": "mission_manager",
+            "bindings": [],
+            "checkpoints": [
+              {
+                "name": "validate_transfer_objective_bounded",
+                "predicates": [
+                  "source pose and destination pose are available from scene version 0",
+                  "placement objective is bowl supported by plate",
+                  "transfer constraints are bounded to the two target objects"
+                ],
+                "validate": true,
+                "weight": 1.0
+              }
+            ],
+            "description": "Bound the transfer objective from the akita_black_bowl pose to a stable placement pose on the plate while preserving object identities.",
+            "edges": [],
+            "entry_node": "bound_transfer_objective",
+            "failure_nodes": [
+              "bound_transfer_objective"
+            ],
+            "inputs": [],
+            "loops": [],
+            "nodes": [
+              {
+                "description": "Use the observed scene objects to bound a grasp candidate for akita black bowl and associate the destination support with plate.",
+                "inputs": [],
+                "max_duration_ms": 3000,
+                "max_sim_steps": 60,
+                "node_id": "bound_transfer_objective",
+                "node_type": "action",
+                "outputs": [],
+                "postconditions": [
+                  "source pose and destination pose are available from scene version 0",
+                  "placement objective is bowl supported by plate",
+                  "transfer constraints are bounded to the two target objects"
+                ],
+                "preconditions": [
+                  "akita black bowl is present in scene version 0",
+                  "plate is present in scene version 0"
+                ],
+                "proposed_by": "policy_agent",
+                "recovery_policy": "fail_fast",
+                "resources": [
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "robot_arm"
+                  },
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "akita_black_bowl"
+                  },
+                  {
+                    "mode": "shared",
+                    "resource_id": "plate"
+                  }
+                ],
+                "skill_calls": [
+                  {
+                    "args": {
+                      "object_name": "akita black bowl"
+                    },
+                    "skill": {
+                      "skill_id": "sample_grasp_pose",
+                      "version": "capx-compat-1"
+                    }
+                  }
+                ]
+              }
+            ],
+            "output_bindings": [],
+            "outputs": [],
+            "subgoal_id": "plan_transfer",
+            "subgraph_id": "sg_plan_transfer",
+            "success_nodes": [
+              "bound_transfer_objective"
+            ]
+          }
+        }
+      ],
+      "rejections": [],
+      "selected": {
+        "candidate_id": "sg_plan_transfer:policy-0:0",
+        "confidence": 0.5,
+        "evidence": null,
+        "parent_scene_version": 0,
+        "producer_agent": "policy-0",
+        "rationale": "",
+        "subgraph": {
+          "assigned_agent": "mission_manager",
+          "bindings": [],
+          "checkpoints": [
+            {
+              "name": "validate_transfer_objective_bound",
+              "predicates": [
+                "source pose and destination pose are available from scene version 0",
+                "placement objective is bowl supported by plate",
+                "transfer constraints are bounded to the two target objects"
+              ],
+              "validate": true,
+              "weight": 1.0
+            }
+          ],
+          "description": "Bound the transfer objective from the akita_black_bowl pose to a stable placement pose on the plate while preserving object identities.",
+          "edges": [],
+          "entry_node": "n_bound_transfer",
+          "failure_nodes": [
+            "n_bound_transfer"
+          ],
+          "inputs": [],
+          "loops": [],
+          "nodes": [
+            {
+              "description": "Sample a grasp pose for the source bowl and validate that the transfer objective is bounded to the source bowl and destination plate from the current scene.",
+              "inputs": [],
+              "max_duration_ms": 3000,
+              "max_sim_steps": 60,
+              "node_id": "n_bound_transfer",
+              "node_type": "action",
+              "outputs": [],
+              "postconditions": [
+                "source pose and destination pose are available from scene version 0",
+                "placement objective is bowl supported by plate",
+                "transfer constraints are bounded to the two target objects"
+              ],
+              "preconditions": [
+                "akita_black_bowl is present in scene version 0",
+                "plate is present in scene version 0"
+              ],
+              "proposed_by": "cap-mas-local-policy-agent",
+              "recovery_policy": "fail_fast",
+              "resources": [
+                {
+                  "mode": "exclusive",
+                  "resource_id": "robot:manipulator"
+                },
+                {
+                  "mode": "shared",
+                  "resource_id": "object:akita_black_bowl"
+                },
+                {
+                  "mode": "shared",
+                  "resource_id": "object:plate"
+                }
+              ],
+              "skill_calls": [
+                {
+                  "args": {
+                    "object_name": "akita black bowl"
+                  },
+                  "skill": {
+                    "skill_id": "sample_grasp_pose",
+                    "version": "capx-compat-1"
+                  }
+                }
+              ]
+            }
+          ],
+          "output_bindings": [],
+          "outputs": [],
+          "subgoal_id": "plan_transfer",
+          "subgraph_id": "sg_plan_transfer",
+          "success_nodes": [
+            "n_bound_transfer"
+          ]
+        }
+      }
+    },
+    "sg_secure_bowl": {
+      "considered": [
+        {
+          "candidate_id": "sg_secure_bowl:policy-0:0",
+          "confidence": 0.5,
+          "evidence": null,
+          "parent_scene_version": 0,
+          "producer_agent": "policy-0",
+          "rationale": "",
+          "subgraph": {
+            "assigned_agent": "mission_manager",
+            "bindings": [],
+            "checkpoints": [
+              {
+                "name": "validate_secure_bowl",
+                "predicates": [
+                  "bowl is designated as the controlled object",
+                  "plate remains designated as stationary destination",
+                  "non-target objects remain outside the bounded transfer objective"
+                ],
+                "validate": true,
+                "weight": 1.0
+              }
+            ],
+            "description": "Establish that the akita_black_bowl can be controlled for transfer without disturbing the plate or non-target objects.",
+            "edges": [],
+            "entry_node": "designate_bowl_control",
+            "failure_nodes": [
+              "designate_bowl_control"
+            ],
+            "inputs": [],
+            "loops": [],
+            "nodes": [
+              {
+                "description": "Designate akita black bowl as the controlled transfer object while preserving stationary destination and non-target bounds.",
+                "inputs": [],
+                "max_duration_ms": 3000,
+                "max_sim_steps": 120,
+                "node_id": "designate_bowl_control",
+                "node_type": "action",
+                "outputs": [],
+                "postconditions": [
+                  "bowl is designated as the controlled object",
+                  "plate remains designated as stationary destination",
+                  "non-target objects remain outside the bounded transfer objective"
+                ],
+                "preconditions": [
+                  "akita black bowl is present in SceneSnapshot",
+                  "plate is present in SceneSnapshot"
+                ],
+                "proposed_by": "local_policy_agent",
+                "recovery_policy": "stop_and_report_failure",
+                "resources": [
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "robot_arm"
+                  },
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "gripper"
+                  },
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "akita_black_bowl"
+                  },
+                  {
+                    "mode": "shared",
+                    "resource_id": "plate"
+                  },
+                  {
+                    "mode": "shared",
+                    "resource_id": "workspace"
+                  }
+                ],
+                "skill_calls": [
+                  {
+                    "args": {
+                      "object_name": "akita black bowl"
+                    },
+                    "skill": {
+                      "skill_id": "sample_grasp_pose",
+                      "version": "capx-compat-1"
+                    }
+                  }
+                ]
+              }
+            ],
+            "output_bindings": [],
+            "outputs": [],
+            "subgoal_id": "secure_bowl",
+            "subgraph_id": "sg_secure_bowl",
+            "success_nodes": [
+              "designate_bowl_control"
+            ]
+          }
+        },
+        {
+          "candidate_id": "sg_secure_bowl:policy-1:1",
+          "confidence": 0.5,
+          "evidence": null,
+          "parent_scene_version": 0,
+          "producer_agent": "policy-1",
+          "rationale": "",
+          "subgraph": {
+            "assigned_agent": "mission_manager",
+            "bindings": [],
+            "checkpoints": [
+              {
+                "name": "secure_bowl_validation",
+                "predicates": [
+                  "bowl is designated as the controlled object",
+                  "plate remains designated as stationary destination",
+                  "non-target objects remain outside the bounded transfer objective"
+                ],
+                "validate": true,
+                "weight": 1.0
+              }
+            ],
+            "description": "Establish that the akita_black_bowl can be controlled for transfer without disturbing the plate or non-target objects.",
+            "edges": [],
+            "entry_node": "secure_bowl_control",
+            "failure_nodes": [
+              "secure_bowl_control"
+            ],
+            "inputs": [],
+            "loops": [],
+            "nodes": [
+              {
+                "description": "Designate the akita black bowl as the controlled object by sampling a grasp pose for transfer planning.",
+                "inputs": [],
+                "max_duration_ms": 3000,
+                "max_sim_steps": 20,
+                "node_id": "secure_bowl_control",
+                "node_type": "action",
+                "outputs": [],
+                "postconditions": [
+                  "bowl is designated as the controlled object",
+                  "plate remains designated as stationary destination",
+                  "non-target objects remain outside the bounded transfer objective"
+                ],
+                "preconditions": [
+                  "akita black bowl is present in the scene",
+                  "plate is present in the scene"
+                ],
+                "proposed_by": "cap-mas-local-policy-agent",
+                "recovery_policy": "Report failure if grasp pose sampling cannot designate the bowl for bounded transfer while preserving stationary destination constraints.",
+                "resources": [
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "robot_arm"
+                  },
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "akita_black_bowl"
+                  },
+                  {
+                    "mode": "shared",
+                    "resource_id": "plate"
+                  },
+                  {
+                    "mode": "shared",
+                    "resource_id": "workspace_scene"
+                  }
+                ],
+                "skill_calls": [
+                  {
+                    "args": {
+                      "object_name": "akita black bowl"
+                    },
+                    "skill": {
+                      "skill_id": "sample_grasp_pose",
+                      "version": "capx-compat-1"
+                    }
+                  }
+                ]
+              }
+            ],
+            "output_bindings": [],
+            "outputs": [],
+            "subgoal_id": "secure_bowl",
+            "subgraph_id": "sg_secure_bowl",
+            "success_nodes": [
+              "secure_bowl_control"
+            ]
+          }
+        }
+      ],
+      "rejections": [],
+      "selected": {
+        "candidate_id": "sg_secure_bowl:policy-1:1",
+        "confidence": 0.5,
+        "evidence": null,
+        "parent_scene_version": 0,
+        "producer_agent": "policy-1",
+        "rationale": "",
+        "subgraph": {
+          "assigned_agent": "mission_manager",
+          "bindings": [],
+          "checkpoints": [
+            {
+              "name": "secure_bowl_validation",
+              "predicates": [
+                "bowl is designated as the controlled object",
+                "plate remains designated as stationary destination",
+                "non-target objects remain outside the bounded transfer objective"
+              ],
+              "validate": true,
+              "weight": 1.0
+            }
+          ],
+          "description": "Establish that the akita_black_bowl can be controlled for transfer without disturbing the plate or non-target objects.",
+          "edges": [],
+          "entry_node": "secure_bowl_control",
+          "failure_nodes": [
+            "secure_bowl_control"
+          ],
+          "inputs": [],
+          "loops": [],
+          "nodes": [
+            {
+              "description": "Designate the akita black bowl as the controlled object by sampling a grasp pose for transfer planning.",
+              "inputs": [],
+              "max_duration_ms": 3000,
+              "max_sim_steps": 20,
+              "node_id": "secure_bowl_control",
+              "node_type": "action",
+              "outputs": [],
+              "postconditions": [
+                "bowl is designated as the controlled object",
+                "plate remains designated as stationary destination",
+                "non-target objects remain outside the bounded transfer objective"
+              ],
+              "preconditions": [
+                "akita black bowl is present in the scene",
+                "plate is present in the scene"
+              ],
+              "proposed_by": "cap-mas-local-policy-agent",
+              "recovery_policy": "Report failure if grasp pose sampling cannot designate the bowl for bounded transfer while preserving stationary destination constraints.",
+              "resources": [
+                {
+                  "mode": "exclusive",
+                  "resource_id": "robot_arm"
+                },
+                {
+                  "mode": "exclusive",
+                  "resource_id": "akita_black_bowl"
+                },
+                {
+                  "mode": "shared",
+                  "resource_id": "plate"
+                },
+                {
+                  "mode": "shared",
+                  "resource_id": "workspace_scene"
+                }
+              ],
+              "skill_calls": [
+                {
+                  "args": {
+                    "object_name": "akita black bowl"
+                  },
+                  "skill": {
+                    "skill_id": "sample_grasp_pose",
+                    "version": "capx-compat-1"
+                  }
+                }
+              ]
+            }
+          ],
+          "output_bindings": [],
+          "outputs": [],
+          "subgoal_id": "secure_bowl",
+          "subgraph_id": "sg_secure_bowl",
+          "success_nodes": [
+            "secure_bowl_control"
+          ]
+        }
+      }
+    },
+    "sg_verify_completion": {
+      "considered": [
+        {
+          "candidate_id": "sg_verify_completion:policy-0:0",
+          "confidence": 0.5,
+          "evidence": null,
+          "parent_scene_version": 0,
+          "producer_agent": "policy-0",
+          "rationale": "",
+          "subgraph": {
+            "assigned_agent": "mission_manager",
+            "bindings": [],
+            "checkpoints": [
+              {
+                "name": "terminal_mission_success",
+                "predicates": [
+                  "akita_black_bowl is on plate",
+                  "source and destination tracks remain unambiguous",
+                  "mission task is satisfied"
+                ],
+                "validate": true,
+                "weight": 1.0
+              }
+            ],
+            "description": "Verify terminal mission success using the scene relation and object identities.",
+            "edges": [],
+            "entry_node": "verify_completion_action",
+            "failure_nodes": [
+              "verify_completion_action"
+            ],
+            "inputs": [],
+            "loops": [],
+            "nodes": [
+              {
+                "description": "Hold at the current end-effector pose while validating mission completion predicates from the scene snapshot.",
+                "inputs": [],
+                "max_duration_ms": 2000,
+                "max_sim_steps": 120,
+                "node_id": "verify_completion_action",
+                "node_type": "action",
+                "outputs": [],
+                "postconditions": [
+                  "akita_black_bowl is on plate",
+                  "source and destination tracks remain unambiguous",
+                  "mission task is satisfied"
+                ],
+                "preconditions": [
+                  "scene snapshot is available",
+                  "source and destination tracks are present"
+                ],
+                "proposed_by": "cap-mas-local-policy-agent",
+                "recovery_policy": "Report verification failure if any terminal predicate is not satisfied.",
+                "resources": [
+                  {
+                    "mode": "exclusive",
+                    "resource_id": "robot_arm"
+                  },
+                  {
+                    "mode": "shared",
+                    "resource_id": "scene_snapshot"
+                  }
+                ],
+                "skill_calls": [
+                  {
+                    "args": {
+                      "position": [
+                        0.45761051390214663,
+                        2.5472812343171576e-12,
+                        0.3681068704146351
+                      ],
+                      "quaternion_wxyz": [
+                        -6.995296258254999e-06,
+                        0.9995966048795351,
+                        0.0002462128340272596,
+                        -0.02840012048587299
+                      ]
+                    },
+                    "skill": {
+                      "skill_id": "goto_pose",
+                      "version": "capx-compat-1"
+                    }
+                  }
+                ]
+              }
+            ],
+            "output_bindings": [],
+            "outputs": [],
+            "subgoal_id": "verify_completion",
+            "subgraph_id": "sg_verify_completion",
+            "success_nodes": [
+              "verify_completion_action"
+            ]
+          }
+        }
+      ],
+      "rejections": [],
+      "selected": {
+        "candidate_id": "sg_verify_completion:policy-0:0",
+        "confidence": 0.5,
+        "evidence": null,
+        "parent_scene_version": 0,
+        "producer_agent": "policy-0",
+        "rationale": "",
+        "subgraph": {
+          "assigned_agent": "mission_manager",
+          "bindings": [],
+          "checkpoints": [
+            {
+              "name": "terminal_mission_success",
+              "predicates": [
+                "akita_black_bowl is on plate",
+                "source and destination tracks remain unambiguous",
+                "mission task is satisfied"
+              ],
+              "validate": true,
+              "weight": 1.0
+            }
+          ],
+          "description": "Verify terminal mission success using the scene relation and object identities.",
+          "edges": [],
+          "entry_node": "verify_completion_action",
+          "failure_nodes": [
+            "verify_completion_action"
+          ],
+          "inputs": [],
+          "loops": [],
+          "nodes": [
+            {
+              "description": "Hold at the current end-effector pose while validating mission completion predicates from the scene snapshot.",
+              "inputs": [],
+              "max_duration_ms": 2000,
+              "max_sim_steps": 120,
+              "node_id": "verify_completion_action",
+              "node_type": "action",
+              "outputs": [],
+              "postconditions": [
+                "akita_black_bowl is on plate",
+                "source and destination tracks remain unambiguous",
+                "mission task is satisfied"
+              ],
+              "preconditions": [
+                "scene snapshot is available",
+                "source and destination tracks are present"
+              ],
+              "proposed_by": "cap-mas-local-policy-agent",
+              "recovery_policy": "Report verification failure if any terminal predicate is not satisfied.",
+              "resources": [
+                {
+                  "mode": "exclusive",
+                  "resource_id": "robot_arm"
+                },
+                {
+                  "mode": "shared",
+                  "resource_id": "scene_snapshot"
+                }
+              ],
+              "skill_calls": [
+                {
+                  "args": {
+                    "position": [
+                      0.45761051390214663,
+                      2.5472812343171576e-12,
+                      0.3681068704146351
+                    ],
+                    "quaternion_wxyz": [
+                      -6.995296258254999e-06,
+                      0.9995966048795351,
+                      0.0002462128340272596,
+                      -0.02840012048587299
+                    ]
+                  },
+                  "skill": {
+                    "skill_id": "goto_pose",
+                    "version": "capx-compat-1"
+                  }
+                }
+              ]
+            }
+          ],
+          "output_bindings": [],
+          "outputs": [],
+          "subgoal_id": "verify_completion",
+          "subgraph_id": "sg_verify_completion",
+          "success_nodes": [
+            "verify_completion_action"
+          ]
+        }
+      }
+    }
+  },
+  "baseline": "B3-LLM-staged",
+  "evaluator_success": false,
+  "graph": {
+    "bindings": [],
+    "edges": [
+      {
+        "condition": "targets_confirmed",
+        "source": "sg_locate_targets",
+        "target": "sg_plan_transfer"
+      },
+      {
+        "condition": "transfer_objective_bounded",
+        "source": "sg_plan_transfer",
+        "target": "sg_secure_bowl"
+      },
+      {
+        "condition": "bowl_control_bounded",
+        "source": "sg_secure_bowl",
+        "target": "sg_place_on_plate"
+      },
+      {
+        "condition": "placement_completed",
+        "source": "sg_place_on_plate",
+        "target": "sg_verify_completion"
+      },
+      {
+        "condition": "target_confirmation_failed",
+        "source": "sg_locate_targets",
+        "target": "sg_abort_mission"
+      },
+      {
+        "condition": "transfer_objective_unbounded",
+        "source": "sg_plan_transfer",
+        "target": "sg_abort_mission"
+      },
+      {
+        "condition": "bowl_control_unavailable",
+        "source": "sg_secure_bowl",
+        "target": "sg_abort_mission"
+      },
+      {
+        "condition": "placement_failed",
+        "source": "sg_place_on_plate",
+        "target": "sg_abort_mission"
+      },
+      {
+        "condition": "verification_failed",
+        "source": "sg_verify_completion",
+        "target": "sg_abort_mission"
+      }
+    ],
+    "entry_subgraph": "sg_locate_targets",
+    "failure_subgraphs": [
+      "sg_abort_mission"
+    ],
+    "graph_version": 1,
+    "loops": [],
+    "mission_id": "place-akita-black-bowl-on-plate-episode-5d2ebac2",
+    "parent_scene_version": 0,
+    "schema_version": 1,
+    "subgraphs": [
+      {
+        "assigned_agent": "mission_manager",
+        "bindings": [],
+        "checkpoints": [
+          {
+            "name": "locate_targets_scene_snapshot_validation",
+            "predicates": [
+              "akita_black_bowl track is present with confidence 1.0",
+              "plate track is present with confidence 1.0",
+              "no ambiguity or staleness is reported for either target"
+            ],
+            "validate": true,
+            "weight": 1.0
+          }
+        ],
+        "description": "Confirm the declared source object akita_black_bowl and destination object plate are present, current, and unambiguous in scene version 0.",
+        "edges": [],
+        "entry_node": "validate_locate_targets",
+        "failure_nodes": [
+          "validate_locate_targets"
+        ],
+        "inputs": [],
+        "loops": [],
+        "nodes": [
+          {
+            "description": "Validate target presence and freshness from the provided SceneSnapshot.",
+            "inputs": [],
+            "max_duration_ms": 1000,
+            "max_sim_steps": 1,
+            "node_id": "validate_locate_targets",
+            "node_type": "checkpoint",
+            "outputs": [],
+            "postconditions": [
+              "akita_black_bowl track is present with confidence 1.0",
+              "plate track is present with confidence 1.0",
+              "no ambiguity or staleness is reported for either target"
+            ],
+            "preconditions": [],
+            "proposed_by": "local_policy_agent",
+            "recovery_policy": "fail_fast",
+            "resources": [
+              {
+                "mode": "shared",
+                "resource_id": "scene_snapshot"
+              }
+            ],
+            "skill_calls": []
+          }
+        ],
+        "output_bindings": [],
+        "outputs": [],
+        "subgoal_id": "locate_targets",
+        "subgraph_id": "sg_locate_targets",
+        "success_nodes": [
+          "validate_locate_targets"
+        ]
+      },
+      {
+        "assigned_agent": "mission_manager",
+        "bindings": [],
+        "checkpoints": [
+          {
+            "name": "validate_transfer_objective_bound",
+            "predicates": [
+              "source pose and destination pose are available from scene version 0",
+              "placement objective is bowl supported by plate",
+              "transfer constraints are bounded to the two target objects"
+            ],
+            "validate": true,
+            "weight": 1.0
+          }
+        ],
+        "description": "Bound the transfer objective from the akita_black_bowl pose to a stable placement pose on the plate while preserving object identities.",
+        "edges": [],
+        "entry_node": "n_bound_transfer",
+        "failure_nodes": [
+          "n_bound_transfer"
+        ],
+        "inputs": [],
+        "loops": [],
+        "nodes": [
+          {
+            "description": "Sample a grasp pose for the source bowl and validate that the transfer objective is bounded to the source bowl and destination plate from the current scene.",
+            "inputs": [],
+            "max_duration_ms": 3000,
+            "max_sim_steps": 60,
+            "node_id": "n_bound_transfer",
+            "node_type": "action",
+            "outputs": [],
+            "postconditions": [
+              "source pose and destination pose are available from scene version 0",
+              "placement objective is bowl supported by plate",
+              "transfer constraints are bounded to the two target objects"
+            ],
+            "preconditions": [
+              "akita_black_bowl is present in scene version 0",
+              "plate is present in scene version 0"
+            ],
+            "proposed_by": "cap-mas-local-policy-agent",
+            "recovery_policy": "fail_fast",
+            "resources": [
+              {
+                "mode": "exclusive",
+                "resource_id": "robot:manipulator"
+              },
+              {
+                "mode": "shared",
+                "resource_id": "object:akita_black_bowl"
+              },
+              {
+                "mode": "shared",
+                "resource_id": "object:plate"
+              }
+            ],
+            "skill_calls": [
+              {
+                "args": {
+                  "object_name": "akita black bowl"
+                },
+                "skill": {
+                  "skill_id": "sample_grasp_pose",
+                  "version": "capx-compat-1"
+                }
+              }
+            ]
+          }
+        ],
+        "output_bindings": [],
+        "outputs": [],
+        "subgoal_id": "plan_transfer",
+        "subgraph_id": "sg_plan_transfer",
+        "success_nodes": [
+          "n_bound_transfer"
+        ]
+      },
+      {
+        "assigned_agent": "mission_manager",
+        "bindings": [],
+        "checkpoints": [
+          {
+            "name": "secure_bowl_validation",
+            "predicates": [
+              "bowl is designated as the controlled object",
+              "plate remains designated as stationary destination",
+              "non-target objects remain outside the bounded transfer objective"
+            ],
+            "validate": true,
+            "weight": 1.0
+          }
+        ],
+        "description": "Establish that the akita_black_bowl can be controlled for transfer without disturbing the plate or non-target objects.",
+        "edges": [],
+        "entry_node": "secure_bowl_control",
+        "failure_nodes": [
+          "secure_bowl_control"
+        ],
+        "inputs": [],
+        "loops": [],
+        "nodes": [
+          {
+            "description": "Designate the akita black bowl as the controlled object by sampling a grasp pose for transfer planning.",
+            "inputs": [],
+            "max_duration_ms": 3000,
+            "max_sim_steps": 20,
+            "node_id": "secure_bowl_control",
+            "node_type": "action",
+            "outputs": [],
+            "postconditions": [
+              "bowl is designated as the controlled object",
+              "plate remains designated as stationary destination",
+              "non-target objects remain outside the bounded transfer objective"
+            ],
+            "preconditions": [
+              "akita black bowl is present in the scene",
+              "plate is present in the scene"
+            ],
+            "proposed_by": "cap-mas-local-policy-agent",
+            "recovery_policy": "Report failure if grasp pose sampling cannot designate the bowl for bounded transfer while preserving stationary destination constraints.",
+            "resources": [
+              {
+                "mode": "exclusive",
+                "resource_id": "robot_arm"
+              },
+              {
+                "mode": "exclusive",
+                "resource_id": "akita_black_bowl"
+              },
+              {
+                "mode": "shared",
+                "resource_id": "plate"
+              },
+              {
+                "mode": "shared",
+                "resource_id": "workspace_scene"
+              }
+            ],
+            "skill_calls": [
+              {
+                "args": {
+                  "object_name": "akita black bowl"
+                },
+                "skill": {
+                  "skill_id": "sample_grasp_pose",
+                  "version": "capx-compat-1"
+                }
+              }
+            ]
+          }
+        ],
+        "output_bindings": [],
+        "outputs": [],
+        "subgoal_id": "secure_bowl",
+        "subgraph_id": "sg_secure_bowl",
+        "success_nodes": [
+          "secure_bowl_control"
+        ]
+      },
+      {
+        "assigned_agent": "mission_manager",
+        "bindings": [],
+        "checkpoints": [
+          {
+            "name": "validate_place_on_plate",
+            "predicates": [
+              "akita_black_bowl final support relation is on plate",
+              "bowl remains identifiable after placement",
+              "plate remains present after placement"
+            ],
+            "validate": true,
+            "weight": 1.0
+          }
+        ],
+        "description": "Complete the bounded placement objective so the akita_black_bowl is on the plate.",
+        "edges": [],
+        "entry_node": "place_akita_black_bowl_on_plate",
+        "failure_nodes": [
+          "place_akita_black_bowl_on_plate"
+        ],
+        "inputs": [],
+        "loops": [],
+        "nodes": [
+          {
+            "description": "Move the secured akita_black_bowl to the plate pose and release it.",
+            "inputs": [],
+            "max_duration_ms": 8000,
+            "max_sim_steps": 240,
+            "node_id": "place_akita_black_bowl_on_plate",
+            "node_type": "action",
+            "outputs": [],
+            "postconditions": [
+              "akita_black_bowl final support relation is on plate",
+              "bowl remains identifiable after placement",
+              "plate remains present after placement"
+            ],
+            "preconditions": [
+              "akita_black_bowl is secured by gripper",
+              "plate is present at destination"
+            ],
+            "proposed_by": "policy_agent",
+            "recovery_policy": "bounded_fail_on_unmet_postconditions",
+            "resources": [
+              {
+                "mode": "exclusive",
+                "resource_id": "robot_arm"
+              },
+              {
+                "mode": "exclusive",
+                "resource_id": "robot_gripper"
+              },
+              {
+                "mode": "exclusive",
+                "resource_id": "akita_black_bowl"
+              },
+              {
+                "mode": "shared",
+                "resource_id": "plate"
+              }
+            ],
+            "skill_calls": [
+              {
+                "args": {
+                  "position": [
+                    0.7311072690457259,
+                    0.21441666267663156,
+                    0.08
+                  ],
+                  "quaternion_wxyz": [
+                    -6.995296258254999e-06,
+                    0.9995966048795351,
+                    0.0002462128340272596,
+                    -0.02840012048587299
+                  ]
+                },
+                "skill": {
+                  "skill_id": "goto_pose",
+                  "version": "capx-compat-1"
+                }
+              },
+              {
+                "args": {},
+                "skill": {
+                  "skill_id": "open_gripper",
+                  "version": "capx-compat-1"
+                }
+              }
+            ]
+          }
+        ],
+        "output_bindings": [],
+        "outputs": [],
+        "subgoal_id": "place_on_plate",
+        "subgraph_id": "sg_place_on_plate",
+        "success_nodes": [
+          "place_akita_black_bowl_on_plate"
+        ]
+      },
+      {
+        "assigned_agent": "mission_manager",
+        "bindings": [],
+        "checkpoints": [
+          {
+            "name": "terminal_mission_success",
+            "predicates": [
+              "akita_black_bowl is on plate",
+              "source and destination tracks remain unambiguous",
+              "mission task is satisfied"
+            ],
+            "validate": true,
+            "weight": 1.0
+          }
+        ],
+        "description": "Verify terminal mission success using the scene relation and object identities.",
+        "edges": [],
+        "entry_node": "verify_completion_action",
+        "failure_nodes": [
+          "verify_completion_action"
+        ],
+        "inputs": [],
+        "loops": [],
+        "nodes": [
+          {
+            "description": "Hold at the current end-effector pose while validating mission completion predicates from the scene snapshot.",
+            "inputs": [],
+            "max_duration_ms": 2000,
+            "max_sim_steps": 120,
+            "node_id": "verify_completion_action",
+            "node_type": "action",
+            "outputs": [],
+            "postconditions": [
+              "akita_black_bowl is on plate",
+              "source and destination tracks remain unambiguous",
+              "mission task is satisfied"
+            ],
+            "preconditions": [
+              "scene snapshot is available",
+              "source and destination tracks are present"
+            ],
+            "proposed_by": "cap-mas-local-policy-agent",
+            "recovery_policy": "Report verification failure if any terminal predicate is not satisfied.",
+            "resources": [
+              {
+                "mode": "exclusive",
+                "resource_id": "robot_arm"
+              },
+              {
+                "mode": "shared",
+                "resource_id": "scene_snapshot"
+              }
+            ],
+            "skill_calls": [
+              {
+                "args": {
+                  "position": [
+                    0.45761051390214663,
+                    2.5472812343171576e-12,
+                    0.3681068704146351
+                  ],
+                  "quaternion_wxyz": [
+                    -6.995296258254999e-06,
+                    0.9995966048795351,
+                    0.0002462128340272596,
+                    -0.02840012048587299
+                  ]
+                },
+                "skill": {
+                  "skill_id": "goto_pose",
+                  "version": "capx-compat-1"
+                }
+              }
+            ]
+          }
+        ],
+        "output_bindings": [],
+        "outputs": [],
+        "subgoal_id": "verify_completion",
+        "subgraph_id": "sg_verify_completion",
+        "success_nodes": [
+          "verify_completion_action"
+        ]
+      },
+      {
+        "assigned_agent": "mission_manager",
+        "bindings": [],
+        "checkpoints": [
+          {
+            "name": "abort_mission_verified",
+            "predicates": [
+              "mission is classified as failed within declared topology"
+            ],
+            "validate": true,
+            "weight": 1.0
+          }
+        ],
+        "description": "Terminal failure state for unmet prerequisites, unsafe transfer bounds, or failed verification.",
+        "edges": [],
+        "entry_node": "abort_mission_action",
+        "failure_nodes": [
+          "abort_mission_action"
+        ],
+        "inputs": [],
+        "loops": [],
+        "nodes": [
+          {
+            "description": "Open the gripper and declare the mission failed within the declared topology.",
+            "inputs": [],
+            "max_duration_ms": 2000,
+            "max_sim_steps": 120,
+            "node_id": "abort_mission_action",
+            "node_type": "action",
+            "outputs": [],
+            "postconditions": [
+              "mission is classified as failed within declared topology"
+            ],
+            "preconditions": [],
+            "proposed_by": "mission_manager",
+            "recovery_policy": "terminal_failure",
+            "resources": [
+              {
+                "mode": "exclusive",
+                "resource_id": "robot_arm"
+              },
+              {
+                "mode": "exclusive",
+                "resource_id": "gripper"
+              }
+            ],
+            "skill_calls": [
+              {
+                "args": {},
+                "skill": {
+                  "skill_id": "open_gripper",
+                  "version": "capx-compat-1"
+                }
+              }
+            ]
+          }
+        ],
+        "output_bindings": [],
+        "outputs": [],
+        "subgoal_id": "abort_mission",
+        "subgraph_id": "sg_abort_mission",
+        "success_nodes": [
+          "abort_mission_action"
+        ]
+      }
+    ],
+    "success_subgraphs": [
+      "sg_verify_completion"
+    ],
+    "task": "Place akita black bowl on plate"
+  },
+  "graph_protocol": "staged",
+  "model": "gpt-5.5",
+  "proposal_failures": [
+    {
+      "agent_name": "policy-1",
+      "error_type": "LLMTransportError",
+      "message": "LLM transport failed: HTTPSConnectionPool(host='api.wangzhaohui.xyz', port=443): Read timed out. (read timeout=59.99999751150608)",
+      "subgraph_id": "sg_verify_completion"
+    },
+    {
+      "agent_name": "policy-1",
+      "error_type": "LLMTransportError",
+      "message": "LLM transport failed: HTTPSConnectionPool(host='api.wangzhaohui.xyz', port=443): Read timed out. (read timeout=59.99999783653766)",
+      "subgraph_id": "sg_abort_mission"
+    }
+  ],
+  "result": {
+    "completed": false,
+    "context": {
+      "budget": {},
+      "episode_epoch": 1,
+      "episode_id": "5d2ebac2-b735-40c9-ba08-cd9a3918f019",
+      "history": {
+        "current_subgoal": null,
+        "last_verification": null,
+        "recovery_count": 0,
+        "traces": []
+      },
+      "memories": null,
+      "scene": {
+        "episode_epoch": 1,
+        "episode_id": "5d2ebac2-b735-40c9-ba08-cd9a3918f019",
+        "freshness_ms": 0.0,
+        "local_map": null,
+        "objects": [
+          {
+            "confidence": 1.0,
+            "covariance": null,
+            "evidence": [],
+            "label": "akita black bowl",
+            "last_seen_ns": 1784631246717772791,
+            "pose_wxyz_xyz": [
+              0.707106783005648,
+              -1.3874755282174046e-05,
+              1.6673002289946658e-06,
+              0.7071067792293566,
+              0.6013300383327326,
+              0.21186636362912686,
+              -0.013592924902407932
+            ],
+            "track_id": "akita_black_bowl",
+            "visual_evidence": []
+          },
+          {
+            "confidence": 1.0,
+            "covariance": null,
+            "evidence": [],
+            "label": "cookies",
+            "last_seen_ns": 1784631246717772791,
+            "pose_wxyz_xyz": [
+              0.7071067811865475,
+              3.841602572386712e-17,
+              1.5637444332227524e-18,
+              0.7071067811865476,
+              0.7386511565199982,
+              0.037033600218897324,
+              -0.002614522581637746
+            ],
+            "track_id": "cookies",
+            "visual_evidence": []
+          },
+          {
+            "confidence": 1.0,
+            "covariance": null,
+            "evidence": [],
+            "label": "glazed rim porcelain ramekin",
+            "last_seen_ns": 1784631246717772791,
+            "pose_wxyz_xyz": [
+              0.7071067844060659,
+              -5.229770139978105e-08,
+              1.1371528997944274e-07,
+              0.7071067779670178,
+              0.4733997874194468,
+              0.19778195227843787,
+              -0.012656920713254971
+            ],
+            "track_id": "glazed_rim_porcelain_ramekin",
+            "visual_evidence": []
+          },
+          {
+            "confidence": 1.0,
+            "covariance": null,
+            "evidence": [],
+            "label": "plate",
+            "last_seen_ns": 1784631246717772791,
+            "pose_wxyz_xyz": [
+              0.7071068099946488,
+              -1.3218930710771582e-05,
+              5.905204005109564e-06,
+              0.7071067522302282,
+              0.7311072690457259,
+              0.21441666267663156,
+              -0.00949366147095354
+            ],
+            "track_id": "plate",
+            "visual_evidence": []
+          },
+          {
+            "confidence": 1.0,
+            "covariance": null,
+            "evidence": [],
+            "label": "akita black bowl 2",
+            "last_seen_ns": 1784631246717772791,
+            "pose_wxyz_xyz": [
+              0.707106783005648,
+              -1.3874755282170995e-05,
+              1.6673002289947406e-06,
+              0.7071067792293566,
+              0.46775055309348446,
+              0.32615471937524537,
+              -0.013592924902407932
+            ],
+            "track_id": "akita_black_bowl_2",
+            "visual_evidence": []
+          },
+          {
+            "confidence": 1.0,
+            "covariance": null,
+            "evidence": [],
+            "label": "wooden cabinet",
+            "last_seen_ns": 1784631246717772791,
+            "pose_wxyz_xyz": [
+              0.2346830582479854,
+              0.0,
+              0.0,
+              0.972071942898967,
+              0.6917861107380657,
+              -0.26600483279958137,
+              -0.007000000000000006
+            ],
+            "track_id": "wooden_cabinet",
+            "visual_evidence": []
+          },
+          {
+            "confidence": 1.0,
+            "covariance": null,
+            "evidence": [],
+            "label": "flat stove",
+            "last_seen_ns": 1784631246717772791,
+            "pose_wxyz_xyz": [
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.2482811197563914,
+              -0.1361119968454451,
+              -0.007000000000000006
+            ],
+            "track_id": "flat_stove",
+            "visual_evidence": []
+          }
+        ],
+        "publish_timestamp_ns": 1784631246717772791,
+        "robot": {
+          "ee_pose": {
+            "byte_size": null,
+            "media_type": "array/ee-pose",
+            "sha256": null,
+            "uri": "artifact://memory/294e5c17-d4c5-456b-85bf-7defabc7e423"
+          },
+          "ee_pose_wxyz_xyz": [
+            -6.995296258254999e-06,
+            0.9995966048795351,
+            0.0002462128340272596,
+            -0.02840012048587299,
+            0.45761051390214663,
+            2.5472812343171576e-12,
+            0.3681068704146351
+          ],
+          "gripper_opening": 0.9682300354289081,
+          "joint_position": {
+            "byte_size": null,
+            "media_type": "array/joint-position",
+            "sha256": null,
+            "uri": "artifact://memory/99b5f31d-683b-4ea2-8b70-62416b10fe24"
+          }
+        },
+        "scene_version": 0,
+        "sensor_timestamp_ns": 1784631246717772791,
+        "source_artifacts": [
+          {
+            "byte_size": null,
+            "media_type": "image/rgb",
+            "sha256": null,
+            "uri": "artifact://memory/c722902c-71fd-4e72-a3d2-2d61075735f0"
+          },
+          {
+            "byte_size": null,
+            "media_type": "image/depth",
+            "sha256": null,
+            "uri": "artifact://memory/05ff366f-5193-496b-a78f-edfc1812f163"
+          },
+          {
+            "byte_size": null,
+            "media_type": "image/rgb",
+            "sha256": null,
+            "uri": "artifact://memory/3a81c813-5df5-45f1-84b1-a93e5cad673d"
+          },
+          {
+            "byte_size": null,
+            "media_type": "image/depth",
+            "sha256": null,
+            "uri": "artifact://memory/7a5df05a-cdd3-4f20-b9fa-6c5aa0e4fce7"
+          }
+        ],
+        "spatial_relations": [],
+        "uncertainty": {
+          "ambiguous_track_ids": [],
+          "notes": [],
+          "scene_confidence": 1.0,
+          "stale_track_ids": []
+        },
+        "visual_evidence": [
+          {
+            "artifact": {
+              "byte_size": null,
+              "media_type": "image/rgb",
+              "sha256": null,
+              "uri": "artifact://memory/c722902c-71fd-4e72-a3d2-2d61075735f0"
+            },
+            "camera_id": "agentview",
+            "captured_at_ns": 1784631246717772791,
+            "evidence_type": "image/rgb",
+            "region_xyxy": null,
+            "track_id": null
+          },
+          {
+            "artifact": {
+              "byte_size": null,
+              "media_type": "image/depth",
+              "sha256": null,
+              "uri": "artifact://memory/05ff366f-5193-496b-a78f-edfc1812f163"
+            },
+            "camera_id": "agentview",
+            "captured_at_ns": 1784631246717772791,
+            "evidence_type": "image/depth",
+            "region_xyxy": null,
+            "track_id": null
+          },
+          {
+            "artifact": {
+              "byte_size": null,
+              "media_type": "image/rgb",
+              "sha256": null,
+              "uri": "artifact://memory/3a81c813-5df5-45f1-84b1-a93e5cad673d"
+            },
+            "camera_id": "robot0_eye_in_hand",
+            "captured_at_ns": 1784631246717772791,
+            "evidence_type": "image/rgb",
+            "region_xyxy": null,
+            "track_id": null
+          },
+          {
+            "artifact": {
+              "byte_size": null,
+              "media_type": "image/depth",
+              "sha256": null,
+              "uri": "artifact://memory/7a5df05a-cdd3-4f20-b9fa-6c5aa0e4fce7"
+            },
+            "camera_id": "robot0_eye_in_hand",
+            "captured_at_ns": 1784631246717772791,
+            "evidence_type": "image/depth",
+            "region_xyxy": null,
+            "track_id": null
+          }
+        ]
+      },
+      "task_id": "place-akita-black-bowl-on-plate-episode-5d2ebac2"
+    },
+    "failure": {
+      "evidence_refs": [],
+      "failure_class": "EXECUTION_ERROR",
+      "failure_id": "add104d3-f40c-45dc-9c5e-dabf705aff4a",
+      "message": "no mission transition from 'sg_locate_targets' for outcome 'success'",
+      "metadata": {},
+      "node_id": null,
+      "recoverable": true,
+      "recovery_policy": "replan",
+      "retry_count": 0,
+      "scene_version": 0,
+      "source_agent": "runtime",
+      "subgraph_id": "sg_locate_targets"
+    },
+    "outputs": {
+      "sg_locate_targets": {}
+    },
+    "scene": {
+      "episode_epoch": 1,
+      "episode_id": "5d2ebac2-b735-40c9-ba08-cd9a3918f019",
+      "freshness_ms": 0.0,
+      "local_map": null,
+      "objects": [
+        {
+          "confidence": 1.0,
+          "covariance": null,
+          "evidence": [],
+          "label": "akita black bowl",
+          "last_seen_ns": 1784631246717772791,
+          "pose_wxyz_xyz": [
+            0.707106783005648,
+            -1.3874755282174046e-05,
+            1.6673002289946658e-06,
+            0.7071067792293566,
+            0.6013300383327326,
+            0.21186636362912686,
+            -0.013592924902407932
+          ],
+          "track_id": "akita_black_bowl",
+          "visual_evidence": []
+        },
+        {
+          "confidence": 1.0,
+          "covariance": null,
+          "evidence": [],
+          "label": "cookies",
+          "last_seen_ns": 1784631246717772791,
+          "pose_wxyz_xyz": [
+            0.7071067811865475,
+            3.841602572386712e-17,
+            1.5637444332227524e-18,
+            0.7071067811865476,
+            0.7386511565199982,
+            0.037033600218897324,
+            -0.002614522581637746
+          ],
+          "track_id": "cookies",
+          "visual_evidence": []
+        },
+        {
+          "confidence": 1.0,
+          "covariance": null,
+          "evidence": [],
+          "label": "glazed rim porcelain ramekin",
+          "last_seen_ns": 1784631246717772791,
+          "pose_wxyz_xyz": [
+            0.7071067844060659,
+            -5.229770139978105e-08,
+            1.1371528997944274e-07,
+            0.7071067779670178,
+            0.4733997874194468,
+            0.19778195227843787,
+            -0.012656920713254971
+          ],
+          "track_id": "glazed_rim_porcelain_ramekin",
+          "visual_evidence": []
+        },
+        {
+          "confidence": 1.0,
+          "covariance": null,
+          "evidence": [],
+          "label": "plate",
+          "last_seen_ns": 1784631246717772791,
+          "pose_wxyz_xyz": [
+            0.7071068099946488,
+            -1.3218930710771582e-05,
+            5.905204005109564e-06,
+            0.7071067522302282,
+            0.7311072690457259,
+            0.21441666267663156,
+            -0.00949366147095354
+          ],
+          "track_id": "plate",
+          "visual_evidence": []
+        },
+        {
+          "confidence": 1.0,
+          "covariance": null,
+          "evidence": [],
+          "label": "akita black bowl 2",
+          "last_seen_ns": 1784631246717772791,
+          "pose_wxyz_xyz": [
+            0.707106783005648,
+            -1.3874755282170995e-05,
+            1.6673002289947406e-06,
+            0.7071067792293566,
+            0.46775055309348446,
+            0.32615471937524537,
+            -0.013592924902407932
+          ],
+          "track_id": "akita_black_bowl_2",
+          "visual_evidence": []
+        },
+        {
+          "confidence": 1.0,
+          "covariance": null,
+          "evidence": [],
+          "label": "wooden cabinet",
+          "last_seen_ns": 1784631246717772791,
+          "pose_wxyz_xyz": [
+            0.2346830582479854,
+            0.0,
+            0.0,
+            0.972071942898967,
+            0.6917861107380657,
+            -0.26600483279958137,
+            -0.007000000000000006
+          ],
+          "track_id": "wooden_cabinet",
+          "visual_evidence": []
+        },
+        {
+          "confidence": 1.0,
+          "covariance": null,
+          "evidence": [],
+          "label": "flat stove",
+          "last_seen_ns": 1784631246717772791,
+          "pose_wxyz_xyz": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.2482811197563914,
+            -0.1361119968454451,
+            -0.007000000000000006
+          ],
+          "track_id": "flat_stove",
+          "visual_evidence": []
+        }
+      ],
+      "publish_timestamp_ns": 1784631246717772791,
+      "robot": {
+        "ee_pose": {
+          "byte_size": null,
+          "media_type": "array/ee-pose",
+          "sha256": null,
+          "uri": "artifact://memory/294e5c17-d4c5-456b-85bf-7defabc7e423"
+        },
+        "ee_pose_wxyz_xyz": [
+          -6.995296258254999e-06,
+          0.9995966048795351,
+          0.0002462128340272596,
+          -0.02840012048587299,
+          0.45761051390214663,
+          2.5472812343171576e-12,
+          0.3681068704146351
+        ],
+        "gripper_opening": 0.9682300354289081,
+        "joint_position": {
+          "byte_size": null,
+          "media_type": "array/joint-position",
+          "sha256": null,
+          "uri": "artifact://memory/99b5f31d-683b-4ea2-8b70-62416b10fe24"
+        }
+      },
+      "scene_version": 0,
+      "sensor_timestamp_ns": 1784631246717772791,
+      "source_artifacts": [
+        {
+          "byte_size": null,
+          "media_type": "image/rgb",
+          "sha256": null,
+          "uri": "artifact://memory/c722902c-71fd-4e72-a3d2-2d61075735f0"
+        },
+        {
+          "byte_size": null,
+          "media_type": "image/depth",
+          "sha256": null,
+          "uri": "artifact://memory/05ff366f-5193-496b-a78f-edfc1812f163"
+        },
+        {
+          "byte_size": null,
+          "media_type": "image/rgb",
+          "sha256": null,
+          "uri": "artifact://memory/3a81c813-5df5-45f1-84b1-a93e5cad673d"
+        },
+        {
+          "byte_size": null,
+          "media_type": "image/depth",
+          "sha256": null,
+          "uri": "artifact://memory/7a5df05a-cdd3-4f20-b9fa-6c5aa0e4fce7"
+        }
+      ],
+      "spatial_relations": [],
+      "uncertainty": {
+        "ambiguous_track_ids": [],
+        "notes": [],
+        "scene_confidence": 1.0,
+        "stale_track_ids": []
+      },
+      "visual_evidence": [
+        {
+          "artifact": {
+            "byte_size": null,
+            "media_type": "image/rgb",
+            "sha256": null,
+            "uri": "artifact://memory/c722902c-71fd-4e72-a3d2-2d61075735f0"
+          },
+          "camera_id": "agentview",
+          "captured_at_ns": 1784631246717772791,
+          "evidence_type": "image/rgb",
+          "region_xyxy": null,
+          "track_id": null
+        },
+        {
+          "artifact": {
+            "byte_size": null,
+            "media_type": "image/depth",
+            "sha256": null,
+            "uri": "artifact://memory/05ff366f-5193-496b-a78f-edfc1812f163"
+          },
+          "camera_id": "agentview",
+          "captured_at_ns": 1784631246717772791,
+          "evidence_type": "image/depth",
+          "region_xyxy": null,
+          "track_id": null
+        },
+        {
+          "artifact": {
+            "byte_size": null,
+            "media_type": "image/rgb",
+            "sha256": null,
+            "uri": "artifact://memory/3a81c813-5df5-45f1-84b1-a93e5cad673d"
+          },
+          "camera_id": "robot0_eye_in_hand",
+          "captured_at_ns": 1784631246717772791,
+          "evidence_type": "image/rgb",
+          "region_xyxy": null,
+          "track_id": null
+        },
+        {
+          "artifact": {
+            "byte_size": null,
+            "media_type": "image/depth",
+            "sha256": null,
+            "uri": "artifact://memory/7a5df05a-cdd3-4f20-b9fa-6c5aa0e4fce7"
+          },
+          "camera_id": "robot0_eye_in_hand",
+          "captured_at_ns": 1784631246717772791,
+          "evidence_type": "image/depth",
+          "region_xyxy": null,
+          "track_id": null
+        }
+      ]
+    },
+    "terminal_subgraph": "sg_locate_targets",
+    "traces": []
+  },
+  "seed": 1,
+  "task_id": "libero_spatial_0"
+}

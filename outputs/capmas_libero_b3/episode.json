@@ -1,0 +1,1718 @@
+{
+  "baseline": "B3",
+  "evaluator_success": true,
+  "failure_artifacts": [],
+  "graph": {
+    "bindings": [],
+    "edges": [
+      {
+        "condition": "success",
+        "source": "open_gripper",
+        "target": "approach_object"
+      },
+      {
+        "condition": "success",
+        "source": "approach_object",
+        "target": "close_and_verify_grasp"
+      },
+      {
+        "condition": "success",
+        "source": "close_and_verify_grasp",
+        "target": "approach_target"
+      },
+      {
+        "condition": "success",
+        "source": "approach_target",
+        "target": "release_and_verify_placement"
+      }
+    ],
+    "entry_subgraph": "open_gripper",
+    "failure_subgraphs": [
+      "open_gripper",
+      "approach_object",
+      "close_and_verify_grasp",
+      "approach_target",
+      "release_and_verify_placement"
+    ],
+    "graph_version": 1,
+    "loops": [],
+    "mission_id": "libero_spatial_0_fixed_graph",
+    "parent_scene_version": 0,
+    "schema_version": 1,
+    "subgraphs": [
+      {
+        "assigned_agent": "libero_fixed_graph_policy",
+        "bindings": [],
+        "checkpoints": [
+          {
+            "name": "open_gripper_verified",
+            "predicates": [
+              "gripper_open"
+            ],
+            "validate": true,
+            "weight": 1.0
+          }
+        ],
+        "description": "LIBERO task 0 subgoal: open_gripper",
+        "edges": [],
+        "entry_node": "open_gripper_action",
+        "failure_nodes": [
+          "open_gripper_action"
+        ],
+        "inputs": [],
+        "loops": [],
+        "nodes": [
+          {
+            "description": "LIBERO task 0: open_gripper",
+            "inputs": [],
+            "max_duration_ms": 60000,
+            "max_sim_steps": 500,
+            "node_id": "open_gripper_action",
+            "node_type": "action",
+            "outputs": [],
+            "postconditions": [
+              "gripper_open"
+            ],
+            "preconditions": [],
+            "proposed_by": "libero_spatial_task0_multistep_policy",
+            "recovery_policy": "replan",
+            "resources": [
+              {
+                "mode": "exclusive",
+                "resource_id": "robot_arm_0"
+              }
+            ],
+            "skill_calls": [
+              {
+                "args": {},
+                "skill": {
+                  "skill_id": "open_gripper",
+                  "version": "capx-compat-1"
+                }
+              }
+            ]
+          }
+        ],
+        "output_bindings": [],
+        "outputs": [],
+        "subgoal_id": "open_gripper",
+        "subgraph_id": "open_gripper",
+        "success_nodes": [
+          "open_gripper_action"
+        ]
+      },
+      {
+        "assigned_agent": "libero_fixed_graph_policy",
+        "bindings": [],
+        "checkpoints": [
+          {
+            "name": "approach_object_verified",
+            "predicates": [
+              "object_visible:akita_black_bowl"
+            ],
+            "validate": true,
+            "weight": 1.0
+          }
+        ],
+        "description": "LIBERO task 0 subgoal: approach_object",
+        "edges": [],
+        "entry_node": "approach_object_action",
+        "failure_nodes": [
+          "approach_object_action"
+        ],
+        "inputs": [],
+        "loops": [],
+        "nodes": [
+          {
+            "description": "LIBERO task 0: approach_object",
+            "inputs": [],
+            "max_duration_ms": 60000,
+            "max_sim_steps": 500,
+            "node_id": "approach_object_action",
+            "node_type": "action",
+            "outputs": [],
+            "postconditions": [
+              "object_visible:akita_black_bowl"
+            ],
+            "preconditions": [],
+            "proposed_by": "libero_spatial_task0_multistep_policy",
+            "recovery_policy": "replan",
+            "resources": [
+              {
+                "mode": "exclusive",
+                "resource_id": "robot_arm_0"
+              }
+            ],
+            "skill_calls": [
+              {
+                "args": {
+                  "object_name": "akita black bowl"
+                },
+                "skill": {
+                  "skill_id": "sample_grasp_pose",
+                  "version": "capx-compat-1"
+                }
+              },
+              {
+                "args": {
+                  "position": {
+                    "call_index": 0,
+                    "path": [
+                      "result",
+                      0
+                    ]
+                  },
+                  "quaternion_wxyz": {
+                    "call_index": 0,
+                    "path": [
+                      "result",
+                      1
+                    ]
+                  },
+                  "z_approach": 0.1
+                },
+                "skill": {
+                  "skill_id": "goto_pose",
+                  "version": "capx-compat-1"
+                }
+              }
+            ]
+          }
+        ],
+        "output_bindings": [],
+        "outputs": [],
+        "subgoal_id": "approach_object",
+        "subgraph_id": "approach_object",
+        "success_nodes": [
+          "approach_object_action"
+        ]
+      },
+      {
+        "assigned_agent": "libero_fixed_graph_policy",
+        "bindings": [],
+        "checkpoints": [
+          {
+            "name": "close_and_verify_grasp_verified",
+            "predicates": [
+              "object_in_gripper(akita_black_bowl)"
+            ],
+            "validate": true,
+            "weight": 1.0
+          }
+        ],
+        "description": "LIBERO task 0 subgoal: close_and_verify_grasp",
+        "edges": [],
+        "entry_node": "close_and_verify_grasp_action",
+        "failure_nodes": [
+          "close_and_verify_grasp_action"
+        ],
+        "inputs": [],
+        "loops": [],
+        "nodes": [
+          {
+            "description": "LIBERO task 0: close_and_verify_grasp",
+            "inputs": [],
+            "max_duration_ms": 60000,
+            "max_sim_steps": 500,
+            "node_id": "close_and_verify_grasp_action",
+            "node_type": "action",
+            "outputs": [],
+            "postconditions": [
+              "object_in_gripper(akita_black_bowl)"
+            ],
+            "preconditions": [],
+            "proposed_by": "libero_spatial_task0_multistep_policy",
+            "recovery_policy": "replan",
+            "resources": [
+              {
+                "mode": "exclusive",
+                "resource_id": "robot_arm_0"
+              }
+            ],
+            "skill_calls": [
+              {
+                "args": {},
+                "skill": {
+                  "skill_id": "close_gripper",
+                  "version": "capx-compat-1"
+                }
+              }
+            ]
+          }
+        ],
+        "output_bindings": [],
+        "outputs": [],
+        "subgoal_id": "close_and_verify_grasp",
+        "subgraph_id": "close_and_verify_grasp",
+        "success_nodes": [
+          "close_and_verify_grasp_action"
+        ]
+      },
+      {
+        "assigned_agent": "libero_fixed_graph_policy",
+        "bindings": [],
+        "checkpoints": [
+          {
+            "name": "approach_target_verified",
+            "predicates": [
+              "object_in_gripper(akita_black_bowl)"
+            ],
+            "validate": true,
+            "weight": 1.0
+          }
+        ],
+        "description": "LIBERO task 0 subgoal: approach_target",
+        "edges": [],
+        "entry_node": "approach_target_action",
+        "failure_nodes": [
+          "approach_target_action"
+        ],
+        "inputs": [],
+        "loops": [],
+        "nodes": [
+          {
+            "description": "LIBERO task 0: approach_target",
+            "inputs": [],
+            "max_duration_ms": 60000,
+            "max_sim_steps": 500,
+            "node_id": "approach_target_action",
+            "node_type": "action",
+            "outputs": [],
+            "postconditions": [
+              "object_in_gripper(akita_black_bowl)"
+            ],
+            "preconditions": [],
+            "proposed_by": "libero_spatial_task0_multistep_policy",
+            "recovery_policy": "replan",
+            "resources": [
+              {
+                "mode": "exclusive",
+                "resource_id": "robot_arm_0"
+              }
+            ],
+            "skill_calls": [
+              {
+                "args": {
+                  "object_name": "plate"
+                },
+                "skill": {
+                  "skill_id": "get_object_pose",
+                  "version": "capx-compat-1"
+                }
+              },
+              {
+                "args": {
+                  "position": {
+                    "call_index": 0,
+                    "path": [
+                      "result",
+                      0
+                    ]
+                  },
+                  "quaternion_wxyz": [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  "z_approach": 0.12
+                },
+                "skill": {
+                  "skill_id": "goto_pose",
+                  "version": "capx-compat-1"
+                }
+              }
+            ]
+          }
+        ],
+        "output_bindings": [],
+        "outputs": [],
+        "subgoal_id": "approach_target",
+        "subgraph_id": "approach_target",
+        "success_nodes": [
+          "approach_target_action"
+        ]
+      },
+      {
+        "assigned_agent": "libero_fixed_graph_policy",
+        "bindings": [],
+        "checkpoints": [
+          {
+            "name": "release_and_verify_placement_verified",
+            "predicates": [
+              "object_at_target(akita_black_bowl,plate)",
+              "gripper_open"
+            ],
+            "validate": true,
+            "weight": 1.0
+          }
+        ],
+        "description": "LIBERO task 0 subgoal: release_and_verify_placement",
+        "edges": [],
+        "entry_node": "release_and_verify_placement_action",
+        "failure_nodes": [
+          "release_and_verify_placement_action"
+        ],
+        "inputs": [],
+        "loops": [],
+        "nodes": [
+          {
+            "description": "LIBERO task 0: release_and_verify_placement",
+            "inputs": [],
+            "max_duration_ms": 60000,
+            "max_sim_steps": 500,
+            "node_id": "release_and_verify_placement_action",
+            "node_type": "action",
+            "outputs": [],
+            "postconditions": [
+              "object_at_target(akita_black_bowl,plate)",
+              "gripper_open"
+            ],
+            "preconditions": [],
+            "proposed_by": "libero_spatial_task0_multistep_policy",
+            "recovery_policy": "replan",
+            "resources": [
+              {
+                "mode": "exclusive",
+                "resource_id": "robot_arm_0"
+              }
+            ],
+            "skill_calls": [
+              {
+                "args": {},
+                "skill": {
+                  "skill_id": "open_gripper",
+                  "version": "capx-compat-1"
+                }
+              }
+            ]
+          }
+        ],
+        "output_bindings": [],
+        "outputs": [],
+        "subgoal_id": "release_and_verify_placement",
+        "subgraph_id": "release_and_verify_placement",
+        "success_nodes": [
+          "release_and_verify_placement_action"
+        ]
+      }
+    ],
+    "success_subgraphs": [
+      "release_and_verify_placement"
+    ],
+    "task": "Place akita black bowl on plate"
+  },
+  "result": {
+    "completed": true,
+    "context": {
+      "budget": {},
+      "episode_epoch": 1,
+      "episode_id": "6d2c9319-c17f-4401-9720-3317b2a4675c",
+      "history": {
+        "current_subgoal": "release_and_verify_placement",
+        "last_verification": {
+          "checked_scene_version": 5,
+          "contract_id": "d75e71a3-d00c-4e98-a057-9c14cf18303a",
+          "decision": "commit",
+          "failure_class": null,
+          "predicate_results": [
+            {
+              "confidence": 1.0,
+              "evidence": [
+                "akita_black_bowl",
+                "plate"
+              ],
+              "name": "object_at_target(akita_black_bowl,plate)",
+              "passed": true,
+              "reason": null
+            },
+            {
+              "confidence": 1.0,
+              "evidence": [],
+              "name": "gripper_open",
+              "passed": true,
+              "reason": null
+            }
+          ],
+          "violated_invariants": []
+        },
+        "recovery_count": 0,
+        "traces": [
+          {
+            "contract_id": "4c928349-9887-40d8-96c2-9a2b5f72fb0e",
+            "end_scene_version": 1,
+            "episode_epoch": 1,
+            "episode_id": "6d2c9319-c17f-4401-9720-3317b2a4675c",
+            "failure_class": null,
+            "finished_at_ns": 1784603167041521483,
+            "lease_id": "lease-1",
+            "metadata": {},
+            "observation_after": null,
+            "observation_before": null,
+            "parent_scene_version": 0,
+            "postcondition_result": {
+              "checked_scene_version": 1,
+              "contract_id": "4c928349-9887-40d8-96c2-9a2b5f72fb0e",
+              "decision": "commit",
+              "failure_class": null,
+              "predicate_results": [
+                {
+                  "confidence": 1.0,
+                  "evidence": [],
+                  "name": "gripper_open",
+                  "passed": true,
+                  "reason": null
+                }
+              ],
+              "violated_invariants": []
+            },
+            "precondition_result": {
+              "checked_scene_version": 0,
+              "contract_id": "4c928349-9887-40d8-96c2-9a2b5f72fb0e",
+              "decision": "approve",
+              "failure_class": null,
+              "predicate_results": [],
+              "violated_invariants": []
+            },
+            "skill_traces": [
+              {
+                "args": {},
+                "error_message": null,
+                "error_type": null,
+                "finished_at_ns": 1784603167035495906,
+                "invocation_id": "90ea8c49-8bdd-474e-adba-d5f602970025",
+                "output": {
+                  "result": null
+                },
+                "skill_id": "open_gripper",
+                "skill_version": "capx-compat-1",
+                "started_at_ns": 1784603166145637169,
+                "status": "completed"
+              }
+            ],
+            "start_scene_version": 0,
+            "started_at_ns": 1784603166145635448,
+            "status": "completed",
+            "trace_id": "85401c0b-e4f8-444d-ac23-40e3dd1ca54c"
+          },
+          {
+            "contract_id": "08c0464b-8a15-479f-9863-40c77eadd01a",
+            "end_scene_version": 2,
+            "episode_epoch": 1,
+            "episode_id": "6d2c9319-c17f-4401-9720-3317b2a4675c",
+            "failure_class": null,
+            "finished_at_ns": 1784603174318766426,
+            "lease_id": "lease-2",
+            "metadata": {},
+            "observation_after": null,
+            "observation_before": null,
+            "parent_scene_version": 1,
+            "postcondition_result": {
+              "checked_scene_version": 2,
+              "contract_id": "08c0464b-8a15-479f-9863-40c77eadd01a",
+              "decision": "commit",
+              "failure_class": null,
+              "predicate_results": [
+                {
+                  "confidence": 1.0,
+                  "evidence": [],
+                  "name": "object_visible:akita_black_bowl",
+                  "passed": true,
+                  "reason": null
+                }
+              ],
+              "violated_invariants": []
+            },
+            "precondition_result": {
+              "checked_scene_version": 1,
+              "contract_id": "08c0464b-8a15-479f-9863-40c77eadd01a",
+              "decision": "approve",
+              "failure_class": null,
+              "predicate_results": [],
+              "violated_invariants": []
+            },
+            "skill_traces": [
+              {
+                "args": {
+                  "object_name": "akita black bowl"
+                },
+                "error_message": null,
+                "error_type": null,
+                "finished_at_ns": 1784603167042492686,
+                "invocation_id": "c025dfd4-4f22-4f35-9dc7-b469043f99df",
+                "output": {
+                  "result": [
+                    [
+                      0.6013300383327327,
+                      0.21186636362912675,
+                      -0.013592924901916437
+                    ],
+                    [
+                      0,
+                      1,
+                      0,
+                      0
+                    ]
+                  ]
+                },
+                "skill_id": "sample_grasp_pose",
+                "skill_version": "capx-compat-1",
+                "started_at_ns": 1784603167042224362,
+                "status": "completed"
+              },
+              {
+                "args": {
+                  "position": [
+                    0.6013300383327327,
+                    0.21186636362912675,
+                    -0.013592924901916437
+                  ],
+                  "quaternion_wxyz": [
+                    0,
+                    1,
+                    0,
+                    0
+                  ],
+                  "z_approach": 0.1
+                },
+                "error_message": null,
+                "error_type": null,
+                "finished_at_ns": 1784603174312873309,
+                "invocation_id": "b82e05ac-04ab-4fef-b18d-083008cd4035",
+                "output": {
+                  "result": null
+                },
+                "skill_id": "goto_pose",
+                "skill_version": "capx-compat-1",
+                "started_at_ns": 1784603167042508021,
+                "status": "completed"
+              }
+            ],
+            "start_scene_version": 1,
+            "started_at_ns": 1784603167042222778,
+            "status": "completed",
+            "trace_id": "9e32b393-a2b6-4fb2-9dab-c3f348f20a7d"
+          },
+          {
+            "contract_id": "dfe4963d-db55-4c8f-8de5-b41a4445ea6f",
+            "end_scene_version": 3,
+            "episode_epoch": 1,
+            "episode_id": "6d2c9319-c17f-4401-9720-3317b2a4675c",
+            "failure_class": null,
+            "finished_at_ns": 1784603175853206246,
+            "lease_id": "lease-3",
+            "metadata": {},
+            "observation_after": null,
+            "observation_before": null,
+            "parent_scene_version": 2,
+            "postcondition_result": {
+              "checked_scene_version": 3,
+              "contract_id": "dfe4963d-db55-4c8f-8de5-b41a4445ea6f",
+              "decision": "commit",
+              "failure_class": null,
+              "predicate_results": [
+                {
+                  "confidence": 1.0,
+                  "evidence": [
+                    "akita_black_bowl"
+                  ],
+                  "name": "object_in_gripper(akita_black_bowl)",
+                  "passed": true,
+                  "reason": null
+                }
+              ],
+              "violated_invariants": []
+            },
+            "precondition_result": {
+              "checked_scene_version": 2,
+              "contract_id": "dfe4963d-db55-4c8f-8de5-b41a4445ea6f",
+              "decision": "approve",
+              "failure_class": null,
+              "predicate_results": [],
+              "violated_invariants": []
+            },
+            "skill_traces": [
+              {
+                "args": {},
+                "error_message": null,
+                "error_type": null,
+                "finished_at_ns": 1784603175847510819,
+                "invocation_id": "183f14c6-963e-4fdb-be11-3275b919252c",
+                "output": {
+                  "result": null
+                },
+                "skill_id": "close_gripper",
+                "skill_version": "capx-compat-1",
+                "started_at_ns": 1784603174318970599,
+                "status": "completed"
+              }
+            ],
+            "start_scene_version": 2,
+            "started_at_ns": 1784603174318969267,
+            "status": "completed",
+            "trace_id": "32d7e518-53d3-41e5-9f75-40fcf78cde45"
+          },
+          {
+            "contract_id": "79550f53-d064-4c29-8fae-4ded4996ab92",
+            "end_scene_version": 4,
+            "episode_epoch": 1,
+            "episode_id": "6d2c9319-c17f-4401-9720-3317b2a4675c",
+            "failure_class": null,
+            "finished_at_ns": 1784603180880520313,
+            "lease_id": "lease-4",
+            "metadata": {},
+            "observation_after": null,
+            "observation_before": null,
+            "parent_scene_version": 3,
+            "postcondition_result": {
+              "checked_scene_version": 4,
+              "contract_id": "79550f53-d064-4c29-8fae-4ded4996ab92",
+              "decision": "commit",
+              "failure_class": null,
+              "predicate_results": [
+                {
+                  "confidence": 1.0,
+                  "evidence": [
+                    "akita_black_bowl"
+                  ],
+                  "name": "object_in_gripper(akita_black_bowl)",
+                  "passed": true,
+                  "reason": null
+                }
+              ],
+              "violated_invariants": []
+            },
+            "precondition_result": {
+              "checked_scene_version": 3,
+              "contract_id": "79550f53-d064-4c29-8fae-4ded4996ab92",
+              "decision": "approve",
+              "failure_class": null,
+              "predicate_results": [],
+              "violated_invariants": []
+            },
+            "skill_traces": [
+              {
+                "args": {
+                  "object_name": "plate"
+                },
+                "error_message": null,
+                "error_type": null,
+                "finished_at_ns": 1784603175853624487,
+                "invocation_id": "d4208483-50f4-45f1-baf4-5627b935228e",
+                "output": {
+                  "result": [
+                    [
+                      0.7311072690457259,
+                      0.2144166626766317,
+                      -0.009493661470585057
+                    ],
+                    [
+                      0.7071068099946488,
+                      -1.3218930757352294e-05,
+                      5.905204028518656e-06,
+                      0.7071067522302282
+                    ]
+                  ]
+                },
+                "skill_id": "get_object_pose",
+                "skill_version": "capx-compat-1",
+                "started_at_ns": 1784603175853386135,
+                "status": "completed"
+              },
+              {
+                "args": {
+                  "position": [
+                    0.7311072690457259,
+                    0.2144166626766317,
+                    -0.009493661470585057
+                  ],
+                  "quaternion_wxyz": [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  "z_approach": 0.12
+                },
+                "error_message": null,
+                "error_type": null,
+                "finished_at_ns": 1784603180874781088,
+                "invocation_id": "15f30ebf-3dc5-4d6a-9a0c-c0d001881098",
+                "output": {
+                  "result": null
+                },
+                "skill_id": "goto_pose",
+                "skill_version": "capx-compat-1",
+                "started_at_ns": 1784603175853637147,
+                "status": "completed"
+              }
+            ],
+            "start_scene_version": 3,
+            "started_at_ns": 1784603175853385085,
+            "status": "completed",
+            "trace_id": "cce0440e-a0d3-402d-99a3-b6ccd048118b"
+          },
+          {
+            "contract_id": "d75e71a3-d00c-4e98-a057-9c14cf18303a",
+            "end_scene_version": 5,
+            "episode_epoch": 1,
+            "episode_id": "6d2c9319-c17f-4401-9720-3317b2a4675c",
+            "failure_class": null,
+            "finished_at_ns": 1784603181858627156,
+            "lease_id": "lease-5",
+            "metadata": {},
+            "observation_after": null,
+            "observation_before": null,
+            "parent_scene_version": 4,
+            "postcondition_result": {
+              "checked_scene_version": 5,
+              "contract_id": "d75e71a3-d00c-4e98-a057-9c14cf18303a",
+              "decision": "commit",
+              "failure_class": null,
+              "predicate_results": [
+                {
+                  "confidence": 1.0,
+                  "evidence": [
+                    "akita_black_bowl",
+                    "plate"
+                  ],
+                  "name": "object_at_target(akita_black_bowl,plate)",
+                  "passed": true,
+                  "reason": null
+                },
+                {
+                  "confidence": 1.0,
+                  "evidence": [],
+                  "name": "gripper_open",
+                  "passed": true,
+                  "reason": null
+                }
+              ],
+              "violated_invariants": []
+            },
+            "precondition_result": {
+              "checked_scene_version": 4,
+              "contract_id": "d75e71a3-d00c-4e98-a057-9c14cf18303a",
+              "decision": "approve",
+              "failure_class": null,
+              "predicate_results": [],
+              "violated_invariants": []
+            },
+            "skill_traces": [
+              {
+                "args": {},
+                "error_message": null,
+                "error_type": null,
+                "finished_at_ns": 1784603181852942606,
+                "invocation_id": "3b9f3c7f-6e8e-4e0a-849a-323b04dcde9d",
+                "output": {
+                  "result": null
+                },
+                "skill_id": "open_gripper",
+                "skill_version": "capx-compat-1",
+                "started_at_ns": 1784603180880686009,
+                "status": "completed"
+              }
+            ],
+            "start_scene_version": 4,
+            "started_at_ns": 1784603180880684746,
+            "status": "completed",
+            "trace_id": "6a908be4-24f9-42a7-b877-72b6e4fddd17"
+          }
+        ]
+      },
+      "memories": null,
+      "scene": {
+        "episode_epoch": 1,
+        "episode_id": "6d2c9319-c17f-4401-9720-3317b2a4675c",
+        "freshness_ms": 0.0,
+        "local_map": null,
+        "objects": [
+          {
+            "confidence": 1.0,
+            "covariance": null,
+            "evidence": [],
+            "label": "plate",
+            "last_seen_ns": 1784603181857565137,
+            "pose_wxyz_xyz": [
+              0.7131980361450979,
+              -7.467708578715156e-07,
+              1.7802357050000683e-05,
+              0.7009625959502376,
+              0.7340316010414084,
+              0.20491474027173176,
+              -0.009496931210716708
+            ],
+            "track_id": "plate",
+            "visual_evidence": []
+          },
+          {
+            "confidence": 1.0,
+            "covariance": null,
+            "evidence": [],
+            "label": "akita black bowl",
+            "last_seen_ns": 1784603181857565137,
+            "pose_wxyz_xyz": [
+              0.6249131736831706,
+              0.006570671610473939,
+              -0.009111093606942969,
+              0.7806134380121197,
+              0.7407330469956215,
+              0.20071634748824704,
+              -0.005767006933825147
+            ],
+            "track_id": "akita_black_bowl",
+            "visual_evidence": []
+          },
+          {
+            "confidence": 1.0,
+            "covariance": null,
+            "evidence": [],
+            "label": "cookies",
+            "last_seen_ns": 1784603181857565137,
+            "pose_wxyz_xyz": [
+              0.7071067811865475,
+              4.81022904722803e-17,
+              4.728859309206188e-17,
+              0.7071067811865476,
+              0.7386511565199982,
+              0.037033600218897324,
+              -0.0026145225813922757
+            ],
+            "track_id": "cookies",
+            "visual_evidence": []
+          },
+          {
+            "confidence": 1.0,
+            "covariance": null,
+            "evidence": [],
+            "label": "glazed rim porcelain ramekin",
+            "last_seen_ns": 1784603181857565137,
+            "pose_wxyz_xyz": [
+              0.7071067844060659,
+              -5.229770223745713e-08,
+              1.1371529111543727e-07,
+              0.7071067779670178,
+              0.4733997874194468,
+              0.19778195227843787,
+              -0.012656920712832198
+            ],
+            "track_id": "glazed_rim_porcelain_ramekin",
+            "visual_evidence": []
+          },
+          {
+            "confidence": 1.0,
+            "covariance": null,
+            "evidence": [],
+            "label": "akita black bowl 2",
+            "last_seen_ns": 1784603181857565137,
+            "pose_wxyz_xyz": [
+              0.707106783005648,
+              -1.3874755319828211e-05,
+              1.667300234270783e-06,
+              0.7071067792293566,
+              0.46775055309348457,
+              0.32615471937524537,
+              -0.013592924901916437
+            ],
+            "track_id": "akita_black_bowl_2",
+            "visual_evidence": []
+          },
+          {
+            "confidence": 1.0,
+            "covariance": null,
+            "evidence": [],
+            "label": "wooden cabinet",
+            "last_seen_ns": 1784603181857565137,
+            "pose_wxyz_xyz": [
+              0.2346830582479854,
+              0.0,
+              0.0,
+              0.972071942898967,
+              0.6917861107380657,
+              -0.26600483279958137,
+              -0.007000000000000006
+            ],
+            "track_id": "wooden_cabinet",
+            "visual_evidence": []
+          },
+          {
+            "confidence": 1.0,
+            "covariance": null,
+            "evidence": [],
+            "label": "flat stove",
+            "last_seen_ns": 1784603181857565137,
+            "pose_wxyz_xyz": [
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.2482811197563914,
+              -0.1361119968454451,
+              -0.007000000000000006
+            ],
+            "track_id": "flat_stove",
+            "visual_evidence": []
+          }
+        ],
+        "publish_timestamp_ns": 1784603181857565137,
+        "robot": {
+          "ee_pose": {
+            "byte_size": null,
+            "media_type": "array/ee-pose",
+            "sha256": null,
+            "uri": "artifact://memory/eb41708b-49a1-42f3-b387-9af2f44325e5"
+          },
+          "ee_pose_wxyz_xyz": [
+            -0.01734378813136147,
+            0.9996489211138091,
+            0.010599595473127887,
+            0.01699635564045385,
+            0.7356324056314931,
+            0.23702407768545525,
+            0.1251768867806458
+          ],
+          "gripper_opening": 0.9913780923117365,
+          "joint_position": {
+            "byte_size": null,
+            "media_type": "array/joint-position",
+            "sha256": null,
+            "uri": "artifact://memory/3fb2f935-c080-423e-a872-9c72935742dd"
+          }
+        },
+        "scene_version": 5,
+        "sensor_timestamp_ns": 1784603181857565137,
+        "source_artifacts": [
+          {
+            "byte_size": null,
+            "media_type": "image/rgb",
+            "sha256": null,
+            "uri": "artifact://memory/943fc5aa-790f-4a30-8980-76cc0fd2b60a"
+          },
+          {
+            "byte_size": null,
+            "media_type": "image/depth",
+            "sha256": null,
+            "uri": "artifact://memory/49832261-2bbc-4995-90f0-16ee4a31c11f"
+          },
+          {
+            "byte_size": null,
+            "media_type": "image/rgb",
+            "sha256": null,
+            "uri": "artifact://memory/948a3007-fc4d-4376-90a7-9e18091ef5f6"
+          },
+          {
+            "byte_size": null,
+            "media_type": "image/depth",
+            "sha256": null,
+            "uri": "artifact://memory/e06d14eb-07e3-42e6-b091-891423fd29e9"
+          }
+        ],
+        "spatial_relations": [],
+        "uncertainty": {
+          "ambiguous_track_ids": [],
+          "notes": [],
+          "scene_confidence": 1.0,
+          "stale_track_ids": []
+        },
+        "visual_evidence": [
+          {
+            "artifact": {
+              "byte_size": null,
+              "media_type": "image/rgb",
+              "sha256": null,
+              "uri": "artifact://memory/943fc5aa-790f-4a30-8980-76cc0fd2b60a"
+            },
+            "camera_id": "agentview",
+            "captured_at_ns": 1784603181857565137,
+            "evidence_type": "image/rgb",
+            "region_xyxy": null,
+            "track_id": null
+          },
+          {
+            "artifact": {
+              "byte_size": null,
+              "media_type": "image/depth",
+              "sha256": null,
+              "uri": "artifact://memory/49832261-2bbc-4995-90f0-16ee4a31c11f"
+            },
+            "camera_id": "agentview",
+            "captured_at_ns": 1784603181857565137,
+            "evidence_type": "image/depth",
+            "region_xyxy": null,
+            "track_id": null
+          },
+          {
+            "artifact": {
+              "byte_size": null,
+              "media_type": "image/rgb",
+              "sha256": null,
+              "uri": "artifact://memory/948a3007-fc4d-4376-90a7-9e18091ef5f6"
+            },
+            "camera_id": "robot0_eye_in_hand",
+            "captured_at_ns": 1784603181857565137,
+            "evidence_type": "image/rgb",
+            "region_xyxy": null,
+            "track_id": null
+          },
+          {
+            "artifact": {
+              "byte_size": null,
+              "media_type": "image/depth",
+              "sha256": null,
+              "uri": "artifact://memory/e06d14eb-07e3-42e6-b091-891423fd29e9"
+            },
+            "camera_id": "robot0_eye_in_hand",
+            "captured_at_ns": 1784603181857565137,
+            "evidence_type": "image/depth",
+            "region_xyxy": null,
+            "track_id": null
+          }
+        ]
+      },
+      "task_id": "libero_spatial_0_fixed_graph"
+    },
+    "failure": null,
+    "outputs": {
+      "approach_object": {},
+      "approach_target": {},
+      "close_and_verify_grasp": {},
+      "open_gripper": {},
+      "release_and_verify_placement": {}
+    },
+    "scene": {
+      "episode_epoch": 1,
+      "episode_id": "6d2c9319-c17f-4401-9720-3317b2a4675c",
+      "freshness_ms": 0.0,
+      "local_map": null,
+      "objects": [
+        {
+          "confidence": 1.0,
+          "covariance": null,
+          "evidence": [],
+          "label": "plate",
+          "last_seen_ns": 1784603181857565137,
+          "pose_wxyz_xyz": [
+            0.7131980361450979,
+            -7.467708578715156e-07,
+            1.7802357050000683e-05,
+            0.7009625959502376,
+            0.7340316010414084,
+            0.20491474027173176,
+            -0.009496931210716708
+          ],
+          "track_id": "plate",
+          "visual_evidence": []
+        },
+        {
+          "confidence": 1.0,
+          "covariance": null,
+          "evidence": [],
+          "label": "akita black bowl",
+          "last_seen_ns": 1784603181857565137,
+          "pose_wxyz_xyz": [
+            0.6249131736831706,
+            0.006570671610473939,
+            -0.009111093606942969,
+            0.7806134380121197,
+            0.7407330469956215,
+            0.20071634748824704,
+            -0.005767006933825147
+          ],
+          "track_id": "akita_black_bowl",
+          "visual_evidence": []
+        },
+        {
+          "confidence": 1.0,
+          "covariance": null,
+          "evidence": [],
+          "label": "cookies",
+          "last_seen_ns": 1784603181857565137,
+          "pose_wxyz_xyz": [
+            0.7071067811865475,
+            4.81022904722803e-17,
+            4.728859309206188e-17,
+            0.7071067811865476,
+            0.7386511565199982,
+            0.037033600218897324,
+            -0.0026145225813922757
+          ],
+          "track_id": "cookies",
+          "visual_evidence": []
+        },
+        {
+          "confidence": 1.0,
+          "covariance": null,
+          "evidence": [],
+          "label": "glazed rim porcelain ramekin",
+          "last_seen_ns": 1784603181857565137,
+          "pose_wxyz_xyz": [
+            0.7071067844060659,
+            -5.229770223745713e-08,
+            1.1371529111543727e-07,
+            0.7071067779670178,
+            0.4733997874194468,
+            0.19778195227843787,
+            -0.012656920712832198
+          ],
+          "track_id": "glazed_rim_porcelain_ramekin",
+          "visual_evidence": []
+        },
+        {
+          "confidence": 1.0,
+          "covariance": null,
+          "evidence": [],
+          "label": "akita black bowl 2",
+          "last_seen_ns": 1784603181857565137,
+          "pose_wxyz_xyz": [
+            0.707106783005648,
+            -1.3874755319828211e-05,
+            1.667300234270783e-06,
+            0.7071067792293566,
+            0.46775055309348457,
+            0.32615471937524537,
+            -0.013592924901916437
+          ],
+          "track_id": "akita_black_bowl_2",
+          "visual_evidence": []
+        },
+        {
+          "confidence": 1.0,
+          "covariance": null,
+          "evidence": [],
+          "label": "wooden cabinet",
+          "last_seen_ns": 1784603181857565137,
+          "pose_wxyz_xyz": [
+            0.2346830582479854,
+            0.0,
+            0.0,
+            0.972071942898967,
+            0.6917861107380657,
+            -0.26600483279958137,
+            -0.007000000000000006
+          ],
+          "track_id": "wooden_cabinet",
+          "visual_evidence": []
+        },
+        {
+          "confidence": 1.0,
+          "covariance": null,
+          "evidence": [],
+          "label": "flat stove",
+          "last_seen_ns": 1784603181857565137,
+          "pose_wxyz_xyz": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.2482811197563914,
+            -0.1361119968454451,
+            -0.007000000000000006
+          ],
+          "track_id": "flat_stove",
+          "visual_evidence": []
+        }
+      ],
+      "publish_timestamp_ns": 1784603181857565137,
+      "robot": {
+        "ee_pose": {
+          "byte_size": null,
+          "media_type": "array/ee-pose",
+          "sha256": null,
+          "uri": "artifact://memory/eb41708b-49a1-42f3-b387-9af2f44325e5"
+        },
+        "ee_pose_wxyz_xyz": [
+          -0.01734378813136147,
+          0.9996489211138091,
+          0.010599595473127887,
+          0.01699635564045385,
+          0.7356324056314931,
+          0.23702407768545525,
+          0.1251768867806458
+        ],
+        "gripper_opening": 0.9913780923117365,
+        "joint_position": {
+          "byte_size": null,
+          "media_type": "array/joint-position",
+          "sha256": null,
+          "uri": "artifact://memory/3fb2f935-c080-423e-a872-9c72935742dd"
+        }
+      },
+      "scene_version": 5,
+      "sensor_timestamp_ns": 1784603181857565137,
+      "source_artifacts": [
+        {
+          "byte_size": null,
+          "media_type": "image/rgb",
+          "sha256": null,
+          "uri": "artifact://memory/943fc5aa-790f-4a30-8980-76cc0fd2b60a"
+        },
+        {
+          "byte_size": null,
+          "media_type": "image/depth",
+          "sha256": null,
+          "uri": "artifact://memory/49832261-2bbc-4995-90f0-16ee4a31c11f"
+        },
+        {
+          "byte_size": null,
+          "media_type": "image/rgb",
+          "sha256": null,
+          "uri": "artifact://memory/948a3007-fc4d-4376-90a7-9e18091ef5f6"
+        },
+        {
+          "byte_size": null,
+          "media_type": "image/depth",
+          "sha256": null,
+          "uri": "artifact://memory/e06d14eb-07e3-42e6-b091-891423fd29e9"
+        }
+      ],
+      "spatial_relations": [],
+      "uncertainty": {
+        "ambiguous_track_ids": [],
+        "notes": [],
+        "scene_confidence": 1.0,
+        "stale_track_ids": []
+      },
+      "visual_evidence": [
+        {
+          "artifact": {
+            "byte_size": null,
+            "media_type": "image/rgb",
+            "sha256": null,
+            "uri": "artifact://memory/943fc5aa-790f-4a30-8980-76cc0fd2b60a"
+          },
+          "camera_id": "agentview",
+          "captured_at_ns": 1784603181857565137,
+          "evidence_type": "image/rgb",
+          "region_xyxy": null,
+          "track_id": null
+        },
+        {
+          "artifact": {
+            "byte_size": null,
+            "media_type": "image/depth",
+            "sha256": null,
+            "uri": "artifact://memory/49832261-2bbc-4995-90f0-16ee4a31c11f"
+          },
+          "camera_id": "agentview",
+          "captured_at_ns": 1784603181857565137,
+          "evidence_type": "image/depth",
+          "region_xyxy": null,
+          "track_id": null
+        },
+        {
+          "artifact": {
+            "byte_size": null,
+            "media_type": "image/rgb",
+            "sha256": null,
+            "uri": "artifact://memory/948a3007-fc4d-4376-90a7-9e18091ef5f6"
+          },
+          "camera_id": "robot0_eye_in_hand",
+          "captured_at_ns": 1784603181857565137,
+          "evidence_type": "image/rgb",
+          "region_xyxy": null,
+          "track_id": null
+        },
+        {
+          "artifact": {
+            "byte_size": null,
+            "media_type": "image/depth",
+            "sha256": null,
+            "uri": "artifact://memory/e06d14eb-07e3-42e6-b091-891423fd29e9"
+          },
+          "camera_id": "robot0_eye_in_hand",
+          "captured_at_ns": 1784603181857565137,
+          "evidence_type": "image/depth",
+          "region_xyxy": null,
+          "track_id": null
+        }
+      ]
+    },
+    "terminal_subgraph": "release_and_verify_placement",
+    "traces": [
+      {
+        "contract_id": "4c928349-9887-40d8-96c2-9a2b5f72fb0e",
+        "end_scene_version": 1,
+        "episode_epoch": 1,
+        "episode_id": "6d2c9319-c17f-4401-9720-3317b2a4675c",
+        "failure_class": null,
+        "finished_at_ns": 1784603167041521483,
+        "lease_id": "lease-1",
+        "metadata": {},
+        "observation_after": null,
+        "observation_before": null,
+        "parent_scene_version": 0,
+        "postcondition_result": {
+          "checked_scene_version": 1,
+          "contract_id": "4c928349-9887-40d8-96c2-9a2b5f72fb0e",
+          "decision": "commit",
+          "failure_class": null,
+          "predicate_results": [
+            {
+              "confidence": 1.0,
+              "evidence": [],
+              "name": "gripper_open",
+              "passed": true,
+              "reason": null
+            }
+          ],
+          "violated_invariants": []
+        },
+        "precondition_result": {
+          "checked_scene_version": 0,
+          "contract_id": "4c928349-9887-40d8-96c2-9a2b5f72fb0e",
+          "decision": "approve",
+          "failure_class": null,
+          "predicate_results": [],
+          "violated_invariants": []
+        },
+        "skill_traces": [
+          {
+            "args": {},
+            "error_message": null,
+            "error_type": null,
+            "finished_at_ns": 1784603167035495906,
+            "invocation_id": "90ea8c49-8bdd-474e-adba-d5f602970025",
+            "output": {
+              "result": null
+            },
+            "skill_id": "open_gripper",
+            "skill_version": "capx-compat-1",
+            "started_at_ns": 1784603166145637169,
+            "status": "completed"
+          }
+        ],
+        "start_scene_version": 0,
+        "started_at_ns": 1784603166145635448,
+        "status": "completed",
+        "trace_id": "85401c0b-e4f8-444d-ac23-40e3dd1ca54c"
+      },
+      {
+        "contract_id": "08c0464b-8a15-479f-9863-40c77eadd01a",
+        "end_scene_version": 2,
+        "episode_epoch": 1,
+        "episode_id": "6d2c9319-c17f-4401-9720-3317b2a4675c",
+        "failure_class": null,
+        "finished_at_ns": 1784603174318766426,
+        "lease_id": "lease-2",
+        "metadata": {},
+        "observation_after": null,
+        "observation_before": null,
+        "parent_scene_version": 1,
+        "postcondition_result": {
+          "checked_scene_version": 2,
+          "contract_id": "08c0464b-8a15-479f-9863-40c77eadd01a",
+          "decision": "commit",
+          "failure_class": null,
+          "predicate_results": [
+            {
+              "confidence": 1.0,
+              "evidence": [],
+              "name": "object_visible:akita_black_bowl",
+              "passed": true,
+              "reason": null
+            }
+          ],
+          "violated_invariants": []
+        },
+        "precondition_result": {
+          "checked_scene_version": 1,
+          "contract_id": "08c0464b-8a15-479f-9863-40c77eadd01a",
+          "decision": "approve",
+          "failure_class": null,
+          "predicate_results": [],
+          "violated_invariants": []
+        },
+        "skill_traces": [
+          {
+            "args": {
+              "object_name": "akita black bowl"
+            },
+            "error_message": null,
+            "error_type": null,
+            "finished_at_ns": 1784603167042492686,
+            "invocation_id": "c025dfd4-4f22-4f35-9dc7-b469043f99df",
+            "output": {
+              "result": [
+                [
+                  0.6013300383327327,
+                  0.21186636362912675,
+                  -0.013592924901916437
+                ],
+                [
+                  0,
+                  1,
+                  0,
+                  0
+                ]
+              ]
+            },
+            "skill_id": "sample_grasp_pose",
+            "skill_version": "capx-compat-1",
+            "started_at_ns": 1784603167042224362,
+            "status": "completed"
+          },
+          {
+            "args": {
+              "position": [
+                0.6013300383327327,
+                0.21186636362912675,
+                -0.013592924901916437
+              ],
+              "quaternion_wxyz": [
+                0,
+                1,
+                0,
+                0
+              ],
+              "z_approach": 0.1
+            },
+            "error_message": null,
+            "error_type": null,
+            "finished_at_ns": 1784603174312873309,
+            "invocation_id": "b82e05ac-04ab-4fef-b18d-083008cd4035",
+            "output": {
+              "result": null
+            },
+            "skill_id": "goto_pose",
+            "skill_version": "capx-compat-1",
+            "started_at_ns": 1784603167042508021,
+            "status": "completed"
+          }
+        ],
+        "start_scene_version": 1,
+        "started_at_ns": 1784603167042222778,
+        "status": "completed",
+        "trace_id": "9e32b393-a2b6-4fb2-9dab-c3f348f20a7d"
+      },
+      {
+        "contract_id": "dfe4963d-db55-4c8f-8de5-b41a4445ea6f",
+        "end_scene_version": 3,
+        "episode_epoch": 1,
+        "episode_id": "6d2c9319-c17f-4401-9720-3317b2a4675c",
+        "failure_class": null,
+        "finished_at_ns": 1784603175853206246,
+        "lease_id": "lease-3",
+        "metadata": {},
+        "observation_after": null,
+        "observation_before": null,
+        "parent_scene_version": 2,
+        "postcondition_result": {
+          "checked_scene_version": 3,
+          "contract_id": "dfe4963d-db55-4c8f-8de5-b41a4445ea6f",
+          "decision": "commit",
+          "failure_class": null,
+          "predicate_results": [
+            {
+              "confidence": 1.0,
+              "evidence": [
+                "akita_black_bowl"
+              ],
+              "name": "object_in_gripper(akita_black_bowl)",
+              "passed": true,
+              "reason": null
+            }
+          ],
+          "violated_invariants": []
+        },
+        "precondition_result": {
+          "checked_scene_version": 2,
+          "contract_id": "dfe4963d-db55-4c8f-8de5-b41a4445ea6f",
+          "decision": "approve",
+          "failure_class": null,
+          "predicate_results": [],
+          "violated_invariants": []
+        },
+        "skill_traces": [
+          {
+            "args": {},
+            "error_message": null,
+            "error_type": null,
+            "finished_at_ns": 1784603175847510819,
+            "invocation_id": "183f14c6-963e-4fdb-be11-3275b919252c",
+            "output": {
+              "result": null
+            },
+            "skill_id": "close_gripper",
+            "skill_version": "capx-compat-1",
+            "started_at_ns": 1784603174318970599,
+            "status": "completed"
+          }
+        ],
+        "start_scene_version": 2,
+        "started_at_ns": 1784603174318969267,
+        "status": "completed",
+        "trace_id": "32d7e518-53d3-41e5-9f75-40fcf78cde45"
+      },
+      {
+        "contract_id": "79550f53-d064-4c29-8fae-4ded4996ab92",
+        "end_scene_version": 4,
+        "episode_epoch": 1,
+        "episode_id": "6d2c9319-c17f-4401-9720-3317b2a4675c",
+        "failure_class": null,
+        "finished_at_ns": 1784603180880520313,
+        "lease_id": "lease-4",
+        "metadata": {},
+        "observation_after": null,
+        "observation_before": null,
+        "parent_scene_version": 3,
+        "postcondition_result": {
+          "checked_scene_version": 4,
+          "contract_id": "79550f53-d064-4c29-8fae-4ded4996ab92",
+          "decision": "commit",
+          "failure_class": null,
+          "predicate_results": [
+            {
+              "confidence": 1.0,
+              "evidence": [
+                "akita_black_bowl"
+              ],
+              "name": "object_in_gripper(akita_black_bowl)",
+              "passed": true,
+              "reason": null
+            }
+          ],
+          "violated_invariants": []
+        },
+        "precondition_result": {
+          "checked_scene_version": 3,
+          "contract_id": "79550f53-d064-4c29-8fae-4ded4996ab92",
+          "decision": "approve",
+          "failure_class": null,
+          "predicate_results": [],
+          "violated_invariants": []
+        },
+        "skill_traces": [
+          {
+            "args": {
+              "object_name": "plate"
+            },
+            "error_message": null,
+            "error_type": null,
+            "finished_at_ns": 1784603175853624487,
+            "invocation_id": "d4208483-50f4-45f1-baf4-5627b935228e",
+            "output": {
+              "result": [
+                [
+                  0.7311072690457259,
+                  0.2144166626766317,
+                  -0.009493661470585057
+                ],
+                [
+                  0.7071068099946488,
+                  -1.3218930757352294e-05,
+                  5.905204028518656e-06,
+                  0.7071067522302282
+                ]
+              ]
+            },
+            "skill_id": "get_object_pose",
+            "skill_version": "capx-compat-1",
+            "started_at_ns": 1784603175853386135,
+            "status": "completed"
+          },
+          {
+            "args": {
+              "position": [
+                0.7311072690457259,
+                0.2144166626766317,
+                -0.009493661470585057
+              ],
+              "quaternion_wxyz": [
+                0.0,
+                1.0,
+                0.0,
+                0.0
+              ],
+              "z_approach": 0.12
+            },
+            "error_message": null,
+            "error_type": null,
+            "finished_at_ns": 1784603180874781088,
+            "invocation_id": "15f30ebf-3dc5-4d6a-9a0c-c0d001881098",
+            "output": {
+              "result": null
+            },
+            "skill_id": "goto_pose",
+            "skill_version": "capx-compat-1",
+            "started_at_ns": 1784603175853637147,
+            "status": "completed"
+          }
+        ],
+        "start_scene_version": 3,
+        "started_at_ns": 1784603175853385085,
+        "status": "completed",
+        "trace_id": "cce0440e-a0d3-402d-99a3-b6ccd048118b"
+      },
+      {
+        "contract_id": "d75e71a3-d00c-4e98-a057-9c14cf18303a",
+        "end_scene_version": 5,
+        "episode_epoch": 1,
+        "episode_id": "6d2c9319-c17f-4401-9720-3317b2a4675c",
+        "failure_class": null,
+        "finished_at_ns": 1784603181858627156,
+        "lease_id": "lease-5",
+        "metadata": {},
+        "observation_after": null,
+        "observation_before": null,
+        "parent_scene_version": 4,
+        "postcondition_result": {
+          "checked_scene_version": 5,
+          "contract_id": "d75e71a3-d00c-4e98-a057-9c14cf18303a",
+          "decision": "commit",
+          "failure_class": null,
+          "predicate_results": [
+            {
+              "confidence": 1.0,
+              "evidence": [
+                "akita_black_bowl",
+                "plate"
+              ],
+              "name": "object_at_target(akita_black_bowl,plate)",
+              "passed": true,
+              "reason": null
+            },
+            {
+              "confidence": 1.0,
+              "evidence": [],
+              "name": "gripper_open",
+              "passed": true,
+              "reason": null
+            }
+          ],
+          "violated_invariants": []
+        },
+        "precondition_result": {
+          "checked_scene_version": 4,
+          "contract_id": "d75e71a3-d00c-4e98-a057-9c14cf18303a",
+          "decision": "approve",
+          "failure_class": null,
+          "predicate_results": [],
+          "violated_invariants": []
+        },
+        "skill_traces": [
+          {
+            "args": {},
+            "error_message": null,
+            "error_type": null,
+            "finished_at_ns": 1784603181852942606,
+            "invocation_id": "3b9f3c7f-6e8e-4e0a-849a-323b04dcde9d",
+            "output": {
+              "result": null
+            },
+            "skill_id": "open_gripper",
+            "skill_version": "capx-compat-1",
+            "started_at_ns": 1784603180880686009,
+            "status": "completed"
+          }
+        ],
+        "start_scene_version": 4,
+        "started_at_ns": 1784603180880684746,
+        "status": "completed",
+        "trace_id": "6a908be4-24f9-42a7-b877-72b6e4fddd17"
+      }
+    ]
+  },
+  "seed": 1,
+  "task_id": "libero_spatial_0"
+}

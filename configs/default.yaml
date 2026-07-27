@@ -1,0 +1,106 @@
+project:
+  name: cap-mas
+  schema_version: capmas.v0
+
+backend:
+  mode: capx_typed
+  capx_root: /data/MLLM/wzh/agent/paper/infiAgent/workspace/cap-x
+  environment: libero
+  suite_name: libero_spatial
+  task_id: 0
+
+llm:
+  backend: capx_compatible
+  model: same_as_capx_baseline
+  api_base: null
+  api_key_env: CAPMAS_LLM_API_KEY
+  temperature: 0.0
+  max_output_tokens: 4096
+  structured_outputs: true
+  record_prompt_hash: true
+  record_usage: true
+  default_deadline_ms: 30000
+  agent_budget_group: episode
+
+runtime:
+  scheduler: fixed_graph
+  state_store: versioned
+  validator: contract
+  verifier: observable_postconditions
+  action_lease: enabled
+  recovery: contract_replan
+  topology: fixed
+
+perception:
+  fast_geometry_hz: 20
+  object_tracker_hz: 10
+  semantic_trigger: event
+  max_snapshot_age_ms: 150
+  max_processing_latency_ms: 50
+  runtime: thread
+  queue_capacity: 4
+  worker:
+    max_restarts_per_episode: 3
+    restart_backoff_ms: [50, 100, 200]
+    restart_timeout_ms: 500
+    exhaustion_policy: retain_last_snapshot
+  artifact_store:
+    backend: file
+    root: "${run_dir}/artifacts"
+    checksum: sha256
+    max_bytes: 10737418240
+    ttl_ms: 3600000
+    pin_ttl_ms: 600000
+    cleanup_on_episode_end: true
+  map:
+    backend: sparse_voxel
+    voxel_size_m: 0.01
+    local_radius_m: 1.0
+    tsdf:
+      enabled: false
+      truncation_distance_m: 0.04
+
+state_store:
+  max_pending_observations: 8
+  pending_drop_policy: drop_oldest
+  require_contiguous_commit: false
+
+legacy:
+  require_contiguous_commit: true
+
+skills:
+  registry: quarantine
+  activation: safe_checkpoint
+  promotion: cross_episode
+
+memory:
+  storage: episode_experience_semantic
+  skill_registry: separate_quarantine
+  controller: rules
+  top_k: 3
+  update_timing: episode_boundary
+  hard_case_buffer: enabled
+  rollback: enabled
+
+learning:
+  enabled: false
+  runtime_updates: false
+  reward:
+    benchmark: capx_binary
+    training: verified_potential_shaping
+    safety: hard_constraint
+    human_intervention_cost: enabled
+  memory_controller:
+    stage: 1
+    stage_1_algorithm: offline_contextual_bandit
+    stage_2_algorithm: conservative_ppo
+    stage_3_algorithm: constrained_ppo_or_grpo
+    robot_skill_registry: frozen_during_memory_training
+  evolution:
+    mode: sequential_memory_then_robot
+    joint_evolution_ablation: disabled
+    promotion: automatic_with_rollback
+
+evaluation:
+  privileged_completion_for_agent: false
+  matched_capx_budget: true

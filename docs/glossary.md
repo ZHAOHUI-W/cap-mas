@@ -1,0 +1,37 @@
+# Glossary
+
+| Term | Definition |
+| --- | --- |
+| Action Contract | A versioned proposal for a bounded robot state transition with typed skills, preconditions, postconditions, invariants, timeout, and recovery policy. |
+| Action Lease | Runtime-issued exclusive authority to execute a contract on a physical robot. |
+| Active Skill | An immutable, validated skill version callable by the active executor. |
+| Agent Plane | Event-triggered multi-agent reasoning and coordination plane. |
+| Arbiter | Deterministic or bounded decision component that selects one typed candidate before Verifier approval. |
+| CAP-X Adapter | Compatibility layer that exposes CAP-X environments and APIs to CAP-MAS. |
+| Committed State | A state snapshot accepted after verification; it is not a prediction. |
+| Contract-Driven Coordination | Coordination in which agent proposals advance the robot only after version, permission, and predicate checks. |
+| Episode Epoch | Identifier that invalidates contracts after reset, timeout, or cancellation. |
+| Observable Postcondition | A task-relevant predicate inferred from agent-visible sensors and state estimators. |
+| Privileged Completion | Simulator/evaluator success information unavailable to the normal agent. |
+| Quarantine Registry | Isolated store for candidate skills that cannot affect active execution. |
+| Scene Snapshot | Immutable, versioned world-model artifact with timestamps, geometry, semantics, and uncertainty. |
+| Visual Evidence | An artifact-backed RGB, depth, mask, crop, or pose-support reference that grounds a scene fact without embedding raw sensor data in agent context. |
+| Spatial Relation | A confidence-bearing relation between two tracked entities, such as `left_of`, `inside`, or `occluded_by`. |
+| Grounded Policy Decision | A Policy Agent result containing exactly one bounded action contract or one targeted visual-evidence request. |
+| Mission Graph | Versioned typed graph owned by the Manager that describes task-level subgoals, dependencies, ports, budgets, and exits. |
+| SubgraphSpec | Bounded typed local policy graph assigned to one subgoal and lowered to one or more ActionContracts. |
+| GraphValidator | Static validator for graph reachability, typed ports, checkpoints, cycles, and resource conflicts. |
+| Graph Rehearsal | Offline or asynchronous execution of a graph over sampled scenes for failure localization and evolution. |
+| Experiment Run Configuration | The non-secret protocol, model, seed, budget, schema, retry, and worker settings used to produce one experiment artifact. |
+| LLM Call Trace | A sanitized immutable record of one Manager or Policy provider request, including latency, token usage, schema mode, fallback, and outcome. |
+| Evidence Provenance | The provider, source SceneSnapshot version, capture timestamp, and optional artifact references attached to candidate evidence. |
+| Evidence Tie-Break | A deterministic structural choice made when candidates have usable evidence but equal final evidence scores. |
+| Confidence Fallback | A legacy arbitration mode used only when no candidate-specific evidence is available. |
+| Proposal Wave | A bounded set of Policy candidate requests launched for dependency-compatible subgoals from one immutable Scene Snapshot. |
+| Rolling Replan | The execution mode that replans only the ready suffix after each verified Scene Snapshot update. |
+| Targeted Perception Request | A bounded request for evidence about selected tracks, cameras, or regions; it is served asynchronously by the Perception Agent. |
+| Semantic Perception Agent | Event-triggered agent for object identity, ambiguity resolution, and semantic map correction. |
+| Skill Candidate | Newly generated or repaired skill awaiting validation and promotion. |
+| State Version | Monotonic identifier for a scene snapshot used to detect stale proposals. |
+| Subgoal Checkpoint | Safe boundary at which contracts, memory, topology, or skill versions may be updated. |
+| World Model Plane | Asynchronous scene-estimation and incremental mapping plane. |
