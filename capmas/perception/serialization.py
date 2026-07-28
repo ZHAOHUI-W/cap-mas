@@ -14,6 +14,7 @@ from capmas.contracts.scene import (
     VisualEvidence,
 )
 from capmas.perception.protocol import CameraFrame, CameraModel, ObservationBundle
+from capmas.perception.tracking import ObjectMeasurement
 
 
 _OBSERVATION_FIELDS = {
@@ -24,6 +25,7 @@ _OBSERVATION_FIELDS = {
     "sequence",
     "robot_state",
     "frames",
+    "object_measurements",
 }
 _SNAPSHOT_FIELDS = {
     "episode_id",
@@ -52,6 +54,9 @@ def observation_to_json(bundle: ObservationBundle) -> str:
         "sequence": bundle.sequence,
         "robot_state": _encode(bundle.robot_state),
         "frames": [_frame_to_dict(frame) for frame in bundle.frames],
+        "object_measurements": [
+            _measurement_to_dict(measurement) for measurement in bundle.object_measurements
+        ],
     }
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
@@ -67,6 +72,10 @@ def observation_from_json(encoded: str | bytes) -> ObservationBundle:
         episode_epoch=_optional_int(payload.get("episode_epoch"), "episode_epoch"),
         source=_str(payload.get("source", ""), "source"),
         sequence=_int(payload, "sequence", default=0),
+        object_measurements=tuple(
+            _measurement_from_dict(item)
+            for item in _list(payload, "object_measurements")
+        ),
     )
 
 
@@ -170,6 +179,36 @@ def _object_to_dict(obj: ObjectTrack) -> dict[str, object]:
         "prediction_timestamp_ns": obj.prediction_timestamp_ns,
         "track_status": obj.track_status,
     }
+
+
+def _measurement_to_dict(measurement: ObjectMeasurement) -> dict[str, object]:
+    return {
+        "track_id": measurement.track_id,
+        "label": measurement.label,
+        "pose_wxyz_xyz": list(measurement.pose_wxyz_xyz),
+        "confidence": measurement.confidence,
+        "timestamp_ns": measurement.timestamp_ns,
+        "covariance": _artifact_to_dict(measurement.covariance),
+        "evidence": [_artifact_to_dict(ref) for ref in measurement.evidence],
+    }
+
+
+def _measurement_from_dict(value: object) -> ObjectMeasurement:
+    item = _mapping(value, "object_measurement")
+    _reject_unknown(
+        item,
+        {"track_id", "label", "pose_wxyz_xyz", "confidence", "timestamp_ns", "covariance", "evidence"},
+        "object_measurement",
+    )
+    return ObjectMeasurement(
+        track_id=_optional_str(item.get("track_id"), "object_measurement.track_id"),
+        label=_str(item["label"], "object_measurement.label"),
+        pose_wxyz_xyz=tuple(_number_list(item.get("pose_wxyz_xyz", ()))),
+        confidence=_finite_float(item["confidence"], "object_measurement.confidence"),
+        timestamp_ns=_int(item, "timestamp_ns"),
+        covariance=_artifact_from_dict(item.get("covariance")),
+        evidence=tuple(_artifact_from_dict(ref) for ref in _list(item, "evidence")),
+    )
 
 
 def _object_from_dict(value: object) -> ObjectTrack:

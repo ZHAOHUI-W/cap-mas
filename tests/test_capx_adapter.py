@@ -1,4 +1,5 @@
 import pytest
+import numpy as np
 
 from capmas.backends.capx import (
     CAPXObservationProvider,
@@ -9,6 +10,7 @@ from capmas.backends.capx import (
 from capmas.contracts.action import ActionContract, ExecutionBudget, SkillCall
 from capmas.contracts.core import SkillRef
 from capmas.perception.artifacts import InMemoryArtifactStore
+from capmas.perception.artifact_bridge import EncodedArtifactStore, FileArtifactStore, NumpyArtifactCodec
 from capmas.perception.protocol import ObservationBundle
 from capmas.skills.registry import SkillRegistry
 
@@ -100,6 +102,38 @@ def test_capx_observation_is_artifactized_and_not_exposed_as_raw_arrays() -> Non
     assert observation.frames[0].rgb is not None
     assert observation.frames[0].rgb.uri.startswith("artifact://")
     assert observation.robot_state["joint_position"].uri.startswith("artifact://")
+
+
+def test_capx_observation_provider_writes_numpy_values_to_replaceable_encoded_store(tmp_path) -> None:
+    artifacts = EncodedArtifactStore(FileArtifactStore(tmp_path), NumpyArtifactCodec())
+    rgb = np.array([[[1, 2, 3]]], dtype=np.uint8)
+    depth = np.array([[0.25]], dtype=np.float32)
+    joints = np.array([0.0, 1.0], dtype=np.float64)
+    ee_pose = np.array([0.2, 0.3, 0.4, 1.0, 0.0, 0.0, 0.0, 0.25], dtype=np.float32)
+    provider = CAPXObservationProvider(
+        observation_fn=lambda: {
+            "timestamp_ns": 42,
+            "agentview": {
+                "intrinsics": np.eye(3),
+                "pose_mat": np.eye(4),
+                "images": {"rgb": rgb, "depth": depth},
+            },
+            "robot_joint_pos": joints,
+            "robot_cartesian_pos": ee_pose,
+        },
+        artifacts=artifacts,
+    )
+
+    observation = provider.capture()
+
+    assert observation.frames[0].rgb is not None
+    assert observation.frames[0].rgb.media_type == "image/rgb+npy"
+    assert observation.frames[0].depth is not None
+    assert observation.frames[0].depth.media_type == "image/depth+npy"
+    np.testing.assert_array_equal(artifacts.get(observation.frames[0].rgb), rgb)
+    np.testing.assert_array_equal(artifacts.get(observation.frames[0].depth), depth)
+    np.testing.assert_array_equal(artifacts.get(observation.robot_state["joint_position"]), joints)
+    np.testing.assert_array_equal(artifacts.get(observation.robot_state["ee_pose"]), ee_pose)
 
 
 def test_capx_object_pose_is_aligned_to_scene_track_pose() -> None:

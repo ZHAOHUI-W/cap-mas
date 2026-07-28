@@ -5,6 +5,7 @@ from typing import Mapping, Protocol, Sequence
 
 from capmas.contracts.core import ArtifactRef
 from capmas.contracts.scene import SceneSnapshot, VisualEvidence
+from capmas.perception.tracking import ObjectMeasurement
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class ObservationBundle:
     episode_epoch: int | None = None
     source: str = ""
     sequence: int = 0
+    object_measurements: tuple[ObjectMeasurement, ...] = ()
 
 
 @dataclass(frozen=True)

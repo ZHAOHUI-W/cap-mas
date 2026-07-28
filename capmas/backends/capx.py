@@ -16,13 +16,14 @@ from capmas.contracts.scene import (
     SceneSnapshot,
     VisualEvidence,
 )
-from capmas.perception.artifacts import InMemoryArtifactStore
+from capmas.perception.artifact_bridge import ArtifactSink
 from capmas.perception.protocol import (
     CameraFrame,
     CameraModel,
     ObservationBundle,
     ObservationProvider,
 )
+from capmas.perception.tracking import ObjectMeasurement
 
 
 def _flatten_numbers(value: object) -> tuple[float, ...]:
@@ -41,7 +42,7 @@ class CAPXObservationProvider(ObservationProvider):
     """Normalize a CAP-X API observation without exposing its environment object."""
 
     observation_fn: Callable[[], Mapping[str, object]]
-    artifacts: InMemoryArtifactStore
+    artifacts: ArtifactSink
     object_poses_fn: Callable[[], Mapping[str, object]] | None = None
     object_pose_fn: Callable[[str], object] | None = None
     object_names: tuple[str, ...] = ()
@@ -178,6 +179,22 @@ class CAPXStreamingObservationSource:
             episode_epoch=self.episode_epoch,
             source=self.source,
             sequence=self._sequence,
+            object_measurements=tuple(
+                ObjectMeasurement(
+                    track_id=track.track_id,
+                    label=track.label,
+                    pose_wxyz_xyz=track.pose_wxyz_xyz,
+                    confidence=track.confidence,
+                    timestamp_ns=observation.timestamp_ns,
+                    covariance=track.covariance,
+                    evidence=track.evidence,
+                )
+                for track in self.provider.capture_object_tracks(
+                    timestamp_ns=observation.timestamp_ns,
+                    episode_id=self.episode_id or "unknown",
+                    episode_epoch=self.episode_epoch or 0,
+                )
+            ),
         )
 
 

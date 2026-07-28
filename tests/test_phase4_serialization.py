@@ -4,6 +4,7 @@ import pytest
 
 from capmas.contracts.core import ArtifactRef
 from capmas.perception.protocol import CameraFrame, CameraModel, ObservationBundle
+from capmas.perception.tracking import ObjectMeasurement
 from capmas.perception.serialization import (
     observation_from_json,
     observation_to_json,
@@ -26,6 +27,16 @@ def make_observation_bundle() -> ObservationBundle:
         2,
         "replay",
         7,
+        (
+            ObjectMeasurement(
+                "cube-1",
+                "cube",
+                (1.0, 0.0, 0.0, 0.0, 0.1, 0.2, 0.3),
+                0.95,
+                100,
+                evidence=(rgb,),
+            ),
+        ),
     )
 
 

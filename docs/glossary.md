@@ -35,3 +35,12 @@
 | State Version | Monotonic identifier for a scene snapshot used to detect stale proposals. |
 | Subgoal Checkpoint | Safe boundary at which contracts, memory, topology, or skill versions may be updated. |
 | World Model Plane | Asynchronous scene-estimation and incremental mapping plane. |
+| P4.5 Process World Model | The Phase 4.5 infrastructure gate that connects real CAP-X observations to a spawned World Model worker through shared artifacts and JSON IPC. |
+| Encoded Artifact Store | A codec-aware wrapper that converts runtime values such as NumPy arrays into bytes before delegating persistence to `FileArtifactStore`. |
+| Artifact Codec | Replaceable encoder/decoder that defines how an in-memory observation value becomes a shared artifact. P4.5 initially uses NumPy `.npy`. |
+| Latest-Wins Queue | Non-blocking bounded queue policy that drops the oldest pending observation when a newer observation arrives. |
+| Observation Correlation | The `(episode_id, episode_epoch, sequence)` identity used to acknowledge one process observation independently of global counters. |
+| In-Flight Observation | An observation accepted by a worker but not yet published as a `SceneSnapshot`; it is discarded if the worker crashes. |
+| Last Valid Snapshot | The most recent successfully published immutable snapshot retained across worker restart or artifact failure. |
+| Degraded Runtime | A fail-closed health state reached after restart or artifact-failure budgets are exhausted; fresh-dependent actions are rejected. |
+| Artifact Failure | Missing, checksum-invalid, truncated, or undecodable shared data that prevents one observation from producing a snapshot. |

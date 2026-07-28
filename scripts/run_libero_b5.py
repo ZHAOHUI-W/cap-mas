@@ -16,6 +16,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from capmas.perception.capx_depth import CAPXDepthDecoder
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -34,7 +36,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target-name", default="plate")
     parser.add_argument("--max-observations", type=int, default=20)
     parser.add_argument("--duration-s", type=float, default=None)
-    parser.add_argument("--depth-subsample", type=int, default=8)
+    parser.add_argument(
+        "--depth-subsample",
+        type=int,
+        default=16,
+        help="Depth stride; 16 is the process-mode latency-safe default, 8 increases map density",
+    )
     parser.add_argument(
         "--server-url",
         "--api-base",
@@ -64,50 +71,6 @@ class EmptyDepthDecoder:
         return ()
 
 
-class CAPXDepthDecoder:
-    """Decode CAP-X's in-memory NumPy depth artifact into world-model points."""
-
-    def __init__(self, *, subsample: int = 8, near_m: float = 0.015, far_m: float = 20.0) -> None:
-        if subsample <= 0:
-            raise ValueError("depth subsample must be positive")
-        if not 0.0 < near_m < far_m:
-            raise ValueError("depth clip range must satisfy 0 < near_m < far_m")
-        self.subsample = subsample
-        self.near_m = near_m
-        self.far_m = far_m
-
-    def decode(self, frame, depth, artifact_store):
-        import numpy as np
-
-        value = getattr(artifact_store, "get")(depth)
-        depth_array = np.asarray(value).squeeze()
-        if depth_array.ndim != 2:
-            raise ValueError(f"CAP-X depth must be 2D, got shape={depth_array.shape}")
-        intrinsics = np.asarray(frame.camera.intrinsics, dtype=float)
-        if intrinsics.size != 9:
-            raise ValueError("CAP-X camera intrinsics must contain 9 values")
-        intrinsics = intrinsics.reshape(3, 3)
-        sampled = depth_array[:: self.subsample, :: self.subsample].astype(float, copy=False)
-        height, width = sampled.shape
-        yy, xx = np.indices((height, width), dtype=float)
-        scale = float(self.subsample)
-        fx = intrinsics[0, 0] / scale
-        fy = intrinsics[1, 1] / scale
-        cx = intrinsics[0, 2] / scale
-        cy = intrinsics[1, 2] / scale
-        if fx == 0.0 or fy == 0.0:
-            raise ValueError("CAP-X camera intrinsics contain zero focal length")
-        valid = (
-            np.isfinite(sampled)
-            & (sampled >= self.near_m)
-            & (sampled <= self.far_m)
-        )
-        z = sampled[valid]
-        x = (xx[valid] - cx) * z / fx
-        y = (yy[valid] - cy) * z / fy
-        return tuple((float(px), float(py), float(pz)) for px, py, pz in zip(x, y, z))
-
-
 def build_live_world_model(provider, *, depth_subsample: int = 8):
     """Build a World Model using the exact CAP-X provider artifact boundary."""
     from capmas.perception.geometry import ReferenceGeometryEstimator
@@ -116,6 +79,8 @@ def build_live_world_model(provider, *, depth_subsample: int = 8):
     from capmas.perception.world_model import WorldModelService
 
     def measurements(observation):
+        if observation.object_measurements:
+            return observation.object_measurements
         tracks = provider.capture_object_tracks(
             timestamp_ns=observation.timestamp_ns,
             episode_id=observation.episode_id or "unknown",
@@ -260,6 +225,9 @@ def snapshot_summary(snapshot) -> dict[str, object] | None:
             for track in snapshot.objects
         ],
         "source_artifact_count": len(snapshot.source_artifacts),
+        "source_artifact_bytes": sum(
+            artifact.byte_size or 0 for artifact in snapshot.source_artifacts
+        ),
         "source_artifact_media_types": sorted(
             {artifact.media_type for artifact in snapshot.source_artifacts}
         ),
@@ -344,8 +312,6 @@ def main() -> None:
     initial_scene = None
     live_mode = args.config_path is not None and args.recording is None
     if live_mode:
-        if args.runtime != "thread":
-            raise SystemExit("live CAP-X B5 currently supports --runtime thread only")
         _, loader_type = _prepare_capx_imports()
         config = loader_type.load(args.config_path)
         if not args.skip_api_servers:
@@ -354,10 +320,20 @@ def main() -> None:
             server_processes = _start_api_servers(config.get("api_servers"))
         from capmas.backends.capx_libero_factory import build_capx_runtime_from_yaml
 
+        capture_artifact_store = None
+        if args.runtime == "process":
+            from capmas.perception.artifact_bridge import EncodedArtifactStore, NumpyArtifactCodec
+
+            capture_artifact_store = EncodedArtifactStore(
+                FileArtifactStore(artifact_root, fsync=False),
+                NumpyArtifactCodec(),
+            )
+
         capx_bundle = build_capx_runtime_from_yaml(
             args.config_path,
             loader=lambda _: config,
             object_names=(args.object_name, args.target_name),
+            artifact_store=capture_artifact_store,
         )
         episode = capx_bundle.backend.reset(seed=args.seed)
         initial_scene = episode.initial_scene
@@ -367,20 +343,36 @@ def main() -> None:
             episode_id=episode.handle.episode_id,
             episode_epoch=episode.handle.episode_epoch,
         )
-        service = build_live_world_model(
-            capx_bundle.observation_provider,
-            depth_subsample=args.depth_subsample,
-        )
-        runtime = ThreadWorldModelRuntime(
-            service=service,
-            synchronizer=BoundedSensorSynchronizer(
-                capacity=args.queue_capacity,
-                episode_id=episode.handle.episode_id,
-                episode_epoch=episode.handle.episode_epoch,
-            ),
-            config=WorldModelRuntimeConfig(queue_capacity=args.queue_capacity),
-            clock=time.time_ns,
-        )
+        if args.runtime == "thread":
+            service = build_live_world_model(
+                capx_bundle.observation_provider,
+                depth_subsample=args.depth_subsample,
+            )
+            runtime = ThreadWorldModelRuntime(
+                service=service,
+                synchronizer=BoundedSensorSynchronizer(
+                    capacity=args.queue_capacity,
+                    episode_id=episode.handle.episode_id,
+                    episode_epoch=episode.handle.episode_epoch,
+                ),
+                config=WorldModelRuntimeConfig(queue_capacity=args.queue_capacity),
+                clock=time.time_ns,
+            )
+        else:
+            from capmas.backends.capx_libero_factory import CAPXProcessWorldModelFactory
+
+            runtime = ProcessWorldModelRuntime(
+                service_factory=CAPXProcessWorldModelFactory(
+                    str(artifact_root),
+                    depth_subsample=args.depth_subsample,
+                ),
+                synchronizer_config=SynchronizerConfig(
+                    queue_capacity=args.queue_capacity,
+                    max_age_ms=150.0,
+                ),
+                config=WorldModelRuntimeConfig(queue_capacity=args.queue_capacity),
+                artifact_store=FileArtifactStore(artifact_root, fsync=False),
+            )
     elif args.runtime == "thread":
         from capmas.perception.artifacts import InMemoryArtifactStore
 
@@ -443,7 +435,33 @@ def main() -> None:
                 logger.warning("dropped observation sequence=%s", observation.sequence)
                 continue
             submitted += 1
-            if not runtime.wait_until_processed(timeout_s=5.0):
+            if args.runtime == "process":
+                acknowledgement = runtime.wait_for_sequence(
+                    observation.sequence,
+                    timeout_s=5.0,
+                    episode_id=observation.episode_id,
+                    episode_epoch=observation.episode_epoch,
+                )
+                if acknowledgement is None:
+                    metrics.record_drop()
+                    logger.error("world model processing timeout sequence=%s", observation.sequence)
+                    continue
+                if acknowledgement.kind == "dropped":
+                    metrics.record_drop()
+                    logger.warning(
+                        "world model dropped sequence=%s reason=%s",
+                        observation.sequence,
+                        acknowledgement.error,
+                    )
+                    continue
+                if acknowledgement.kind == "failed":
+                    logger.error(
+                        "world model failed sequence=%s error=%s",
+                        observation.sequence,
+                        acknowledgement.error,
+                    )
+                    continue
+            elif not runtime.wait_until_processed(timeout_s=5.0):
                 metrics.record_drop()
                 logger.error("world model processing timeout sequence=%s", observation.sequence)
                 continue
@@ -476,16 +494,29 @@ def main() -> None:
                 logger.exception("CAP-X backend stop failed")
 
     summary = metrics.summary(now_ns=time.time_ns())
+    capture_artifact_io = None
+    if capx_bundle is not None:
+        artifact_metrics = getattr(capx_bundle.observation_provider.artifacts, "metrics", None)
+        if callable(artifact_metrics):
+            capture_artifact_io = asdict(artifact_metrics())
     payload = {
         "phase": "4-b5-live" if live_mode else "4-b5-reference",
         "mode": "live_capx" if live_mode else "replay",
         "recording": str(Path(args.recording).resolve()) if args.recording else None,
         "config_path": str(Path(args.config_path).resolve()) if args.config_path else None,
         "runtime": args.runtime,
+        "depth_subsample": args.depth_subsample,
+        "perception_mode": (
+            "privileged_object_pose_plus_real_rgbd" if live_mode else "replay_reference"
+        ),
+        "semantic_models_enabled": False,
+        "artifact_codec": "numpy-npy" if args.runtime == "process" else "in_memory",
+        "artifact_fsync": False if args.runtime == "process" else None,
         "submitted": submitted,
         "processed": processed,
         "snapshot_versions": snapshots,
         "final_snapshot": snapshot_summary(final_snapshot),
+        "capture_artifact_io": capture_artifact_io,
         "metrics": asdict(summary),
         "health": asdict(runtime.health()),
         "evaluator_success": evaluator_success,

@@ -1,7 +1,8 @@
 # Phase 4 Reference World Model Design
 
-Status: Approved; reference implementation and live thread-mode CAP-X B5 gate
-complete; live process-mode capture gate pending
+Status: Approved; reference implementation and live thread/process CAP-X B5
+gates complete. P4.5 decisions are accepted
+in [ADR-0012](../../adr/0012-phase4-5-cross-process-artifacts.md).
 Date: 2026-07-27
 
 ## 1. Purpose
@@ -63,6 +64,13 @@ code owns queues, lifecycle, IPC, restart behavior, and health reporting.
 The thread runtime uses a bounded queue and is the default for replay and
 contract tests. The process runtime is the acceptance path for B5 because the
 control path must not share failure or latency with the semantic worker.
+
+P4.5 closes the live process capture gap with a parent-owned run-scoped
+`FileArtifactStore`, an `EncodedArtifactStore` using NumPy `.npy` bytes, and
+sequence-correlated JSON acknowledgements. The worker receives only a
+picklable artifact-root string and never receives CAP-X environment/API
+objects. Queue overflow is latest-wins; worker and artifact failures are
+fail-closed. See ADR-0012 for the complete decision record.
 
 ### 4.2 Time semantics
 

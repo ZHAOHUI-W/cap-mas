@@ -96,25 +96,43 @@ VLM or blocks snapshot publication.
 The B5 runner is `scripts/run_libero_b5.py`. Replay mode remains the
 dependency-light regression path; live mode accepts a CAP-X YAML, resets a
 real LIBERO environment, and feeds `CAPXStreamingObservationSource` into the
-same World Model service. Live mode uses the thread runtime because the
-current CAP-X provider stores NumPy RGB-D values in an in-process artifact
-store. Process mode is retained for replay/IPC acceptance until capture-side
-artifacts are written to the shared file store.
+same World Model service. P4.5 adds an `EncodedArtifactStore` with a NumPy
+`.npy` codec: the parent writes a run-scoped shared `FileArtifactStore`, while
+the process worker reads RGB-D and writes map artifacts into the same root.
+The worker receives only artifact-root configuration and JSON/URI envelopes;
+privileged object poses are copied into the observation envelope as numeric
+measurements, never as a CAP-X object reference.
+
+P4.5 uses a non-blocking latest-wins queue, sequence-correlated acknowledgements,
+last-snapshot restart recovery, and fail-closed artifact errors. The detailed
+decisions and test matrix are in [ADR-0012](adr/0012-phase4-5-cross-process-artifacts.md)
+and the [P4.5 implementation plan](superpowers/plans/2026-07-28-phase4-5-process-world-model.md).
+
+The process B5 performance-safe profile is `--depth-subsample 16` with a
+run-scoped local/tmpfs artifact root and `fsync=false`. A stride of 8 keeps
+more geometry points but is not the default process latency profile.
 
 The live gate records target and achieved rates, processing latency, snapshot
 age, drops, worker health, final object tracks, source artifact media types,
 and the local-map URI in both JSON and per-run log artifacts. The 2026-07-27
 LIBERO Spatial task 0 run used 20 observations at a 20 Hz target and produced:
 
-| Metric | Result |
-| --- | ---: |
-| Snapshots | 20, versions 1..20 |
-| Dropped frames | 0 |
-| Processing latency P95 | 39.54 ms |
-| Snapshot age P95 | 14.52 ms |
-| Achieved rate | 17.47 Hz |
-| Worker restarts | 0 |
-| Final tracks | 7 |
+| Metric | Thread baseline (2026-07-27) | Process P4.5 (2026-07-28) |
+| --- | ---: | ---: |
+| Snapshots | 20, versions 1..20 | 20, versions 1..20 |
+| Dropped frames | 0 | 0 |
+| Processing latency P95 | 39.54 ms | 23.64 ms |
+| Snapshot age P95 | 14.52 ms | 5.63 ms |
+| Achieved rate | 17.47 Hz | 11.43 Hz* |
+| Worker restarts | 0 | 0 |
+| Final tracks | 7 | 7 |
+
+\* The runner waits for each acknowledgement to make the per-sequence
+acceptance artifact unambiguous; this is not the unconstrained capture rate.
+The process run used `depth_subsample=16`, `/dev/shm` artifacts, and
+`fsync=false`. Its JSON also records `capture_artifact_io` (126 puts,
+120,441,216 bytes), source artifact bytes, codec, runtime health, and
+evaluator-only status.
 
 `evaluator_success=false` in this gate is expected: B5 observes the reset
 scene and does not execute a robot action. The optional endpoint probe for

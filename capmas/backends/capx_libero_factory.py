@@ -11,6 +11,7 @@ from capmas.backends.capx import (
     CAPXTypedSkill,
     build_capx_skills,
 )
+from capmas.perception.artifact_bridge import ArtifactSink
 from capmas.perception.artifacts import InMemoryArtifactStore
 from capmas.skills.registry import SkillRegistry
 
@@ -42,6 +43,41 @@ class CAPXRuntimeBundle:
     skill_registry: SkillRegistry
     task_id: str
     suite_name: str
+
+
+@dataclass(frozen=True)
+class CAPXProcessWorldModelFactory:
+    """Pickle-safe World Model factory for the spawned CAP-X worker."""
+
+    artifact_root: str
+    depth_subsample: int = 16
+    fsync: bool = False
+
+    def __call__(self):
+        from capmas.perception.artifact_bridge import (
+            EncodedArtifactStore,
+            FileArtifactStore,
+            NumpyArtifactCodec,
+        )
+        from capmas.perception.capx_depth import CAPXDepthDecoder
+        from capmas.perception.geometry import ReferenceGeometryEstimator
+        from capmas.perception.local_map import SparseVoxelMap
+        from capmas.perception.tracking import KnownObjectTracker
+        from capmas.perception.world_model import WorldModelService
+
+        store = EncodedArtifactStore(
+            FileArtifactStore(self.artifact_root, fsync=self.fsync),
+            NumpyArtifactCodec(),
+        )
+        return WorldModelService(
+            geometry=ReferenceGeometryEstimator(
+                artifact_store=store,
+                depth_decoder=CAPXDepthDecoder(subsample=self.depth_subsample),
+            ),
+            local_map=SparseVoxelMap(voxel_size_m=0.01, local_radius_m=1.0),
+            tracker=KnownObjectTracker(max_match_distance_m=0.08),
+            artifact_store=store,
+        )
 
 
 def _default_loader(path: str | Path) -> Mapping[str, object]:
@@ -87,6 +123,7 @@ def build_capx_runtime_from_yaml(
     backend_id: str = "capx_libero",
     instantiate_code_env: bool = False,
     object_names: Sequence[str] | None = None,
+    artifact_store: ArtifactSink | None = None,
 ) -> CAPXRuntimeBundle:
     """Build CAP-MAS resources from an existing CAP-X LIBERO YAML.
 
@@ -152,7 +189,7 @@ def build_capx_runtime_from_yaml(
     if missing:
         raise ValueError(f"CAP-X API is missing configured functions: {sorted(set(missing))}")
 
-    artifacts = InMemoryArtifactStore()
+    artifacts = artifact_store if artifact_store is not None else InMemoryArtifactStore()
     observation_fn = function_map.get("get_observation")
     if not callable(observation_fn):
         raise ValueError("selected CAP-X API must expose get_observation")

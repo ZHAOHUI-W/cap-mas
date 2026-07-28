@@ -218,10 +218,9 @@ matched endpoint-backed trials; adaptive topology remains Phase 8.
 Status: the dependency-light reference contracts, replay path, sparse voxel
 map, deterministic tracker, semantic trigger queue, observation/committed state
 views, thread/process runtimes, CAP-X streaming adapter, and B5 runner are
-implemented. The live CAP-X observation gate has passed in thread mode with
-real LIBERO RGB-D and CAP-X object-pose measurements. Process-mode replay and
-IPC tests pass; a live process-mode run remains deferred until CAP-X capture
-artifacts are emitted directly into the shared file store.
+implemented. The live CAP-X observation gate has passed in thread mode and
+the P4.5 process gate now passes with real LIBERO RGB-D, shared `.npy`
+artifacts, and CAP-X object-pose measurements carried in the JSON envelope.
 
 - [x] Implement timestamped replay and bounded sensor synchronization.
 - [x] Add fast FK/camera-pose and dependency-light depth-to-world geometry seams.
@@ -234,12 +233,15 @@ artifacts are emitted directly into the shared file store.
 - [x] Add CAP-X streaming metadata adapter and processing-latency metrics.
 - [x] Add `scripts/run_libero_b5.py` replay/live benchmark with JSON/log artifacts.
 - [x] Run live CAP-X B5 thread mode with declared deadline/freshness targets.
-- [ ] Run live CAP-X B5 process mode with shared file-backed capture artifacts.
+- [x] Run live CAP-X B5 process mode with shared file-backed capture artifacts.
 - [ ] Add TSDF backend and semantic model adapters.
 
-Exit criterion: the reference/live-thread B5 gate meets the predeclared
-control deadline and freshness targets; process-mode live capture is a
-follow-up integration gate.
+Exit criterion: the reference/live-thread and P4.5 process B5 gates meet the
+predeclared deadline and freshness targets under their declared artifact-root
+and depth-stride profiles. The accepted P4.5 design and implementation
+checklist are in
+[`docs/superpowers/plans/2026-07-28-phase4-5-process-world-model.md`](superpowers/plans/2026-07-28-phase4-5-process-world-model.md)
+and [ADR-0012](adr/0012-phase4-5-cross-process-artifacts.md).
 
 ## Phase 5 — Memory, rehearsal, and evidence evolution
 

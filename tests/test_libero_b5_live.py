@@ -49,3 +49,21 @@ def test_live_world_model_uses_capx_artifacts_depth_and_object_tracks() -> None:
     assert snapshot.objects[0].track_id == "cube"
     assert snapshot.local_map is not None
     assert len(snapshot.source_artifacts) == 2
+
+
+def test_b5_process_default_depth_subsample_is_latency_safe(monkeypatch) -> None:
+    runner = _load_runner_module()
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_libero_b5.py",
+            "--config-path",
+            "libero.yaml",
+            "--runtime",
+            "process",
+        ],
+    )
+
+    args = runner.parse_args()
+
+    assert args.depth_subsample == 16

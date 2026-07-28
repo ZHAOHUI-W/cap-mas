@@ -24,6 +24,25 @@ def test_capx_streaming_source_adds_source_sequence_and_episode_metadata():
     assert bundle.episode_epoch == 4
 
 
+def test_capx_streaming_source_carries_privileged_object_measurements():
+    provider = CAPXObservationProvider(
+        observation_fn=lambda: {"timestamp_ns": 100},
+        artifacts=InMemoryArtifactStore(),
+        object_poses_fn=lambda: {"cube": ([0.1, 0.2, 0.3], [1.0, 0.0, 0.0, 0.0])},
+    )
+    source = CAPXStreamingObservationSource(
+        provider,
+        episode_id="ep-1",
+        episode_epoch=4,
+    )
+
+    bundle = source.capture()
+
+    assert len(bundle.object_measurements) == 1
+    assert bundle.object_measurements[0].track_id == "cube"
+    assert bundle.object_measurements[0].pose_wxyz_xyz == (1.0, 0.0, 0.0, 0.0, 0.1, 0.2, 0.3)
+
+
 def test_capx_snapshot_records_processing_latency(monkeypatch):
     import capmas.backends.capx as capx_module
 

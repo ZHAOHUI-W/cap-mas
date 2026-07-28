@@ -6,6 +6,7 @@ from capmas.perception.geometry import ReferenceGeometryEstimator
 from capmas.perception.local_map import SparseVoxelMap
 from capmas.perception.protocol import ObservationBundle
 from capmas.perception.tracking import KnownObjectTracker
+from capmas.perception.tracking import ObjectMeasurement
 from capmas.perception.world_model import WorldModelService
 
 
@@ -96,3 +97,27 @@ def test_world_model_rejects_cross_episode_observation():
 
     with pytest.raises(ValueError, match="episode"):
         service.process(make_observation(episode_id="episode-b"), previous)
+
+
+def test_world_model_uses_measurements_embedded_in_observation_without_provider():
+    service = make_world_model()
+    observation = ObservationBundle(
+        timestamp_ns=100,
+        frames=(),
+        robot_state={},
+        episode_id="ep",
+        episode_epoch=1,
+        object_measurements=(
+            ObjectMeasurement(
+                track_id="cube",
+                label="cube",
+                pose_wxyz_xyz=(1.0, 0.0, 0.0, 0.0, 0.1, 0.2, 0.3),
+                confidence=1.0,
+                timestamp_ns=100,
+            ),
+        ),
+    )
+
+    snapshot = service.process(observation, previous=None)
+
+    assert snapshot.objects[0].track_id == "cube"

@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from capmas.backends.capx import CAPXTypedSkill
 from capmas.backends.capx_libero_factory import build_capx_runtime_from_yaml
 from capmas.contracts.core import SkillRef
+from capmas.perception.artifact_bridge import EncodedArtifactStore, FileArtifactStore, NumpyArtifactCodec
 
 
 class FakeApi:
@@ -138,3 +139,31 @@ def test_factory_constructs_low_level_directly_by_default() -> None:
 
     assert bundle.environment is low_level
     assert instantiated == [config["env"]["cfg"]["low_level"]]
+
+
+def test_factory_injects_replaceable_artifact_store_into_capx_provider(tmp_path) -> None:
+    low_level = FakeLowLevelEnv()
+    api = FakeApi()
+    config = {
+        "env": {
+            "cfg": {
+                "low_level": {"suite_name": "libero_spatial", "task_id": 0},
+                "apis": ["FrankaLiberoApi"],
+            }
+        }
+    }
+    artifacts = EncodedArtifactStore(FileArtifactStore(tmp_path), NumpyArtifactCodec())
+
+    bundle = build_capx_runtime_from_yaml(
+        "unused.yaml",
+        loader=lambda path: config,
+        instantiator=lambda env_config: low_level,
+        api_factory=lambda name: (lambda env: api),
+        skill_bindings={
+            "get_observation": "get_observation",
+            "open_gripper": "open_gripper",
+        },
+        artifact_store=artifacts,
+    )
+
+    assert bundle.observation_provider.artifacts is artifacts
