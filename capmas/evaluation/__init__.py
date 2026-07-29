@@ -21,10 +21,12 @@ from capmas.evaluation.rehearsal import (
     RehearsalResult,
     RehearsalTimeout,
 )
+from capmas.evaluation.phase5_artifacts import Phase5RunDirectory
 
 __all__ = [
     "ProcessRehearsalPool",
     "RehearsalJob",
     "RehearsalResult",
     "RehearsalTimeout",
+    "Phase5RunDirectory",
 ]

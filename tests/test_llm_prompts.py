@@ -11,6 +11,7 @@ from capmas.llm.prompts import (
     build_staged_policy_request,
     build_topology_request,
     mission_graph_response_schema,
+    subgraph_response_schema,
 )
 
 
@@ -51,6 +52,39 @@ def test_strict_graph_schema_declares_skill_argument_keys() -> None:
     assert args_schema["additionalProperties"] is False
     assert args_schema["required"] == ["object_name", "position"]
     assert set(args_schema["properties"]) == {"object_name", "position"}
+
+
+def test_local_policy_schema_requires_observable_postconditions() -> None:
+    schema = subgraph_response_schema()
+    node_schema = (
+        schema["properties"]["subgraph"]["properties"]["nodes"]["items"]
+    )
+
+    assert node_schema["properties"]["postconditions"]["minItems"] == 1
+
+
+def test_local_policy_schema_exposes_strict_typed_motion_intent() -> None:
+    schema = subgraph_response_schema()
+    node_schema = (
+        schema["properties"]["subgraph"]["properties"]["nodes"]["items"]
+    )
+
+    intent = node_schema["properties"]["motion_intent"]
+    assert intent["type"] == ["object", "null"]
+    assert intent["additionalProperties"] is False
+    assert set(intent["required"]) == {
+        "kind",
+        "object_track_id",
+        "target_track_id",
+        "approach_vector_xyz",
+        "standoff_m",
+        "target_pose_wxyz_xyz",
+    }
+    assert intent["properties"]["kind"]["enum"] == ["grasp", "place", "move"]
+    assert intent["properties"]["approach_vector_xyz"]["type"] == [
+        "array",
+        "null",
+    ]
 
 
 def test_strict_graph_schema_uses_narrow_nullable_argument_types() -> None:
@@ -163,5 +197,7 @@ def test_staged_policy_strategy_changes_system_prompt_and_payload() -> None:
     assert safety_payload["strategy_profile"]["perception_weight"] > balanced_payload[
         "strategy_profile"
     ]["perception_weight"]
+    assert "motion_intent" in str(balanced.messages[0]["content"])
+    assert "approach_vector_xyz" in str(balanced.messages[0]["content"])
     assert balanced.agent_name == "policy-0"
     assert safety.agent_name == "policy-1:safety"

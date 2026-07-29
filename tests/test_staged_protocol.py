@@ -473,6 +473,21 @@ def test_topology_validator_rejects_recovery_dependency_on_failed_source() -> No
     )
 
 
+def test_topology_validator_rejects_nonpositive_scene_fresh_threshold() -> None:
+    topology = replace(
+        _topology(),
+        subgoals=(
+            replace(_topology().subgoals[0], success_predicates=("scene_fresh(0)",)),
+            _topology().subgoals[1],
+        ),
+    )
+
+    result = TopologyValidator().validate(topology)
+
+    assert result.valid is False
+    assert any(item.code == "INVALID_SCENE_FRESH_THRESHOLD" for item in result.errors)
+
+
 def test_local_decoder_normalizes_terminal_predicate_edges_to_typed_outcomes() -> None:
     action = SubgraphNodeSpec(
         node_id="action",
@@ -837,6 +852,8 @@ def test_staged_prompts_use_smaller_role_specific_outputs() -> None:
     assert topology_request.response_schema == mission_topology_response_schema()
     assert policy_request.response_schema == subgraph_response_schema()
     assert "subgraph_id is the only control-flow ID" in topology_request.messages[0]["content"]
+    assert "smallest linear topology" in topology_request.messages[0]["content"]
+    assert "Do not automatically create subgoals or IDs containing retry" in topology_request.messages[0]["content"]
     assert "never use subgraph_artifact" in policy_request.messages[0]["content"]
     assert "failure terminal has no success_predicates" in policy_request.messages[0]["content"]
     assert len(str(topology_request.response_schema)) < len(str(mission_graph_response_schema()))

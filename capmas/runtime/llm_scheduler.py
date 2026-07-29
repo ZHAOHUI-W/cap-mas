@@ -39,6 +39,7 @@ from capmas.contracts.graph import (
 from capmas.contracts.scene import SceneSnapshot
 from capmas.contracts.staged import MissionTopology, TopologySubgoal
 from capmas.graph.staged import TopologyValidator
+from capmas.graph.normalizer import CandidateNormalizer
 from capmas.graph.validator import GraphValidator, scene_initial_facts
 from capmas.runtime.graph_interpreter import FixedGraphInterpreter, GraphExecutionResult
 
@@ -81,6 +82,7 @@ class LLMGraphCompileResult:
     topology: MissionTopology | None = None
     planning_scope: str = "full_graph"
     manager_topology_calls: int = 0
+    candidate_evidence_timeouts: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -118,6 +120,8 @@ class LLMGraphScheduler:
         candidate_scene_rewriter: Callable[[SubgraphSpec, SceneSnapshot], SubgraphSpec] | None = None,
         proposal_mode: str = "subgoal_serial",
         candidate_evidence_provider: CandidateEvidenceProvider | None = None,
+        candidate_normalizer: CandidateNormalizer | None = None,
+        candidate_evidence_timeout_ms: float | None = None,
     ) -> None:
         if max_workers <= 0:
             raise ValueError("max_workers must be positive")
@@ -125,6 +129,8 @@ class LLMGraphScheduler:
             raise ValueError("candidate_confidence must be in [0, 1]")
         if proposal_mode not in {"subgoal_serial", "ready_wave"}:
             raise ValueError("proposal_mode must be subgoal_serial or ready_wave")
+        if candidate_evidence_timeout_ms is not None and candidate_evidence_timeout_ms <= 0:
+            raise ValueError("candidate evidence timeout must be positive")
         self.manager = manager
         self.policy_agents = {key: tuple(value) for key, value in policy_agents.items()}
         self.validator = validator or GraphValidator()
@@ -137,6 +143,9 @@ class LLMGraphScheduler:
         self.candidate_scene_rewriter = candidate_scene_rewriter
         self.proposal_mode = proposal_mode
         self.candidate_evidence_provider = candidate_evidence_provider
+        self.candidate_normalizer = candidate_normalizer
+        self.candidate_evidence_timeout_ms = candidate_evidence_timeout_ms
+        self._candidate_evidence_timeouts: list[str] = []
 
     def compile(
         self,
@@ -147,6 +156,7 @@ class LLMGraphScheduler:
         protocol: str = "legacy",
     ) -> LLMGraphCompileResult:
         started = time.monotonic()
+        self._candidate_evidence_timeouts = []
         if protocol == "staged":
             return self.compile_staged(task, scene, context=context)
         if protocol != "legacy":
@@ -221,6 +231,7 @@ class LLMGraphScheduler:
             proposal_mode=self.proposal_mode,
             proposal_waves=tuple((item.subgraph_id,) for item in graph.subgraphs),
             compile_latency_ms=(time.monotonic() - started) * 1000.0,
+            candidate_evidence_timeouts=tuple(self._candidate_evidence_timeouts),
         )
 
     def run(
@@ -289,6 +300,7 @@ class LLMGraphScheduler:
     ) -> LLMGraphCompileResult:
         """Compile topology and local graphs as two independent LLM stages."""
         started = time.monotonic()
+        self._candidate_evidence_timeouts = []
         manager = self.manager
         if not hasattr(manager, "propose_topology"):
             raise LLMGraphScheduleError(
@@ -392,6 +404,7 @@ class LLMGraphScheduler:
             compile_latency_ms=(time.monotonic() - started) * 1000.0,
             topology=topology,
             manager_topology_calls=1,
+            candidate_evidence_timeouts=tuple(self._candidate_evidence_timeouts),
         )
 
     def compile_ready_frontier(
@@ -523,6 +536,7 @@ class LLMGraphScheduler:
             topology=topology,
             planning_scope="ready_frontier",
             manager_topology_calls=1 if manager_called else 0,
+            candidate_evidence_timeouts=tuple(self._candidate_evidence_timeouts),
         )
 
     def _compile_staged_ready_waves(
@@ -607,6 +621,7 @@ class LLMGraphScheduler:
             compile_latency_ms=(time.monotonic() - started) * 1000.0,
             topology=topology,
             manager_topology_calls=1,
+            candidate_evidence_timeouts=tuple(self._candidate_evidence_timeouts),
         )
 
     def _propose_candidate_wave(
@@ -679,6 +694,7 @@ class LLMGraphScheduler:
                         raw_subgraph=raw_proposal,
                         rewrite_report=rewrite_report_for(raw_proposal, proposal),
                     )
+                    candidate = self._normalize_candidate(candidate)
                     candidates[subgraph_id].append(
                         self._attach_candidate_evidence(candidate, scene)
                     )
@@ -785,6 +801,7 @@ class LLMGraphScheduler:
                         raw_subgraph=raw_proposal,
                         rewrite_report=rewrite_report_for(raw_proposal, proposal),
                     )
+                    candidate = self._normalize_candidate(candidate)
                     candidates.append(self._attach_candidate_evidence(candidate, scene))
                 except Exception as exc:
                     failures.append(
@@ -808,10 +825,39 @@ class LLMGraphScheduler:
     ) -> GraphCandidate:
         if self.candidate_evidence_provider is None:
             return candidate
-        evidence = self.candidate_evidence_provider(candidate, scene)
+        if self.candidate_evidence_timeout_ms is None:
+            evidence = self.candidate_evidence_provider(candidate, scene)
+        else:
+            pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="capmas-evidence")
+            future = pool.submit(self.candidate_evidence_provider, candidate, scene)
+            try:
+                evidence = future.result(timeout=self.candidate_evidence_timeout_ms / 1000.0)
+            except TimeoutError:
+                future.cancel()
+                pool.shutdown(wait=False, cancel_futures=True)
+                self._candidate_evidence_timeouts.append(candidate.candidate_id)
+                return replace(
+                    candidate,
+                    evidence=CandidateEvidence(
+                        available_metrics=(),
+                        scene_version=scene.scene_version,
+                        provider="candidate_evidence_timeout",
+                        captured_at_ns=time.time_ns(),
+                    ),
+                )
+            except BaseException:
+                pool.shutdown(wait=False, cancel_futures=True)
+                raise
+            else:
+                pool.shutdown(wait=True)
         if evidence is None:
             return candidate
         return replace(candidate, evidence=evidence)
+
+    def _normalize_candidate(self, candidate: GraphCandidate) -> GraphCandidate:
+        if self.candidate_normalizer is None:
+            return candidate
+        return self.candidate_normalizer.normalize(candidate)
 
     def _rewrite_candidate(
         self,

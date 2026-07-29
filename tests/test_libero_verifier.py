@@ -1,8 +1,8 @@
 import pytest
 
-from capmas.contracts.action import ActionContract, SkillCall
+from capmas.contracts.action import ActionContract, SkillCall, SkillOutputRef
 from capmas.contracts.core import SkillRef
-from capmas.contracts.graph import SubgraphNodeSpec, SubgraphSpec
+from capmas.contracts.graph import MotionIntent, SubgraphNodeSpec, SubgraphSpec
 from capmas.contracts.scene import ObjectTrack, SceneSnapshot
 from capmas.contracts.trace import ExecutionTrace
 from capmas.verification.libero import (
@@ -10,6 +10,7 @@ from capmas.verification.libero import (
     compile_time_preconditions,
     ground_libero_grasp_subgraph,
     repair_libero_grasp_subgraph,
+    validate_libero_grasp_subgraph,
     validate_libero_skill_sequence,
 )
 from capmas.verification.predicates import PredicateBasedVerifier
@@ -118,6 +119,47 @@ def test_libero_grasp_grounding_uses_sample_output_and_default_approach() -> Non
     assert args["z_approach"] == 0.10
 
 
+def test_libero_grasp_grounding_inserts_lift_after_close() -> None:
+    subgraph = SubgraphSpec(
+        "grasp",
+        "grasp",
+        "grasp",
+        (
+            SubgraphNodeSpec(
+                "action",
+                "grasp",
+                (
+                    SkillCall(SkillRef("sample_grasp_pose", "1"), {}),
+                    SkillCall(
+                        SkillRef("goto_pose", "1"),
+                        {"position": [0, 0, 0], "quaternion_wxyz": [1, 0, 0, 0]},
+                    ),
+                    SkillCall(SkillRef("close_gripper", "1"), {}),
+                ),
+            ),
+        ),
+        (),
+        "action",
+        ("action",),
+        ("action",),
+    )
+
+    grounded = ground_libero_grasp_subgraph(subgraph)
+    calls = grounded.nodes[0].skill_calls
+
+    assert [call.skill.skill_id for call in calls] == [
+        "sample_grasp_pose",
+        "goto_pose",
+        "close_gripper",
+        "lift_after_grasp",
+    ]
+    assert calls[-1].args == {
+        "position": SkillOutputRef(0, ("result", 0)),
+        "quaternion_wxyz": SkillOutputRef(0, ("result", 1)),
+        "z_lift": 0.12,
+    }
+
+
 def test_libero_grasp_repair_inserts_motion_after_sample_before_close() -> None:
     subgraph = SubgraphSpec(
         "grasp",
@@ -187,7 +229,7 @@ def test_libero_grasp_repair_removes_goto_only_args_from_sampler() -> None:
                 (
                     SkillCall(
                         SkillRef("sample_grasp_pose", "1"),
-                        {"object_name": "bowl", "z_approach": 0.1},
+                        {"object_name": "bowl", "z_approach": 0.1, "z_lift": 0.12},
                     ),
                     SkillCall(SkillRef("goto_pose", "1"), {}),
                 ),
@@ -202,6 +244,64 @@ def test_libero_grasp_repair_removes_goto_only_args_from_sampler() -> None:
     repaired = repair_libero_grasp_subgraph(subgraph)
 
     assert repaired.nodes[0].skill_calls[0].args == {"object_name": "bowl"}
+
+
+def test_libero_grasp_subgraph_rejects_cross_node_grasp_dataflow() -> None:
+    subgraph = SubgraphSpec(
+        "grasp",
+        "grasp",
+        "grasp",
+        (
+            SubgraphNodeSpec(
+                "sample",
+                "sample",
+                (SkillCall(SkillRef("sample_grasp_pose", "1"), {"object_name": "bowl"}),),
+            ),
+            SubgraphNodeSpec(
+                "close",
+                "close",
+                (SkillCall(SkillRef("close_gripper", "1"), {}),),
+            ),
+        ),
+        (),
+        "sample",
+        ("close",),
+        ("close",),
+    )
+
+    with pytest.raises(ValueError, match="one action node"):
+        validate_libero_grasp_subgraph(subgraph)
+
+
+def test_libero_grasp_subgraph_rejects_natural_language_pose_placeholder() -> None:
+    subgraph = SubgraphSpec(
+        "grasp",
+        "grasp",
+        "grasp",
+        (
+            SubgraphNodeSpec(
+                "action",
+                "action",
+                (
+                    SkillCall(SkillRef("sample_grasp_pose", "1"), {"object_name": "bowl"}),
+                    SkillCall(
+                        SkillRef("goto_pose", "1"),
+                        {
+                            "position": "sampled_grasp_position(bowl)",
+                            "quaternion_wxyz": "sampled_grasp_quaternion_wxyz(bowl)",
+                        },
+                    ),
+                ),
+            ),
+        ),
+        (),
+        "action",
+        ("action",),
+        ("action",),
+    )
+
+    with pytest.raises(ValueError, match="natural-language placeholder"):
+        validate_libero_grasp_subgraph(subgraph)
 
 
 def test_libero_placement_grounding_uses_scene_target_pose() -> None:
@@ -248,6 +348,57 @@ def test_libero_placement_grounding_uses_scene_target_pose() -> None:
     assert args["position"] == (0.4, 0.5, 0.6)
     assert args["quaternion_wxyz"] == (0.0, 1.0, 0.0, 0.0)
     assert args["z_approach"] == 0.12
+
+
+def test_libero_placement_grounding_rebinds_motion_intent_to_effective_pose() -> None:
+    subgraph = SubgraphSpec(
+        "place",
+        "place",
+        "place",
+        (
+            SubgraphNodeSpec(
+                "action",
+                "place",
+                (
+                    SkillCall(
+                        SkillRef("goto_pose", "1"),
+                        {
+                            "position": [9, 9, 9],
+                            "quaternion_wxyz": [1, 0, 0, 0],
+                        },
+                    ),
+                ),
+                postconditions=("object_at_target(bowl,plate)",),
+                motion_intent=MotionIntent(
+                    "place",
+                    target_track_id="plate",
+                    approach_vector_xyz=(0.0, 0.0, -1.0),
+                    target_pose_wxyz_xyz=(1.0, 0.0, 0.0, 0.0, 9.0, 9.0, 9.0),
+                ),
+            ),
+        ),
+        (),
+        "action",
+        ("action",),
+        ("action",),
+    )
+    scene = SceneSnapshot(
+        "ep",
+        1,
+        0,
+        1,
+        1,
+        {},
+        objects=(_track("plate", "plate", (0.4, 0.5, 0.6)),),
+    )
+
+    grounded = ground_libero_grasp_subgraph(subgraph, scene)
+    intent = grounded.nodes[0].motion_intent
+
+    assert intent is not None
+    assert intent.target_track_id == "plate"
+    assert intent.approach_vector_xyz == (0.0, 0.0, -1.0)
+    assert intent.target_pose_wxyz_xyz == (0.0, 1.0, 0.0, 0.0, 0.4, 0.5, 0.6)
 
 
 def test_libero_placement_grounding_reads_target_predicate_from_subgraph_checkpoint() -> None:

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from capmas.backends.capx import CAPXTypedSkill
 from capmas.backends.capx_libero_factory import build_capx_runtime_from_yaml
+from capmas.contracts.action import ExecutionBudget
 from capmas.contracts.core import SkillRef
 from capmas.perception.artifact_bridge import EncodedArtifactStore, FileArtifactStore, NumpyArtifactCodec
 
@@ -35,6 +36,69 @@ class FakeLowLevelEnv:
 
     def reset(self, seed=None, options=None):
         self.reset_calls.append((seed, options))
+
+
+class GroundingApi:
+    def __init__(self) -> None:
+        self.pose_queries: list[str] = []
+        self.grasp_queries: list[str] = []
+
+    def get_observation(self):
+        return {
+            "timestamp_ns": 1,
+            "robot_cartesian_pos": [0.0] * 8,
+        }
+
+    def get_object_pose(self, object_name, use_multiview=True):
+        del use_multiview
+        self.pose_queries.append(object_name)
+        return ([0.1, 0.2, 0.3], [1.0, 0.0, 0.0, 0.0])
+
+    def sample_grasp_pose(self, object_name, use_multiview=True):
+        del use_multiview
+        self.grasp_queries.append(object_name)
+        return ([0.9, 0.8, 0.7], [0.0, 0.0, 0.0, 1.0])
+
+    def goto_pose(self, position, quaternion_wxyz, z_approach=0.0):
+        return position, quaternion_wxyz, z_approach
+
+    def open_gripper(self):
+        return None
+
+    def close_gripper(self):
+        return None
+
+    def functions(self):
+        return {
+            "get_observation": self.get_observation,
+            "get_object_pose": self.get_object_pose,
+            "sample_grasp_pose": self.sample_grasp_pose,
+            "goto_pose": self.goto_pose,
+            "open_gripper": self.open_gripper,
+            "close_gripper": self.close_gripper,
+        }
+
+
+class GroundingLowLevelEnv(FakeLowLevelEnv):
+    def __init__(self) -> None:
+        super().__init__()
+        self.handle = type(
+            "Handle",
+            (),
+            {
+                "task_language": (
+                    "Pick up the black bowl between the plate and the ramekin "
+                    "and place it on the plate"
+                )
+            },
+        )()
+
+
+class UnavailablePoseGroundingApi(GroundingApi):
+    def get_object_pose(self, object_name, use_multiview=True):
+        del use_multiview
+        self.pose_queries.append(object_name)
+        raise ValueError("no grounded pose available")
 
 
 @dataclass
@@ -167,3 +231,142 @@ def test_factory_injects_replaceable_artifact_store_into_capx_provider(tmp_path)
     )
 
     assert bundle.observation_provider.artifacts is artifacts
+
+
+def test_factory_preserves_task_language_and_routes_source_grasp_query() -> None:
+    low_level = GroundingLowLevelEnv()
+    api = GroundingApi()
+    config = {
+        "env": {
+            "cfg": {
+                "low_level": {"suite_name": "libero_spatial", "task_id": 0},
+                "apis": ["FrankaLiberoApi"],
+                "scene": {"object_names": ["akita black bowl", "plate"]},
+            }
+        }
+    }
+
+    bundle = build_capx_runtime_from_yaml(
+        "unused.yaml",
+        loader=lambda path: config,
+        instantiator=lambda env_config: low_level,
+        api_factory=lambda name: (lambda env: api),
+        object_names=("akita black bowl", "plate"),
+    )
+
+    assert bundle.task_language == low_level.handle.task_language
+    result = bundle.skill_registry.get(
+        SkillRef("sample_grasp_pose", "capx-compat-1")
+    ).execute(
+        {"object_name": "akita black bowl"},
+        ExecutionBudget(max_duration_ms=1000, max_sim_steps=10),
+    )
+
+    assert result.ok is True
+    assert result.output["result"] == (
+        (0.1, 0.2, 0.3), (0.0, 1.0, 0.0, 0.0)
+    )
+    assert api.pose_queries == [low_level.handle.task_language]
+    assert api.grasp_queries == []
+
+
+def test_factory_observation_uses_same_relation_aware_source_query() -> None:
+    low_level = GroundingLowLevelEnv()
+    api = GroundingApi()
+    config = {
+        "env": {
+            "cfg": {
+                "low_level": {"suite_name": "libero_spatial", "task_id": 0},
+                "apis": ["FrankaLiberoApi"],
+            }
+        }
+    }
+
+    bundle = build_capx_runtime_from_yaml(
+        "unused.yaml",
+        loader=lambda path: config,
+        instantiator=lambda env_config: low_level,
+        api_factory=lambda name: (lambda env: api),
+        object_names=("akita black bowl", "plate"),
+    )
+
+    tracks = bundle.observation_provider.capture_object_tracks(
+        timestamp_ns=1,
+        episode_id="episode",
+        episode_epoch=1,
+    )
+
+    assert tracks[0].track_id == "akita black bowl"
+    assert api.pose_queries == [low_level.handle.task_language, "plate"]
+
+
+def test_factory_grounded_grasp_prefers_relation_aware_object_pose() -> None:
+    low_level = GroundingLowLevelEnv()
+    api = GroundingApi()
+    config = {
+        "env": {
+            "cfg": {
+                "low_level": {"suite_name": "libero_spatial", "task_id": 0},
+                "apis": ["FrankaLiberoApi"],
+                "scene": {"object_names": ["akita black bowl", "plate"]},
+            }
+        }
+    }
+
+    bundle = build_capx_runtime_from_yaml(
+        "unused.yaml",
+        loader=lambda path: config,
+        instantiator=lambda env_config: low_level,
+        api_factory=lambda name: (lambda env: api),
+        object_names=("akita black bowl", "plate"),
+    )
+
+    result = bundle.skill_registry.get(
+        SkillRef("sample_grasp_pose", "capx-compat-1")
+    ).execute(
+        {"object_name": "akita black bowl"},
+        ExecutionBudget(max_duration_ms=1000, max_sim_steps=10),
+    )
+
+    assert result.ok is True
+    assert result.output["result"] == (
+        ((0.1, 0.2, 0.3), (0.0, 1.0, 0.0, 0.0))
+    )
+    assert api.pose_queries == [low_level.handle.task_language]
+    assert api.grasp_queries == []
+
+
+def test_factory_grounded_grasp_falls_back_to_raw_sample_on_pose_failure() -> None:
+    low_level = GroundingLowLevelEnv()
+    api = UnavailablePoseGroundingApi()
+    config = {
+        "env": {
+            "cfg": {
+                "low_level": {"suite_name": "libero_spatial", "task_id": 0},
+                "apis": ["FrankaLiberoApi"],
+                "scene": {"object_names": ["akita black bowl", "plate"]},
+            }
+        }
+    }
+
+    bundle = build_capx_runtime_from_yaml(
+        "unused.yaml",
+        loader=lambda path: config,
+        instantiator=lambda env_config: low_level,
+        api_factory=lambda name: (lambda env: api),
+        object_names=("akita black bowl", "plate"),
+    )
+
+    result = bundle.skill_registry.get(
+        SkillRef("sample_grasp_pose", "capx-compat-1")
+    ).execute(
+        {"object_name": "akita black bowl"},
+        ExecutionBudget(max_duration_ms=1000, max_sim_steps=10),
+    )
+
+    assert result.ok is True
+    assert result.output["result"] == (
+        [0.9, 0.8, 0.7], [0.0, 0.0, 0.0, 1.0]
+    )
+    assert api.pose_queries == [low_level.handle.task_language]
+    assert api.grasp_queries == [low_level.handle.task_language]

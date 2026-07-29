@@ -25,6 +25,15 @@
 | Experiment Run Configuration | The non-secret protocol, model, seed, budget, schema, retry, and worker settings used to produce one experiment artifact. |
 | LLM Call Trace | A sanitized immutable record of one Manager or Policy provider request, including latency, token usage, schema mode, fallback, and outcome. |
 | Evidence Provenance | The provider, source SceneSnapshot version, capture timestamp, and optional artifact references attached to candidate evidence. |
+| Evidence Dimension | A typed candidate-evidence result with `pass`, `fail`, or `unknown` status; unknown is not converted to zero. |
+| Geometry Evidence | Candidate-conditioned evidence about grasp quality, reachability, clearance, collision risk, and target-pose feasibility. It is separate from scene-level Perception Evidence. |
+| Motion Intent | Typed action-node metadata describing a grasp, place, or move target and approach. It is planning metadata, not an executable Robot Skill argument. |
+| Motion Preview | A side-effect-free feasibility result produced before ActionLease acquisition; it may contain IK, trajectory, clearance, and collision information. |
+| Motion Preview Backend | A read-only interface for computing Motion Preview from MotionIntent, SceneSnapshot, and local map state. |
+| Candidate Normalizer | The component that canonicalizes a raw Policy subgraph, derives or validates MotionIntent, and recomputes candidate evidence after executable changes. |
+| Realistic Evidence Mode | Primary evaluation mode using sensor-derived SceneSnapshot state without evaluator or simulator ground truth. |
+| Diagnostic Privileged Mode | Isolated debugging mode allowed to use privileged simulator state; its results cannot enter primary success statistics. |
+| Evidence Wave Deadline | Global pre-lease time budget for parallel candidate evidence computation; P5.2 uses 50 ms and converts timeouts to unknown. |
 | Evidence Tie-Break | A deterministic structural choice made when candidates have usable evidence but equal final evidence scores. |
 | Confidence Fallback | A legacy arbitration mode used only when no candidate-specific evidence is available. |
 | Proposal Wave | A bounded set of Policy candidate requests launched for dependency-compatible subgoals from one immutable Scene Snapshot. |

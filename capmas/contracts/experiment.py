@@ -28,6 +28,12 @@ class ExperimentRunConfig:
     schema_mode: str
     manager_plan_fallback: bool = False
     policy_strategies: tuple[str, ...] = ()
+    geometry_mode: str = "disabled"
+    geometry_deadline_ms: int = 50
+    geometry_depth_subsample: int = 16
+    preview_backend: str = "none"
+    privilege_mode: str = "realistic_sensor"
+    artifact_dir: str = ""
     runner_version: str = "capmas-0.1"
 
     def __post_init__(self) -> None:
@@ -49,6 +55,14 @@ class ExperimentRunConfig:
             raise ValueError("experiment retry budgets must not be negative")
         if self.schema_mode not in {"strict_provider_schema", "local_json_validation", "none"}:
             raise ValueError("unsupported experiment schema mode")
+        if self.geometry_mode not in {"disabled", "shadow", "online_bounded"}:
+            raise ValueError("unsupported geometry mode")
+        if self.geometry_deadline_ms <= 0:
+            raise ValueError("geometry deadline must be positive")
+        if self.geometry_depth_subsample <= 0:
+            raise ValueError("geometry depth subsample must be positive")
+        if self.privilege_mode not in {"realistic_sensor", "diagnostic_privileged"}:
+            raise ValueError("unsupported privilege mode")
         if self.policy_strategies:
             if len(self.policy_strategies) != self.policy_agents:
                 raise ValueError(

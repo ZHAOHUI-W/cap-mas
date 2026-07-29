@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import inspect
 import time
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Protocol
 from uuid import uuid4
 
 from capmas.backends.protocol import RobotBackend, SkillExecutionResult
@@ -24,6 +24,16 @@ from capmas.perception.protocol import (
     ObservationProvider,
 )
 from capmas.perception.tracking import ObjectMeasurement
+
+
+class SceneEnricher(Protocol):
+    """Optional post-processor for a CAP-X scene snapshot."""
+
+    def enrich(
+        self,
+        observation: ObservationBundle,
+        snapshot: SceneSnapshot,
+    ) -> SceneSnapshot: ...
 
 
 def _flatten_numbers(value: object) -> tuple[float, ...]:
@@ -266,14 +276,23 @@ class CAPXRobotBackend(RobotBackend):
         task_id: str,
         suite_name: str,
         backend_id: str = "capx",
+        scene_enricher: SceneEnricher | Callable[[ObservationBundle, SceneSnapshot], SceneSnapshot] | None = None,
     ) -> None:
         self.env = env
         self.observation_provider = observation_provider
         self.task_id = task_id
         self.suite_name = suite_name
         self.backend_id = backend_id
+        self._scene_enricher = scene_enricher
         self._handle: EpisodeHandle | None = None
         self._scene_version = 0
+
+    def set_scene_enricher(
+        self,
+        enricher: SceneEnricher | Callable[[ObservationBundle, SceneSnapshot], SceneSnapshot] | None,
+    ) -> None:
+        """Attach or clear an optional observation-to-scene enrichment seam."""
+        self._scene_enricher = enricher
 
     def reset(self, seed: int | None = None, options: Mapping[str, object] | None = None) -> EpisodeStart:
         reset = getattr(self.env, "reset")
@@ -337,7 +356,7 @@ class CAPXRobotBackend(RobotBackend):
             if artifact is not None
         )
         publish_timestamp_ns = time.time_ns()
-        return SceneSnapshot(
+        snapshot = SceneSnapshot(
             episode_id=self._handle.episode_id,
             episode_epoch=self._handle.episode_epoch,
             scene_version=self._scene_version,
@@ -360,6 +379,17 @@ class CAPXRobotBackend(RobotBackend):
                 (publish_timestamp_ns - observation.timestamp_ns) / 1_000_000,
             ),
         )
+        if self._scene_enricher is None:
+            return snapshot
+        enrich = getattr(self._scene_enricher, "enrich", None)
+        enriched = (
+            enrich(observation, snapshot)
+            if callable(enrich)
+            else self._scene_enricher(observation, snapshot)
+        )
+        if not isinstance(enriched, SceneSnapshot):
+            raise TypeError("scene enricher must return SceneSnapshot")
+        return enriched
 
 
 def _normalize_capx_object_pose(value: object) -> tuple[tuple[float, ...], tuple[float, ...]] | None:

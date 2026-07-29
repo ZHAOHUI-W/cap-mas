@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
+import math
+import re
 from typing import Any
 
 from capmas.contracts.graph import LoopSpec, MissionBinding, MissionEdge
@@ -71,6 +73,12 @@ class TopologyValidator:
                         f"subgoals.{item.subgraph_id}",
                     )
                 )
+            diagnostics.extend(
+                _scene_fresh_diagnostics(
+                    (*item.success_predicates, *item.failure_predicates),
+                    f"subgoals.{item.subgraph_id}",
+                )
+            )
             for dependency in item.depends_on:
                 if dependency not in by_id:
                     diagnostics.append(
@@ -355,6 +363,34 @@ def _cycle_diagnostics(dependencies: Mapping[str, set[str]]) -> list[TopologyDia
 
     for node in dependencies:
         visit(node)
+    return diagnostics
+
+
+_SCENE_FRESH_RE = re.compile(r"^scene_fresh\(([^()]*)\)$")
+
+
+def _scene_fresh_diagnostics(
+    predicates: tuple[str, ...],
+    path: str,
+) -> list[TopologyDiagnostic]:
+    diagnostics: list[TopologyDiagnostic] = []
+    for index, predicate in enumerate(predicates):
+        match = _SCENE_FRESH_RE.fullmatch(predicate.strip())
+        if match is None:
+            continue
+        try:
+            threshold_ms = float(match.group(1).strip())
+        except ValueError:
+            threshold_ms = float("nan")
+        if not math.isfinite(threshold_ms) or threshold_ms <= 0.0:
+            diagnostics.append(
+                TopologyDiagnostic(
+                    "INVALID_SCENE_FRESH_THRESHOLD",
+                    f"{predicate!r} must use a finite threshold_ms > 0; use scene_fresh(1000) "
+                    "for a normal observation checkpoint",
+                    f"{path}.predicates[{index}]",
+                )
+            )
     return diagnostics
 
 

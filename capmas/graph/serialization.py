@@ -20,6 +20,7 @@ from capmas.contracts.graph import (
     MissionBinding,
     MissionEdge,
     MissionGraph,
+    MotionIntent,
     PortBinding,
     PortSpec,
     ResourceRequirement,
@@ -180,6 +181,7 @@ def _node_to_dict(node: SubgraphNodeSpec) -> dict[str, Any]:
         "proposed_by": node.proposed_by,
         "recovery_policy": node.recovery_policy,
         "node_type": node.node_type,
+        "motion_intent": _motion_intent_to_dict(node.motion_intent),
     }
 
 
@@ -211,6 +213,55 @@ def _node_from_dict(raw: Any, path: str) -> SubgraphNodeSpec:
         proposed_by=_string(data, "proposed_by", path),
         recovery_policy=_string(data, "recovery_policy", path),
         node_type=_string(data, "node_type", path),
+        motion_intent=_motion_intent_from_dict(
+            data.get("motion_intent"), f"{path}.motion_intent"
+        ),
+    )
+
+
+def _motion_intent_to_dict(intent: MotionIntent | None) -> dict[str, Any] | None:
+    if intent is None:
+        return None
+    return {
+        "kind": intent.kind,
+        "object_track_id": intent.object_track_id,
+        "target_track_id": intent.target_track_id,
+        "approach_vector_xyz": (
+            list(intent.approach_vector_xyz) if intent.approach_vector_xyz is not None else None
+        ),
+        "standoff_m": intent.standoff_m,
+        "target_pose_wxyz_xyz": (
+            list(intent.target_pose_wxyz_xyz) if intent.target_pose_wxyz_xyz is not None else None
+        ),
+    }
+
+
+def _motion_intent_from_dict(raw: Any, path: str) -> MotionIntent | None:
+    if raw is None:
+        return None
+    data = _object(
+        raw,
+        {
+            "kind",
+            "object_track_id",
+            "target_track_id",
+            "approach_vector_xyz",
+            "standoff_m",
+            "target_pose_wxyz_xyz",
+        },
+        path,
+    )
+    return MotionIntent(
+        kind=_string(data, "kind", path),
+        object_track_id=_optional_string(data, "object_track_id", path),
+        target_track_id=_optional_string(data, "target_track_id", path),
+        approach_vector_xyz=_optional_number_tuple(
+            data.get("approach_vector_xyz"), f"{path}.approach_vector_xyz", 3
+        ),
+        standoff_m=_optional_number(data.get("standoff_m"), f"{path}.standoff_m"),
+        target_pose_wxyz_xyz=_optional_number_tuple(
+            data.get("target_pose_wxyz_xyz"), f"{path}.target_pose_wxyz_xyz", 7
+        ),
     )
 
 
@@ -436,7 +487,7 @@ _SUBGRAPH_KEYS = frozenset({
 _NODE_KEYS = frozenset({
     "node_id", "description", "skill_calls", "inputs", "outputs", "preconditions",
     "postconditions", "resources", "max_duration_ms", "max_sim_steps", "proposed_by",
-    "recovery_policy", "node_type",
+    "recovery_policy", "node_type", "motion_intent",
 })
 
 
@@ -497,3 +548,24 @@ def _string_tuple(data: dict[str, Any], key: str, path: str) -> tuple[str, ...]:
     if any(not isinstance(value, str) for value in values):
         raise GraphSchemaError(f"{path}.{key} must contain only strings")
     return tuple(values)
+
+
+def _optional_number(value: Any, path: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise GraphSchemaError(f"{path} must be a number or null")
+    return float(value)
+
+
+def _optional_number_tuple(value: Any, path: str, size: int) -> tuple[float, ...] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise GraphSchemaError(f"{path} must be a list or null")
+    if len(value) != size:
+        raise GraphSchemaError(f"{path} must contain {size} numbers")
+    numbers = tuple(_optional_number(item, path) for item in value)
+    if any(item is None for item in numbers):
+        raise GraphSchemaError(f"{path} must contain only numbers")
+    return tuple(item for item in numbers if item is not None)

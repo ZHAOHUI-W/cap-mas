@@ -19,6 +19,14 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 
+# Direct script execution starts with ``scripts/`` on sys.path.  Phase 5
+# artifact allocation happens before the runtime bootstrap below, so expose
+# the project root at module import time rather than relying on PYTHONPATH.
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+
 class _TeeStream:
     """Duplicate runner stdout/stderr to the terminal and a per-run log."""
 
@@ -71,6 +79,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--api-key", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--output", default="outputs/capmas_libero_b3_llm/episode.json")
     parser.add_argument(
+        "--phase5-artifact-root",
+        default=None,
+        help="optional root for a unique Phase 5 run directory",
+    )
+    parser.add_argument(
         "--log-file",
         default=None,
         help="per-run stdout/stderr log; defaults to the output path with a .log suffix",
@@ -104,7 +117,12 @@ def parse_args() -> argparse.Namespace:
         help="execute the compiled graph once or replan after each verified subgraph",
     )
     parser.add_argument("--llm-max-retries", type=int, default=2)
-    parser.add_argument("--llm-proposal-retries", type=int, default=0)
+    parser.add_argument(
+        "--llm-proposal-retries",
+        type=int,
+        default=1,
+        help="bounded Manager/Policy repair attempts after schema or graph rejection",
+    )
     parser.add_argument("--llm-deadline-ms", type=int, default=60_000)
     parser.add_argument("--llm-max-output-tokens", type=int, default=1536)
     parser.add_argument(
@@ -113,6 +131,24 @@ def parse_args() -> argparse.Namespace:
         help="use strict JSON prompting plus local decoder validation only",
     )
     parser.add_argument("--max-steps", type=int, default=32)
+    parser.add_argument(
+        "--geometry-mode",
+        choices=("disabled", "shadow", "online_bounded"),
+        default="disabled",
+    )
+    parser.add_argument("--geometry-deadline-ms", type=int, default=50)
+    parser.add_argument(
+        "--geometry-depth-subsample",
+        type=int,
+        default=16,
+        help="RGB-D stride for the live reference local map; lower values increase density and latency",
+    )
+    parser.add_argument("--preview-backend", default="none")
+    parser.add_argument(
+        "--privilege-mode",
+        choices=("realistic_sensor", "diagnostic_privileged"),
+        default="realistic_sensor",
+    )
     parser.add_argument("--skip-api-servers", action="store_true")
     parser.add_argument(
         "--allow-manager-plan-fallback",
@@ -193,6 +229,24 @@ def _evaluate_checkpoint(
     return "success" if verifier.goal_satisfied(predicates, context.scene) else "failure"
 
 
+def _world_model_metrics(enricher: object | None, local_map: object | None) -> dict[str, object]:
+    """Expose fail-open live local-map transport diagnostics in artifacts."""
+    if enricher is None:
+        return {
+            "enabled": False,
+            "map_version": None,
+            "processed_observations": 0,
+            "last_error": None,
+        }
+    map_version = getattr(local_map, "map_version", None)
+    return {
+        "enabled": True,
+        "map_version": map_version() if callable(map_version) else None,
+        "processed_observations": getattr(enricher, "processed_observations", 0),
+        "last_error": getattr(enricher, "last_error", None),
+    }
+
+
 def main() -> None:
     args = parse_args()
     if not args.api_base:
@@ -204,11 +258,13 @@ def main() -> None:
         or args.llm_proposal_retries < 0
         or args.llm_deadline_ms <= 0
         or args.llm_max_output_tokens <= 0
+        or args.geometry_deadline_ms <= 0
+        or args.geometry_depth_subsample <= 0
     ):
         raise SystemExit(
             "--policy-agents/--max-workers must be positive, "
             "--llm-max-retries/--llm-proposal-retries must not be negative, and "
-            "--llm-deadline-ms/--llm-max-output-tokens must be positive"
+            "--llm-deadline-ms/--llm-max-output-tokens/--geometry-depth-subsample must be positive"
         )
     policy_strategies = _policy_strategies(args.policy_strategies, args.policy_agents)
     if args.graph_protocol == "staged" and args.allow_manager_plan_fallback:
@@ -217,6 +273,17 @@ def main() -> None:
             "staged topology has no executable Manager fallback"
         )
 
+    phase5_run = None
+    if args.phase5_artifact_root:
+        from capmas.evaluation.phase5_artifacts import Phase5RunDirectory
+
+        phase5_run = Phase5RunDirectory.create(
+            args.phase5_artifact_root,
+            "B3-LLM",
+            str(uuid4()),
+        )
+        args.output = str(phase5_run.path / "results" / "episode.json")
+        args.log_file = str(phase5_run.log_path())
     requested_log_path = (
         Path(args.log_file) if args.log_file else Path(args.output).with_suffix(".log")
     )
@@ -237,7 +304,7 @@ def main() -> None:
     atexit.register(restore_streams)
     print(f"CAP-MAS run log: {log_path}")
 
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = _PROJECT_ROOT
     capx_root = project_root.parent / "cap-x"
     os.environ.setdefault("MUJOCO_GL", "egl")
     os.environ.setdefault("MPLCONFIGDIR", "/tmp/capmas-mpl")
@@ -253,8 +320,12 @@ def main() -> None:
 
     from capmas.agents.manager import LLMTopologyManager, LLMMissionManager
     from capmas.agents.policy import LLMGraphPolicyAgent, LLMStagedGraphPolicyAgent
-    from capmas.backends.capx_libero_factory import build_capx_runtime_from_yaml
+    from capmas.backends.capx_libero_factory import (
+        build_capx_runtime_from_yaml,
+        build_capx_world_model_enricher,
+    )
     from capmas.contracts.experiment import ExperimentRunConfig
+    from capmas.graph.normalizer import CandidateNormalizer
     from capmas.graph.serialization import mission_graph_to_dict
     from capmas.llm.capx_compatible import CAPXCompatibleLLMClient
     from capmas.llm.protocol import LLMTraceCollector
@@ -273,6 +344,8 @@ def main() -> None:
         LLMGraphScheduleError,
         LLMGraphScheduler,
     )
+    from capmas.perception.geometry_evidence import candidate_geometry_evidence
+    from capmas.perception.motion_preview import ReferenceMotionPreview
     from capmas.runtime.rolling import RollingGraphRunner
     from capmas.runtime.orchestrator import RuntimeOrchestrator
     from capmas.runtime.scheduler import FixedGraphScheduler
@@ -283,6 +356,7 @@ def main() -> None:
         ground_libero_grasp_subgraph,
         libero_candidate_evidence,
         repair_libero_grasp_subgraph,
+        validate_libero_grasp_subgraph,
         validate_libero_skill_sequence,
     )
 
@@ -308,6 +382,15 @@ def main() -> None:
             loader=lambda _: config,
             object_names=(args.object_name, args.target_name),
         )
+        world_model_enricher = None
+        geometry_local_map = None
+        if args.geometry_mode != "disabled":
+            world_model_enricher = build_capx_world_model_enricher(
+                bundle.observation_provider,
+                depth_subsample=args.geometry_depth_subsample,
+            )
+            bundle.backend.set_scene_enricher(world_model_enricher)
+            geometry_local_map = world_model_enricher.local_map
         runtime = RuntimeOrchestrator(
             backend=bundle.backend,
             state_store=InMemoryStateStore(),
@@ -326,9 +409,11 @@ def main() -> None:
         policy_skill_metadata = tuple(
             item
             for item in skill_metadata
-            if not item.startswith(("get_observation@", "get_object_pose@"))
+            if not item.startswith(
+                ("get_observation@", "get_object_pose@", "lift_after_grasp@")
+            )
         )
-        task = f"Place {args.object_name} on {args.target_name}"
+        task = bundle.task_language or f"Place {args.object_name} on {args.target_name}"
         run_config = ExperimentRunConfig(
             run_id=str(uuid4()),
             task_id=bundle.task_id,
@@ -352,6 +437,12 @@ def main() -> None:
             ),
             manager_plan_fallback=args.allow_manager_plan_fallback,
             policy_strategies=policy_strategies,
+            geometry_mode=args.geometry_mode,
+            geometry_deadline_ms=args.geometry_deadline_ms,
+            geometry_depth_subsample=args.geometry_depth_subsample,
+            preview_backend=args.preview_backend,
+            privilege_mode=args.privilege_mode,
+            artifact_dir=str(phase5_run.path) if phase5_run is not None else "",
         )
         trace_collector = LLMTraceCollector()
         client = CAPXCompatibleLLMClient(
@@ -473,6 +564,7 @@ def main() -> None:
             typed_graph = graph
             typed_context = context
             for subgraph in typed_graph.subgraphs:
+                validate_libero_grasp_subgraph(subgraph)
                 for node in subgraph.nodes:
                     if node.node_type == "action":
                         contract = subgraph.to_action_contract(node.node_id, typed_context)
@@ -496,6 +588,32 @@ def main() -> None:
                                     f"candidate precondition rejected: {details}"
                                 )
 
+        geometry_records = []
+        preview_backend = ReferenceMotionPreview()
+
+        def candidate_evidence(candidate: object, current_scene: object):
+            perception = libero_candidate_evidence(candidate, current_scene)
+            if args.geometry_mode == "disabled":
+                return perception
+            geometry = candidate_geometry_evidence(
+                candidate,
+                current_scene,
+                geometry_local_map,
+                preview_backend,
+                time.monotonic_ns() + args.geometry_deadline_ms * 1_000_000,
+            )
+            geometry_records.append(geometry)
+            if args.geometry_mode == "shadow":
+                return perception
+            available = tuple(perception.available_metrics)
+            if geometry.measurable:
+                available += ("geometry",)
+            return replace(
+                perception,
+                geometry=geometry,
+                available_metrics=available,
+            )
+
         scheduler = LLMGraphScheduler(
             manager,
             {"*": policy_agents},
@@ -503,7 +621,13 @@ def main() -> None:
             proposal_mode=args.proposal_mode,
             require_policy_proposals=not args.allow_manager_plan_fallback,
             skill_validator=validate_skills,
-            candidate_evidence_provider=libero_candidate_evidence,
+            candidate_evidence_provider=candidate_evidence,
+            candidate_normalizer=CandidateNormalizer(bundle.skill_registry),
+            candidate_evidence_timeout_ms=(
+                max(1.0, float(args.geometry_deadline_ms) - 10.0)
+                if args.geometry_mode != "disabled"
+                else None
+            ),
             candidate_scene_rewriter=lambda subgraph, current_scene: ground_libero_grasp_subgraph(
                 repair_libero_grasp_subgraph(subgraph), current_scene
             ),
@@ -575,6 +699,11 @@ def main() -> None:
                     compile_result.proposal_waves
                     for compile_result in result.compilations
                 ),
+                "geometry_evidence": tuple(geometry_records),
+                "world_model": _world_model_metrics(
+                    world_model_enricher,
+                    geometry_local_map,
+                ),
             }
         else:
             compiled = scheduler.compile(
@@ -615,11 +744,17 @@ def main() -> None:
                 "proposal_waves": result.compile_result.proposal_waves,
                 "compile_latency_ms": result.compile_result.compile_latency_ms,
                 "manager_topology_calls": result.compile_result.manager_topology_calls,
+                "geometry_evidence": tuple(geometry_records),
+                "world_model": _world_model_metrics(
+                    world_model_enricher,
+                    geometry_local_map,
+                ),
             }
         payload = {
             "baseline": f"B3-LLM-{args.graph_protocol}-{args.execution_mode}",
             "log_file": str(log_path),
             "task_id": bundle.task_id,
+            "task_language": bundle.task_language,
             "seed": args.seed,
             "model": args.model,
             "graph_protocol": args.graph_protocol,
@@ -635,6 +770,17 @@ def main() -> None:
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(to_jsonable(payload), indent=2, sort_keys=True))
+        if phase5_run is not None:
+            phase5_run.write_json("run_config.json", run_config.to_dict())
+            phase5_run.write_json("summary.json", payload)
+            phase5_run.write_text(
+                "summary.md",
+                "# CAP-MAS Phase 5 run\n\n"
+                f"- evaluator_success: {payload['evaluator_success']}\n"
+                f"- seed: {args.seed}\n"
+                f"- geometry_mode: {args.geometry_mode}\n",
+            )
+            phase5_run.finalize_manifest()
         print(f"CAP-MAS B3-LLM output: {args.output}")
         print(f"CAP-MAS B3-LLM evaluator_success: {payload['evaluator_success']}")
         print(f"CAP-MAS B3-LLM completed: {artifact_result.completed}")
@@ -672,6 +818,9 @@ def main() -> None:
         failure_path.write_text(
             json.dumps(to_jsonable(failure_payload), indent=2, sort_keys=True)
         )
+        if phase5_run is not None:
+            phase5_run.write_json("failure.json", failure_payload)
+            phase5_run.finalize_manifest()
         print(f"CAP-MAS B3-LLM failure artifact: {failure_path}")
         raise
     finally:

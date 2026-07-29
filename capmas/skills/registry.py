@@ -105,6 +105,27 @@ class SkillRegistry:
                 names.update(str(name) for name in declared if name)
         return tuple(sorted(names))
 
+    def argument_names_for(self, reference: SkillRef) -> tuple[str, ...]:
+        """Return the callable argument allowlist for one registered skill."""
+        skill = self.get(reference)
+        signature = getattr(skill, "_signature", None)
+        if isinstance(signature, inspect.Signature):
+            return tuple(
+                parameter.name
+                for parameter in signature.parameters.values()
+                if parameter.kind
+                in {
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    inspect.Parameter.KEYWORD_ONLY,
+                }
+            )
+        declared = getattr(skill, "argument_names", ())
+        if callable(declared):
+            declared = declared()
+        if isinstance(declared, (tuple, list, set, frozenset)):
+            return tuple(str(name) for name in declared if name)
+        return ()
+
     def argument_schemas(self) -> dict[str, dict[str, object]]:
         """Return conservative JSON schemas inferred from skill signatures."""
         schemas: dict[str, dict[str, object]] = {}

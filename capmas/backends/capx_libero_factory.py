@@ -9,11 +9,21 @@ from capmas.backends.capx import (
     CAPXObservationProvider,
     CAPXRobotBackend,
     CAPXTypedSkill,
+    _normalize_capx_object_pose,
     build_capx_skills,
 )
 from capmas.perception.artifact_bridge import ArtifactSink
 from capmas.perception.artifacts import InMemoryArtifactStore
 from capmas.skills.registry import SkillRegistry
+
+
+def build_capx_world_model_enricher(provider, **kwargs):
+    """Build the optional live RGB-D World Model bridge for CAP-X scenes."""
+    from capmas.perception.capx_world_model import (
+        build_capx_world_model_enricher as _build,
+    )
+
+    return _build(provider, **kwargs)
 
 
 DEFAULT_LIBERO_SKILLS: dict[str, str] = {
@@ -43,6 +53,7 @@ class CAPXRuntimeBundle:
     skill_registry: SkillRegistry
     task_id: str
     suite_name: str
+    task_language: str | None = None
 
 
 @dataclass(frozen=True)
@@ -110,6 +121,23 @@ def _get_nested_mapping(value: object, key: str) -> Mapping[str, object]:
         return {}
     nested = value.get(key)
     return nested if isinstance(nested, Mapping) else {}
+
+
+def _extract_task_language(*owners: object) -> str | None:
+    """Read the benchmark instruction without coupling CAP-MAS to LIBERO types."""
+    for owner in owners:
+        handle = getattr(owner, "handle", None)
+        language = getattr(handle, "task_language", None)
+        if isinstance(language, str) and language.strip():
+            return language.strip()
+        language = getattr(owner, "task_language", None)
+        if isinstance(language, str) and language.strip():
+            return language.strip()
+    return None
+
+
+def _normalize_object_name(value: object) -> str:
+    return " ".join(str(value).replace("_", " ").lower().split())
 
 
 def build_capx_runtime_from_yaml(
@@ -185,9 +213,6 @@ def build_capx_runtime_from_yaml(
                 bindings[skill_id] = function_name
     else:
         bindings = dict(skill_bindings)
-    missing = [name for name in bindings.values() if name not in function_map]
-    if missing:
-        raise ValueError(f"CAP-X API is missing configured functions: {sorted(set(missing))}")
 
     artifacts = artifact_store if artifact_store is not None else InMemoryArtifactStore()
     observation_fn = function_map.get("get_observation")
@@ -195,23 +220,100 @@ def build_capx_runtime_from_yaml(
         raise ValueError("selected CAP-X API must expose get_observation")
     get_all_object_poses = function_map.get("get_all_object_poses")
     get_object_pose = function_map.get("get_object_pose")
+    sample_grasp_pose = function_map.get("sample_grasp_pose")
     configured_object_names = tuple(
         str(name)
         for name in _get_nested_mapping(cfg, "scene").get("object_names", ())
     )
     tracked_object_names = tuple(object_names or configured_object_names)
+    task_language = _extract_task_language(low_level_env, env)
+    source_object_name = tracked_object_names[0] if tracked_object_names else None
     pose_cache: dict[str, object] = {}
     function_overrides: dict[str, Callable[..., object]] = {}
+    goto_pose = function_map.get("goto_pose")
+    if callable(goto_pose):
+        def lift_after_grasp(
+            position: list[float],
+            quaternion_wxyz: list[float],
+            z_lift: float = 0.12,
+        ) -> object:
+            """Lift a grasped object vertically before lateral placement."""
+            if len(position) != 3:
+                raise ValueError("position must contain exactly three values")
+            lifted_position = [
+                float(position[0]),
+                float(position[1]),
+                float(position[2]) + float(z_lift),
+            ]
+            return goto_pose(
+                position=lifted_position,
+                quaternion_wxyz=quaternion_wxyz,
+                z_approach=0.0,
+            )
+
+        function_overrides["lift_after_grasp"] = lift_after_grasp
+        bindings.setdefault("lift_after_grasp", "lift_after_grasp")
+    missing = [
+        name
+        for name in bindings.values()
+        if name not in function_map and name not in function_overrides
+    ]
+    if missing:
+        raise ValueError(f"CAP-X API is missing configured functions: {sorted(set(missing))}")
+
     if callable(get_object_pose):
         @wraps(get_object_pose)
         def tracked_get_object_pose(*args: object, **kwargs: object) -> object:
-            result = get_object_pose(*args, **kwargs)
             name = kwargs.get("object_name", args[0] if args else None)
+            rewritten_args = list(args)
+            rewritten_kwargs = dict(kwargs)
+            if name is not None and _normalize_object_name(name) == _normalize_object_name(
+                source_object_name
+            ) and task_language:
+                if "object_name" in rewritten_kwargs:
+                    rewritten_kwargs["object_name"] = task_language
+                elif rewritten_args:
+                    rewritten_args[0] = task_language
+            result = get_object_pose(*rewritten_args, **rewritten_kwargs)
             if name is not None:
                 pose_cache[str(name)] = result
             return result
 
         function_overrides["get_object_pose"] = tracked_get_object_pose
+
+    if callable(sample_grasp_pose):
+        @wraps(sample_grasp_pose)
+        def grounded_sample_grasp_pose(*args: object, **kwargs: object) -> object:
+            name = kwargs.get("object_name", args[0] if args else None)
+            rewritten_args = list(args)
+            rewritten_kwargs = dict(kwargs)
+            is_source_object = (
+                name is not None
+                and _normalize_object_name(name)
+                == _normalize_object_name(source_object_name)
+            )
+            if is_source_object and task_language:
+                if "object_name" in rewritten_kwargs:
+                    rewritten_kwargs["object_name"] = task_language
+                elif rewritten_args:
+                    rewritten_args[0] = task_language
+            if is_source_object and callable(get_object_pose):
+                grounded_pose = pose_cache.get(str(name))
+                if grounded_pose is None:
+                    try:
+                        grounded_pose = tracked_get_object_pose(
+                            *rewritten_args,
+                            **rewritten_kwargs,
+                        )
+                    except Exception:
+                        grounded_pose = None
+                normalized_pose = _normalize_capx_object_pose(grounded_pose)
+                if normalized_pose is not None:
+                    position, _ = normalized_pose
+                    return position, (0.0, 1.0, 0.0, 0.0)
+            return sample_grasp_pose(*rewritten_args, **rewritten_kwargs)
+
+        function_overrides["sample_grasp_pose"] = grounded_sample_grasp_pose
 
     def object_poses() -> Mapping[str, object]:
         poses: dict[str, object] = dict(pose_cache)
@@ -226,7 +328,7 @@ def build_capx_runtime_from_yaml(
         artifacts,
         object_poses_fn=object_poses,
         object_pose_fn=(
-            get_object_pose
+            tracked_get_object_pose
             if callable(get_object_pose) and not callable(get_all_object_poses)
             else None
         ),
@@ -260,4 +362,5 @@ def build_capx_runtime_from_yaml(
         skill_registry=registry,
         task_id=task_id,
         suite_name=suite_name,
+        task_language=task_language,
     )

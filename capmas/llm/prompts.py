@@ -84,6 +84,39 @@ def mission_graph_response_schema(
             "args": skill_args,
         }
     )
+    motion_intent = {
+        "type": ["object", "null"],
+        "properties": {
+            "kind": {
+                "type": "string",
+                "enum": ["grasp", "place", "move"],
+            },
+            "object_track_id": {"type": ["string", "null"]},
+            "target_track_id": {"type": ["string", "null"]},
+            "approach_vector_xyz": {
+                "type": ["array", "null"],
+                "items": {"type": "number"},
+                "minItems": 3,
+                "maxItems": 3,
+            },
+            "standoff_m": {"type": ["number", "null"]},
+            "target_pose_wxyz_xyz": {
+                "type": ["array", "null"],
+                "items": {"type": "number"},
+                "minItems": 7,
+                "maxItems": 7,
+            },
+        },
+        "required": [
+            "kind",
+            "object_track_id",
+            "target_track_id",
+            "approach_vector_xyz",
+            "standoff_m",
+            "target_pose_wxyz_xyz",
+        ],
+        "additionalProperties": False,
+    }
     node = obj(
         {
             "node_id": {"type": "string"},
@@ -92,13 +125,14 @@ def mission_graph_response_schema(
             "inputs": {"type": "array", "items": port},
             "outputs": {"type": "array", "items": port},
             "preconditions": string_list,
-            "postconditions": string_list,
+            "postconditions": {**string_list, "minItems": 1},
             "resources": {"type": "array", "items": resource},
             "max_duration_ms": {"type": "integer", "minimum": 1},
             "max_sim_steps": {"type": "integer", "minimum": 1},
             "proposed_by": {"type": "string"},
             "recovery_policy": {"type": "string"},
             "node_type": {"type": "string", "enum": ["action", "router", "checkpoint"]},
+            "motion_intent": motion_intent,
         }
     )
     binding = obj(
@@ -582,6 +616,8 @@ def _topology_constraints() -> dict[str, object]:
         "dependencies_must_have_matching_edges": True,
         "failure_recovery_dependencies_must_be_committed_before_failed_source": True,
         "one_success_and_one_failure_edge_max_per_source": True,
+        "scene_fresh_threshold_ms_must_be_finite_and_positive": True,
+        "use_scene_fresh_1000_for_observation_checkpoints": True,
         "rolling_success_edges_must_not_reenter_committed_subgraphs": True,
         "cycles_require_finite_loop_spec": True,
         "parent_scene_version_must_match_current_scene": True,
@@ -607,6 +643,8 @@ def _local_graph_constraints() -> dict[str, object]:
         "never_use_subgraph_artifact_as_top_level_key": True,
         "preserve_requested_subgraph_and_subgoal_ids": True,
         "actions_must_use_registered_typed_skills": True,
+        "action_nodes_must_declare_typed_motion_intent_when_geometry_is_relevant": True,
+        "motion_intent_must_use_scene_track_ids": True,
         "checkpoint_nodes_may_have_empty_skill_calls": True,
         "checkpoint_only_subgoals_must_not_invent_physical_actions": True,
         "strict_args_wire_format": (
@@ -675,6 +713,16 @@ def _topology_system_prompt() -> str:
         "Construct edges mechanically: for every item in every subgoal's depends_on, "
         "emit exactly one edge {source: dependency, target: subgraph_id, condition: success}; "
         "never return a depends_on entry without that exact edge. "
+        "For an ordinary single-object LIBERO pick-and-place task, use the smallest "
+        "linear topology that can be executed and verified: one physical pick subgoal, "
+        "one physical place subgoal, and one checkpoint/verification subgoal, with only "
+        "forward success edges. Put sample_grasp_pose, goto_pose, and close_gripper in "
+        "the pick subgoal's local Policy graph. Do not automatically create subgoals or "
+        "IDs containing retry, refresh, failure, or recovery for the initial plan; runtime "
+        "replanning handles recovery after a failed verification. Do not use a recovery "
+        "branch to encode the normal pick/place order. For this simple topology, declare "
+        "the final verification subgraph as the success terminal and the final physical "
+        "subgraph as the failure terminal instead of inventing a separate failure node. "
         "A failure edge target is a recovery branch: its depends_on may contain only "
         "subgraphs on the source's normal success ancestry that could already be committed; "
         "never make a failure target depend on the failed source or on an uncommitted branch. "
@@ -684,7 +732,9 @@ def _topology_system_prompt() -> str:
         "All terminal predicates must use only these exact observable forms: "
         "object_in_gripper(obj_id), object_at_target(obj_id,target_id), gripper_open(), "
         "gripper_closed(), scene_fresh(threshold_ms), track_exists:track_id, or "
-        "object_visible:label; never write prose predicates. "
+        "object_visible:label; never write prose predicates. scene_fresh(threshold_ms) "
+        "must use a finite positive threshold; never emit scene_fresh(0) or a negative "
+        "threshold. Use scene_fresh(1000) for ordinary observation checkpoints. "
         "If a previous rejection is supplied, correct it before returning. Return exactly one JSON object "
         "matching the schema."
     )
@@ -709,7 +759,15 @@ def _staged_policy_system_prompt(policy_strategy: str = "balanced") -> str:
         "before execution. "
         "For any subgoal whose success predicate includes object_in_gripper, the action "
         "sequence is mandatory: sample_grasp_pose, then goto_pose, then close_gripper; "
-        "never replace this with a direct goto_pose followed by close_gripper. "
+        "never replace this with a direct goto_pose followed by close_gripper. Keep the "
+        "entire grasp sequence in one action node because SkillOutputRef is local to one "
+        "action contract. Use same-node SkillOutputRef values for sampled positions; never "
+        "emit strings such as sampled_grasp_position(...) or sampled_grasp_quaternion_wxyz(...). "
+        "For every action node, populate motion_intent with the typed grasp/place/move "
+        "intent whenever the subgoal has a resolvable object or target. Use the exact "
+        "SceneSnapshot track IDs, provide a physically meaningful approach_vector_xyz "
+        "when the candidate depends on approach geometry, and use null only for fields "
+        "that are genuinely unavailable. Checkpoint nodes must set motion_intent to null. "
         "If the requested failure terminal has no success_predicates, use "
         "scene_fresh(1000) as its validating checkpoint predicate; never emit an empty "
         "checkpoint predicates list. "

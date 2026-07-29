@@ -1,0 +1,205 @@
+"""Side-effect-free candidate motion preview interfaces and reference backend."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import math
+from typing import Literal, Protocol
+
+from capmas.contracts.core import ArtifactRef
+from capmas.contracts.graph import MotionIntent
+from capmas.contracts.scene import ObjectTrack, SceneSnapshot
+from capmas.perception.local_map import LocalMapBackend, MapRegion
+
+
+@dataclass(frozen=True)
+class MotionPreview:
+    status: Literal["feasible", "infeasible", "unknown"]
+    target_pose_wxyz_xyz: tuple[float, ...] | None = None
+    trajectory_ref: ArtifactRef | None = None
+    ik_valid: bool | None = None
+    collision_free: bool | None = None
+    clearance_m: float | None = None
+    path_length_m: float | None = None
+    reason: str = ""
+    backend: str = ""
+    backend_version: str = ""
+
+
+class MotionPreviewBackend(Protocol):
+    def preview(
+        self,
+        intent: MotionIntent,
+        scene: SceneSnapshot,
+        local_map: LocalMapBackend | None,
+    ) -> MotionPreview: ...
+
+
+class ReferenceMotionPreview:
+    """Conservative workspace and sparse-map preview without robot side effects."""
+
+    backend = "reference_motion_preview"
+    backend_version = "1"
+
+    def __init__(
+        self,
+        *,
+        workspace_bounds: tuple[tuple[float, float], ...] = (
+            (-1.0, 1.0),
+            (-1.0, 1.0),
+            (0.0, 2.0),
+        ),
+        target_freshness_ms: float = 250.0,
+        track_stale_ns: int = 500_000_000,
+        corridor_radius_m: float = 0.025,
+        approach_distance_m: float = 0.15,
+        clearance_threshold: float = 0.5,
+        collision_risk_threshold: float = 0.5,
+        corridor_samples: int = 5,
+    ) -> None:
+        if len(workspace_bounds) != 3:
+            raise ValueError("workspace bounds must contain three axes")
+        if any(low >= high for low, high in workspace_bounds):
+            raise ValueError("workspace bounds must have increasing limits")
+        if target_freshness_ms < 0 or track_stale_ns < 0:
+            raise ValueError("freshness limits must not be negative")
+        if corridor_radius_m <= 0 or approach_distance_m <= 0:
+            raise ValueError("preview distances must be positive")
+        if corridor_samples <= 0:
+            raise ValueError("corridor samples must be positive")
+        self.workspace_bounds = workspace_bounds
+        self.target_freshness_ms = target_freshness_ms
+        self.track_stale_ns = track_stale_ns
+        self.corridor_radius_m = corridor_radius_m
+        self.approach_distance_m = approach_distance_m
+        self.clearance_threshold = clearance_threshold
+        self.collision_risk_threshold = collision_risk_threshold
+        self.corridor_samples = corridor_samples
+
+    def preview(
+        self,
+        intent: MotionIntent,
+        scene: SceneSnapshot,
+        local_map: LocalMapBackend | None,
+    ) -> MotionPreview:
+        if scene.freshness_ms > self.target_freshness_ms:
+            return self._unknown("scene is stale")
+
+        track = self._target_track(intent, scene)
+        if intent.target_pose_wxyz_xyz is not None:
+            target_pose = intent.target_pose_wxyz_xyz
+        elif track is not None:
+            target_pose = tuple(track.pose_wxyz_xyz)
+        else:
+            return self._unknown("target track is unresolved")
+
+        if track is not None and scene.sensor_timestamp_ns - track.last_seen_ns > self.track_stale_ns:
+            return self._unknown("target track is stale")
+        if len(target_pose) != 7 or not all(math.isfinite(value) for value in target_pose):
+            return self._unknown("target pose is unavailable or malformed")
+
+        position = tuple(target_pose[4:7])
+        if not self._in_workspace(position):
+            return MotionPreview(
+                status="infeasible",
+                target_pose_wxyz_xyz=target_pose,
+                ik_valid=False,
+                collision_free=None,
+                clearance_m=None,
+                reason="target pose is outside conservative workspace",
+                backend=self.backend,
+                backend_version=self.backend_version,
+            )
+
+        approach = _normalize(intent.approach_vector_xyz)
+        if approach is None:
+            return MotionPreview(
+                status="feasible",
+                target_pose_wxyz_xyz=target_pose,
+                ik_valid=True,
+                collision_free=None,
+                clearance_m=None,
+                reason="approach vector is unavailable; map corridor not evaluated",
+                backend=self.backend,
+                backend_version=self.backend_version,
+            )
+        if local_map is None:
+            return MotionPreview(
+                status="feasible",
+                target_pose_wxyz_xyz=target_pose,
+                ik_valid=True,
+                collision_free=None,
+                path_length_m=self.approach_distance_m,
+                reason="local map is unavailable",
+                backend=self.backend,
+                backend_version=self.backend_version,
+            )
+
+        collision_free = True
+        min_clearance: float | None = None
+        for index in range(1, self.corridor_samples + 1):
+            distance = self.approach_distance_m * index / self.corridor_samples
+            point = tuple(position[axis] - approach[axis] * distance for axis in range(3))
+            result = local_map.query(
+                MapRegion(
+                    center_xyz=point,
+                    extents_xyz=(self.corridor_radius_m,) * 3,
+                )
+            )
+            if result.snapshot_timestamp_ns and result.snapshot_timestamp_ns < scene.sensor_timestamp_ns:
+                return self._unknown("local map is stale")
+            if result.occupied:
+                collision_free = False
+                min_clearance = 0.0
+                break
+            if result.clearance_m is not None:
+                min_clearance = (
+                    result.clearance_m
+                    if min_clearance is None
+                    else min(min_clearance, result.clearance_m)
+                )
+        if min_clearance is None:
+            return self._unknown("local map has no clearance measurement")
+        reason = "corridor is occupied" if not collision_free else "corridor is clear"
+        return MotionPreview(
+            status="feasible" if collision_free else "infeasible",
+            target_pose_wxyz_xyz=target_pose,
+            ik_valid=True,
+            collision_free=collision_free,
+            clearance_m=min_clearance,
+            path_length_m=self.approach_distance_m,
+            reason=reason,
+            backend=self.backend,
+            backend_version=self.backend_version,
+        )
+
+    def _target_track(self, intent: MotionIntent, scene: SceneSnapshot) -> ObjectTrack | None:
+        track_id = intent.object_track_id if intent.kind == "grasp" else intent.target_track_id
+        if track_id is None:
+            track_id = intent.object_track_id
+        if track_id is None:
+            return None
+        return next((track for track in scene.objects if track.track_id == track_id), None)
+
+    def _in_workspace(self, position: tuple[float, float, float]) -> bool:
+        return all(
+            bounds[0] <= position[index] <= bounds[1]
+            for index, bounds in enumerate(self.workspace_bounds)
+        )
+
+    def _unknown(self, reason: str) -> MotionPreview:
+        return MotionPreview(
+            status="unknown",
+            reason=reason,
+            backend=self.backend,
+            backend_version=self.backend_version,
+        )
+
+
+def _normalize(vector: tuple[float, float, float] | None) -> tuple[float, float, float] | None:
+    if vector is None:
+        return None
+    norm = math.sqrt(sum(value * value for value in vector))
+    if norm <= 1e-9:
+        return None
+    return tuple(value / norm for value in vector)

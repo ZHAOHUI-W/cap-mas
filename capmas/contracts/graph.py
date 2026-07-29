@@ -9,7 +9,8 @@ rehearsal, and later distributed execution.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+import math
+from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 from capmas.contracts.action import ActionContract, SkillCall
@@ -132,6 +133,40 @@ class SubgraphOutputBinding:
 
 
 @dataclass(frozen=True)
+class MotionIntent:
+    """Typed planning metadata used by read-only motion preview providers."""
+
+    kind: Literal["grasp", "place", "move"]
+    object_track_id: str | None = None
+    target_track_id: str | None = None
+    approach_vector_xyz: tuple[float, float, float] | None = None
+    standoff_m: float | None = None
+    target_pose_wxyz_xyz: tuple[float, ...] | None = None
+
+    def __post_init__(self) -> None:
+        if self.kind not in {"grasp", "place", "move"}:
+            raise ValueError("motion intent kind must be grasp, place, or move")
+        if self.object_track_id is not None and not self.object_track_id:
+            raise ValueError("motion intent object track id must not be empty")
+        if self.target_track_id is not None and not self.target_track_id:
+            raise ValueError("motion intent target track id must not be empty")
+        if self.approach_vector_xyz is not None:
+            if len(self.approach_vector_xyz) != 3 or not all(
+                math.isfinite(value) for value in self.approach_vector_xyz
+            ):
+                raise ValueError("motion intent approach vector must contain three finite values")
+        if self.standoff_m is not None and (
+            self.standoff_m < 0.0 or not math.isfinite(self.standoff_m)
+        ):
+            raise ValueError("motion intent standoff must be finite and non-negative")
+        if self.target_pose_wxyz_xyz is not None:
+            if len(self.target_pose_wxyz_xyz) != 7 or not all(
+                math.isfinite(value) for value in self.target_pose_wxyz_xyz
+            ):
+                raise ValueError("motion intent target pose must contain seven finite values")
+
+
+@dataclass(frozen=True)
 class SubgraphNodeSpec:
     """An executable or control node inside a local policy subgraph."""
 
@@ -148,6 +183,7 @@ class SubgraphNodeSpec:
     proposed_by: str = "policy_agent"
     recovery_policy: str = "replan"
     node_type: str = "action"
+    motion_intent: MotionIntent | None = None
 
     def __post_init__(self) -> None:
         if not self.node_id:

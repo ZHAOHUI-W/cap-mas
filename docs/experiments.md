@@ -152,10 +152,58 @@ time:
    the preceding phases have locked their baseline artifacts. Any robot-action
    parallelism requires disjoint resources and an explicit graph join.
 
+### Phase 5 experiment artifact rule
+
+Every Phase 5 experiment and every seed gets a new run-scoped directory. No
+runner may reuse an output path or overwrite a prior log:
+
+```text
+outputs/phase5/<experiment_name>/<timestamp>_<run_id>/
+  run_config.json  manifest.json  summary.json  summary.md
+  logs/  results/  traces/  evidence/  artifacts/
+```
+
+The manifest records file size and SHA-256. Failed runs retain their failure
+artifact and complete stdout/stderr log. API keys, Authorization headers, and
+other provider secrets are redacted before publication. A run is incomplete
+for comparison unless its configuration, logs, result, and manifest are all
+present.
+
+The Phase 5 baseline gate uses a five-seed pilot followed by 20 paired trials
+per horizon bucket. The controlled horizon buckets are H2, H4, and H6 based
+on verified subgoal count; native LIBERO tasks are a separate external
+validity set. CAP-X, deterministic B3, and B3-LLM share the same initial
+state seeds, model budget, retry/deadline budget, and action budget.
+
+The P5.2 pilot is launched with:
+
+```bash
+CUDA_VISIBLE_DEVICES=5 python scripts/run_libero_p52_geometry.py \
+  --config-path <cap-x-libero-yaml> \
+  --server-url <endpoint> --model gpt-5.5 \
+  --output-root outputs/phase5
+```
+
+It runs `geometry_disabled`, `geometry_shadow`, and
+`geometry_online_bounded` for seeds 1 through 5. Every mode/seed pair gets an
+independent artifact directory and `used_privileged_state=false` in its
+published configuration.
+
 The complete P3.2-to-Phase-5 handoff is in
 [`phase5-evidence-evolution.md`](phase5-evidence-evolution.md). In particular,
 the current `ProcessRehearsalPool` is an offline execution boundary, not proof
 that online candidates already have rehearsal evidence.
+
+The 2026-07-29 P5.2 endpoint pilot completed all 15 isolated mode/seed runs.
+`geometry_disabled`, `geometry_shadow`, and `geometry_online_bounded` each
+obtained 2/5 CAP-X evaluator successes. The online provider emitted four
+candidate geometry records per run with distinct normalized fingerprints,
+`used_privileged_state=false`, and approximately 0.152--0.183 ms per-candidate
+P95 latency. However, because the B3-LLM path has not yet transported a local
+map, only conservative reachability was measurable; clearance, collision risk,
+and grasp quality stayed unknown. The Arbiter's online selection was therefore
+evidence-aware but not yet geometry-discriminative. This pilot is retained as a
+baseline/diagnostic artifact and does not by itself authorize P5.3.
 
 Current evidence status: the P3.1b `max_workers=2` ready-wave path has a
 successful endpoint-backed LIBERO run, but the matched `max_workers=1`

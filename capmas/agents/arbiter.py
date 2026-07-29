@@ -6,6 +6,7 @@ from capmas.contracts.candidates import (
     ArbitrationResult,
     CandidateRejection,
     GraphCandidate,
+    subgraph_fingerprint,
 )
 from capmas.contracts.scene import SceneSnapshot
 from capmas.contracts.strategy import StrategyProfile
@@ -26,11 +27,15 @@ class CandidateArbiter:
         validator: GraphValidator | None = None,
         *,
         latency_budget_ms: float = 5_000,
+        current_map_version: int | None = None,
     ) -> None:
         if latency_budget_ms <= 0:
             raise ValueError("latency budget must be positive")
         self.validator = validator or GraphValidator()
         self.latency_budget_ms = float(latency_budget_ms)
+        if current_map_version is not None and current_map_version < 0:
+            raise ValueError("current map version must not be negative")
+        self.current_map_version = current_map_version
 
     def select(
         self,
@@ -38,6 +43,7 @@ class CandidateArbiter:
         scene: SceneSnapshot,
         *,
         expected_subgoal: str | None = None,
+        current_map_version: int | None = None,
     ) -> ArbitrationResult:
         proposals = tuple(candidates)
         rejections: list[CandidateRejection] = []
@@ -91,13 +97,27 @@ class CandidateArbiter:
                     )
                 )
                 continue
-            evidence_rejection = self._evidence_gate(candidate, scene)
+            evidence_rejection = self._evidence_gate(
+                candidate,
+                scene,
+                self.current_map_version if current_map_version is None else current_map_version,
+            )
             if evidence_rejection is not None:
                 rejections.append(
                     CandidateRejection(
                         candidate.candidate_id,
                         "STALE_EVIDENCE",
                         evidence_rejection,
+                    )
+                )
+                continue
+            geometry_rejection = self._geometry_gate(candidate)
+            if geometry_rejection is not None:
+                rejections.append(
+                    CandidateRejection(
+                        candidate.candidate_id,
+                        "GEOMETRY_GATE",
+                        geometry_rejection,
                     )
                 )
                 continue
@@ -170,7 +190,7 @@ class CandidateArbiter:
     def _score_breakdown(self, candidate: GraphCandidate) -> tuple[float, dict[str, float]]:
         evidence = candidate.evidence
         if evidence is None:
-            confidence = candidate.confidence or 0.0
+            confidence = candidate.confidence if candidate.confidence is not None else 0.0
             return confidence, {"confidence_fallback": confidence}
         profile = StrategyProfile.for_name(candidate.strategy)
         # Evidence mode intentionally excludes the legacy self-reported/default
@@ -197,6 +217,10 @@ class CandidateArbiter:
             breakdown["ood"] = profile.ood_weight * evidence.ood_success_rate
         if "perception" in available and evidence.perception is not None:
             breakdown["perception"] = profile.perception_weight * evidence.perception.score()
+        if "geometry" in available and evidence.geometry is not None:
+            geometry_score = _geometry_score(evidence.geometry)
+            if geometry_score is not None:
+                breakdown["geometry"] = profile.geometry_weight * geometry_score
         if "latency" in available:
             latency = min(evidence.expected_latency_ms / self.latency_budget_ms, 2.0)
             breakdown["latency"] = -profile.latency_penalty * latency
@@ -205,7 +229,11 @@ class CandidateArbiter:
         return sum(breakdown.values()), breakdown
 
     @staticmethod
-    def _evidence_gate(candidate: GraphCandidate, scene: SceneSnapshot) -> str | None:
+    def _evidence_gate(
+        candidate: GraphCandidate,
+        scene: SceneSnapshot,
+        current_map_version: int | None,
+    ) -> str | None:
         evidence = candidate.evidence
         if evidence is None or evidence.scene_version is None:
             return None
@@ -213,6 +241,47 @@ class CandidateArbiter:
             return (
                 f"evidence targets scene {evidence.scene_version}, "
                 f"current scene is {scene.scene_version}"
+            )
+        if evidence.geometry is not None:
+            if evidence.geometry.candidate_fingerprint != subgraph_fingerprint(candidate.subgraph):
+                return "geometry evidence fingerprint does not match effective candidate"
+            if (
+                current_map_version is not None
+                and evidence.geometry.map_version is not None
+                and evidence.geometry.map_version != current_map_version
+            ):
+                return (
+                    f"geometry evidence targets map {evidence.geometry.map_version}, "
+                    f"current map is {current_map_version}"
+                )
+        return None
+
+    @staticmethod
+    def _geometry_gate(candidate: GraphCandidate) -> str | None:
+        evidence = candidate.evidence
+        if evidence is None or evidence.geometry is None:
+            return None
+        profile = StrategyProfile.for_name(candidate.strategy)
+        geometry = evidence.geometry
+        reachability = geometry.reachability
+        if (
+            reachability.status == "fail"
+            and reachability.score is not None
+            and reachability.score < profile.min_reachability
+        ):
+            return (
+                f"reachability={reachability.score:.3f} is below "
+                f"{profile.name} threshold {profile.min_reachability:.3f}"
+            )
+        collision = geometry.collision_risk
+        if (
+            collision.status == "fail"
+            and collision.score is not None
+            and collision.score > profile.max_collision_risk
+        ):
+            return (
+                f"collision_risk={collision.score:.3f} exceeds "
+                f"{profile.name} limit {profile.max_collision_risk:.3f}"
             )
         return None
 
@@ -241,3 +310,20 @@ class CandidateArbiter:
         duration = sum(node.max_duration_ms for node in subgraph.nodes)
         resources = sum(len(node.exclusive_resources) for node in subgraph.nodes)
         return (self.score(candidate), -duration, -resources, candidate.candidate_id)
+
+
+def _geometry_score(geometry: object) -> float | None:
+    dimensions = (
+        (getattr(geometry, "grasp_quality"), 0.30, False),
+        (getattr(geometry, "reachability"), 0.30, False),
+        (getattr(geometry, "clearance"), 0.25, False),
+        (getattr(geometry, "collision_risk"), 0.15, True),
+    )
+    weighted = 0.0
+    total_weight = 0.0
+    for dimension, weight, invert in dimensions:
+        if dimension.status not in {"pass", "fail"} or dimension.score is None:
+            continue
+        weighted += weight * (1.0 - dimension.score if invert else dimension.score)
+        total_weight += weight
+    return weighted / total_weight if total_weight else None

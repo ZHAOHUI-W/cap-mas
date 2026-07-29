@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import hashlib
 import json
-from typing import Sequence
+from typing import Literal, Sequence
 
+from capmas.contracts.core import ArtifactRef
 from capmas.contracts.graph import SubgraphSpec
 from capmas.graph.serialization import local_subgraph_to_dict
 
@@ -52,6 +53,93 @@ class PerceptionEvidence:
     def score(self) -> float:
         values = [getattr(self, name) for name in self.available]
         return sum(values) / len(values) if values else 0.0
+
+
+@dataclass(frozen=True)
+class EvidenceDimension:
+    """A measurable geometry dimension with explicit three-state semantics."""
+
+    name: str
+    status: Literal["pass", "fail", "unknown"]
+    score: float | None
+    threshold: float | None
+    reason: str
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("evidence dimension name must not be empty")
+        if self.status not in {"pass", "fail", "unknown"}:
+            raise ValueError("evidence dimension status must be pass, fail, or unknown")
+        if self.status == "unknown" and self.score is not None:
+            raise ValueError("unknown dimension score must be None")
+        if self.status in {"pass", "fail"} and self.score is None:
+            raise ValueError("pass or fail dimension score must be available")
+        if self.score is not None and not 0.0 <= self.score <= 1.0:
+            raise ValueError("evidence dimension score must be in [0, 1]")
+        if self.threshold is not None and not 0.0 <= self.threshold <= 1.0:
+            raise ValueError("evidence dimension threshold must be in [0, 1]")
+
+
+@dataclass(frozen=True)
+class GeometryEvidence:
+    """Candidate-conditioned geometry evidence and its reproducibility context."""
+
+    grasp_quality: EvidenceDimension
+    reachability: EvidenceDimension
+    clearance: EvidenceDimension
+    collision_risk: EvidenceDimension
+    candidate_fingerprint: str
+    scene_version: int
+    map_version: int | None
+    map_backend: str
+    provider: str
+    provider_version: str
+    captured_at_ns: int
+    latency_ms: float
+    used_privileged_state: bool = False
+    artifact_refs: tuple[ArtifactRef, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.candidate_fingerprint:
+            raise ValueError("geometry candidate fingerprint must not be empty")
+        if self.scene_version < 0:
+            raise ValueError("geometry scene version must not be negative")
+        if self.map_version is not None and self.map_version < 0:
+            raise ValueError("geometry map version must not be negative")
+        if not self.map_backend:
+            raise ValueError("geometry map backend must not be empty")
+        if not self.provider or not self.provider_version:
+            raise ValueError("geometry provider and version must not be empty")
+        if self.captured_at_ns < 0:
+            raise ValueError("geometry capture timestamp must not be negative")
+        if self.latency_ms < 0:
+            raise ValueError("geometry latency must not be negative")
+        expected = {
+            "grasp_quality",
+            "reachability",
+            "clearance",
+            "collision_risk",
+        }
+        dimensions = (
+            self.grasp_quality,
+            self.reachability,
+            self.clearance,
+            self.collision_risk,
+        )
+        if {dimension.name for dimension in dimensions} != expected:
+            raise ValueError("geometry evidence dimensions have unexpected names")
+
+    @property
+    def measurable(self) -> bool:
+        return any(
+            dimension.status in {"pass", "fail"}
+            for dimension in (
+                self.grasp_quality,
+                self.reachability,
+                self.clearance,
+                self.collision_risk,
+            )
+        )
 
 
 @dataclass(frozen=True)
@@ -128,6 +216,7 @@ class CandidateEvidence:
     recovery_cost: float = 0.0
     evidence_refs: Sequence[str] = ()
     perception: PerceptionEvidence | None = None
+    geometry: GeometryEvidence | None = None
     available_metrics: Sequence[str] = ()
     scene_version: int | None = None
     provider: str | None = None
@@ -148,10 +237,20 @@ class CandidateEvidence:
             raise ValueError("evidence scene version must not be negative")
         if self.captured_at_ns is not None and self.captured_at_ns < 0:
             raise ValueError("evidence capture timestamp must not be negative")
-        allowed = {"verifier", "rehearsal", "ood", "latency", "recovery", "perception"}
+        allowed = {
+            "verifier",
+            "rehearsal",
+            "ood",
+            "latency",
+            "recovery",
+            "perception",
+            "geometry",
+        }
         unknown = set(self.available_metrics) - allowed
         if unknown:
             raise ValueError(f"unknown evidence metrics: {', '.join(sorted(unknown))}")
+        if "geometry" in self.available_metrics and self.geometry is None:
+            raise ValueError("geometry evidence metric requires geometry evidence")
 
 
 @dataclass(frozen=True)
@@ -176,6 +275,8 @@ __all__ = [
     "CandidateEvidence",
     "CandidateRejection",
     "CandidateRewriteReport",
+    "EvidenceDimension",
+    "GeometryEvidence",
     "GraphCandidate",
     "PerceptionEvidence",
     "rewrite_report_for",

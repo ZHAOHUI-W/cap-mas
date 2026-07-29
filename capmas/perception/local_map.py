@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, Protocol
 
 from capmas.perception.geometry import GeometryUpdate
 
@@ -39,6 +39,14 @@ class MapSnapshot:
     source_timestamp_ns: int
     occupied_voxels: tuple[VoxelKey, ...]
     dirty_blocks: tuple[VoxelKey, ...] = ()
+
+
+class LocalMapBackend(Protocol):
+    """Read-only map seam used by candidate motion preview."""
+
+    def query(self, region: MapRegion) -> MapQueryResult: ...
+
+    def map_version(self) -> int: ...
 
 
 class SparseVoxelMap:
@@ -104,6 +112,9 @@ class SparseVoxelMap:
             confidence=confidence,
             snapshot_timestamp_ns=self._source_timestamp_ns,
         )
+
+    def map_version(self) -> int:
+        return self._map_version
 
     def freeze_snapshot(self) -> MapSnapshot:
         return MapSnapshot(

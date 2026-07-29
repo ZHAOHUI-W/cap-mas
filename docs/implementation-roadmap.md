@@ -266,6 +266,25 @@ SceneSnapshot-only online provider.
 - Calibrate correlated perception, verifier, rehearsal, and OOD evidence before
   using it as a learned Arbiter signal.
 
+Implementation status (2026-07-29): P5.2 contracts, strict response-schema
+support for typed `motion_intent`, grounding-aware intent rebasing,
+side-effect-free reference geometry preview, Arbiter geometry gates, scheduler
+timeout handling, and run-scoped artifacts are implemented and covered by the
+local test suite. The CAP-X LIBERO environment is usable through
+`cap-x/.venv-libero`; the endpoint-backed five-seed pilot completed all 15
+mode/seed runs with independent logs and artifacts. Each mode reached 2/5
+`evaluator_success` and the online mode did not yet improve downstream task
+success over the disabled baseline.
+
+The pilot confirms candidate fingerprints and low-latency evidence transport,
+but the realistic B3-LLM provider still supplies no local map. Consequently,
+online geometry reports only `reachability=pass`; grasp quality, clearance, and
+collision risk remain `unknown`, and the Arbiter's non-tied winner is currently
+driven by perception/strategy weights rather than a distinct geometry score.
+P5.2 is therefore implementation-complete but experiment-gate incomplete.
+P5.0 local-map/semantic geometry transport must be completed before P5.3
+process rehearsal is admitted.
+
 Exit criterion: memory updates and candidate evidence are reproducible,
 attributable, versioned, and cannot change active robot execution; rehearsal
 and OOD evidence improve candidate selection without introducing regression on

@@ -18,6 +18,9 @@ class StrategyProfile:
     min_pose_reliability: float = 0.0
     confidence_weight: float = 0.25
     perception_weight: float = 0.0
+    geometry_weight: float = 0.0
+    min_reachability: float = 0.0
+    max_collision_risk: float = 1.0
     verifier_weight: float = 0.20
     rehearsal_weight: float = 0.25
     ood_weight: float = 0.25
@@ -36,6 +39,9 @@ class StrategyProfile:
             "min_pose_reliability",
             "confidence_weight",
             "perception_weight",
+            "geometry_weight",
+            "min_reachability",
+            "max_collision_risk",
             "verifier_weight",
             "rehearsal_weight",
             "ood_weight",
@@ -51,7 +57,10 @@ class StrategyProfile:
         """Return a stable profile while keeping P3.1 names compatible."""
         normalized = (name or "balanced").split(":", 1)[-1]
         profiles = {
-            "balanced": cls("balanced", perception_weight=0.25),
+            "balanced": cls(
+                "balanced", perception_weight=0.25, geometry_weight=0.40,
+                min_reachability=0.50, max_collision_risk=0.50,
+            ),
             "safety": cls(
                 "safety",
                 min_scene_freshness=0.75,
@@ -62,6 +71,9 @@ class StrategyProfile:
                 min_pose_reliability=0.70,
                 confidence_weight=0.10,
                 perception_weight=0.55,
+                geometry_weight=0.50,
+                min_reachability=0.70,
+                max_collision_risk=0.35,
                 verifier_weight=0.20,
                 rehearsal_weight=0.05,
                 ood_weight=0.10,
@@ -77,6 +89,9 @@ class StrategyProfile:
                 min_pose_reliability=0.60,
                 confidence_weight=0.15,
                 perception_weight=0.30,
+                geometry_weight=0.45,
+                min_reachability=0.60,
+                max_collision_risk=0.45,
                 verifier_weight=0.20,
                 rehearsal_weight=0.20,
                 ood_weight=0.30,
@@ -92,6 +107,9 @@ class StrategyProfile:
                 min_pose_reliability=0.50,
                 confidence_weight=0.35,
                 perception_weight=0.15,
+                geometry_weight=0.25,
+                min_reachability=0.50,
+                max_collision_risk=0.65,
                 verifier_weight=0.20,
                 rehearsal_weight=0.15,
                 ood_weight=0.15,
