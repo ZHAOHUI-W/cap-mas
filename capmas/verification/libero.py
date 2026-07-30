@@ -10,6 +10,10 @@ from capmas.contracts.core import SkillRef
 from capmas.contracts.graph import SubgraphSpec
 from capmas.contracts.scene import SceneSnapshot
 from capmas.verification.predicates import PredicateBasedVerifier
+from capmas.verification.evidence import (
+    attach_verifier_evidence,
+    collect_static_verifier_evidence,
+)
 
 
 class LiberoObservableVerifier(PredicateBasedVerifier):
@@ -332,7 +336,7 @@ def libero_candidate_evidence(
         pose_reliability=pose_reliability,
         evidence_refs=evidence_refs,
     )
-    return CandidateEvidence(
+    perception_evidence = CandidateEvidence(
         evidence_refs=evidence_refs,
         perception=perception,
         available_metrics=("perception",),
@@ -340,6 +344,17 @@ def libero_candidate_evidence(
         provider="libero_scene_snapshot",
         captured_at_ns=scene.publish_timestamp_ns,
     )
+    verifier_evidence = collect_static_verifier_evidence(
+        candidate,
+        scene,
+        LiberoObservableVerifier(),
+        predicate_selector=lambda predicate: bool(
+            compile_time_preconditions((predicate,))
+        ),
+        provider="libero_observable_verifier.static",
+        clock=lambda: scene.publish_timestamp_ns,
+    )
+    return attach_verifier_evidence(perception_evidence, verifier_evidence)
 
 
 def _target_position(

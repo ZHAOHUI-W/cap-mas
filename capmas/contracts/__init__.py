@@ -19,7 +19,6 @@ from capmas.contracts.candidates import (
     GeometryEvidence,
     PerceptionEvidence,
 )
-from capmas.verification.evidence import VerifierEvidence
 from capmas.contracts.core import ArtifactRef, EpisodeHandle, SkillRef
 from capmas.contracts.failures import FailureArtifact, FailureClass
 from capmas.contracts.experiment import ExperimentRunConfig
@@ -111,3 +110,11 @@ __all__ = [
     "VerificationResult",
     "VisualEvidence",
 ]
+
+
+def __getattr__(name: str) -> object:
+    if name == "VerifierEvidence":
+        from capmas.verification.evidence import VerifierEvidence
+
+        return VerifierEvidence
+    raise AttributeError(name)

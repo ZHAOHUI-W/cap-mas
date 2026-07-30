@@ -260,15 +260,8 @@ class CandidateEvidence:
                 raise ValueError("verifier_pass_rate must match typed verifier evidence")
             if self.scene_version is not None and self.scene_version != self.verifier.scene_version:
                 raise ValueError("evidence scene version must match typed verifier evidence")
-            if self.provider is not None and self.provider != self.verifier.provider:
-                raise ValueError("evidence provider must match typed verifier evidence")
-            if (
-                self.captured_at_ns is not None
-                and self.captured_at_ns != self.verifier.captured_at_ns
-            ):
-                raise ValueError(
-                    "evidence capture timestamp must match typed verifier evidence"
-                )
+            # The outer provider/timestamp identify the aggregate evidence
+            # envelope. Each typed evidence lane retains its own provenance.
             if "verifier" in self.available_metrics and self.verifier.coverage <= 0.0:
                 raise ValueError("typed verifier metric requires positive coverage")
 

@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import math
+import time
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Literal
 
+from capmas.contracts.candidates import GraphCandidate, subgraph_fingerprint
+from capmas.contracts.scene import SceneSnapshot
 from capmas.contracts.verification import PredicateReport
 
 if TYPE_CHECKING:
@@ -124,10 +128,98 @@ def attach_verifier_evidence(
         verifier_pass_rate=verifier.pass_rate,
         evidence_refs=tuple(base.evidence_refs),
         available_metrics=metrics,
-        scene_version=verifier.scene_version,
-        provider=verifier.provider,
-        captured_at_ns=verifier.captured_at_ns,
+        scene_version=(
+            base.scene_version if base.scene_version is not None else verifier.scene_version
+        ),
+        provider=base.provider or verifier.provider,
+        captured_at_ns=(
+            base.captured_at_ns
+            if base.captured_at_ns is not None
+            else verifier.captured_at_ns
+        ),
         verifier=verifier,
+    )
+
+
+def collect_static_verifier_evidence(
+    candidate: GraphCandidate,
+    scene: SceneSnapshot,
+    verifier: object,
+    *,
+    predicate_selector: Callable[[str], bool] | None = None,
+    provider: str = "predicate_verifier.static",
+    clock: Callable[[], int] = time.time_ns,
+) -> VerifierEvidence:
+    """Collect candidate precondition evidence from one immutable scene."""
+
+    from capmas.evaluation.evidence_contracts import EvidenceCompatibilityError
+
+    if candidate.parent_scene_version != scene.scene_version:
+        raise EvidenceCompatibilityError(
+            f"candidate scene {candidate.parent_scene_version} does not match "
+            f"current scene {scene.scene_version}"
+        )
+    predicates: list[str] = []
+    seen: set[str] = set()
+    for node in candidate.subgraph.nodes:
+        if node.node_type != "action":
+            continue
+        for predicate in node.preconditions:
+            if predicate in seen:
+                continue
+            seen.add(predicate)
+            if predicate_selector is None or predicate_selector(predicate):
+                predicates.append(predicate)
+
+    reports: list[VerifierPredicateEvidence] = []
+    for predicate in predicates:
+        try:
+            evaluated = verifier.evaluate_predicates((predicate,), scene)
+            report = evaluated[0]
+        except Exception as exc:
+            report = PredicateReport(
+                predicate,
+                False,
+                0.0,
+                (),
+                f"unavailable: {type(exc).__name__}: {exc}",
+            )
+        reports.append(predicate_report_to_evidence(report, phase="static"))
+    pass_rate, coverage = summarize_verifier_results(tuple(reports))
+    return VerifierEvidence(
+        candidate_fingerprint=subgraph_fingerprint(candidate.subgraph),
+        scene_version=scene.scene_version,
+        pass_rate=pass_rate,
+        coverage=coverage,
+        provider=provider,
+        captured_at_ns=clock(),
+        static_results=tuple(reports),
+    )
+
+
+def verifier_evidence_from_result(
+    candidate_fingerprint: str,
+    result: "VerificationResult",
+    *,
+    provider: str = "predicate_verifier.dynamic",
+    clock: Callable[[], int] = time.time_ns,
+) -> VerifierEvidence:
+    """Convert one post-execution VerificationResult into typed evidence."""
+
+    reports = tuple(
+        predicate_report_to_evidence(report, phase="dynamic")
+        for report in result.predicate_results
+    )
+    pass_rate, coverage = summarize_verifier_results(reports)
+    return VerifierEvidence(
+        candidate_fingerprint=candidate_fingerprint,
+        scene_version=result.checked_scene_version,
+        pass_rate=pass_rate,
+        coverage=coverage,
+        provider=provider,
+        captured_at_ns=clock(),
+        dynamic_results=reports,
+        source_verification=result.contract_id,
     )
 
 
@@ -199,6 +291,8 @@ __all__ = [
     "VerifierPredicateEvidence",
     "VerifierStatus",
     "attach_verifier_evidence",
+    "collect_static_verifier_evidence",
     "predicate_report_to_evidence",
     "summarize_verifier_results",
+    "verifier_evidence_from_result",
 ]
