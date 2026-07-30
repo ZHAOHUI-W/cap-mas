@@ -235,13 +235,26 @@ class CandidateArbiter:
         current_map_version: int | None,
     ) -> str | None:
         evidence = candidate.evidence
-        if evidence is None or evidence.scene_version is None:
+        if evidence is None:
             return None
-        if evidence.scene_version != scene.scene_version:
+        if (
+            evidence.scene_version is not None
+            and evidence.scene_version != scene.scene_version
+        ):
             return (
                 f"evidence targets scene {evidence.scene_version}, "
                 f"current scene is {scene.scene_version}"
             )
+        if evidence.verifier is not None:
+            if evidence.verifier.scene_version != scene.scene_version:
+                return "verifier evidence scene version does not match current scene"
+            if (
+                evidence.verifier.candidate_fingerprint
+                != subgraph_fingerprint(candidate.subgraph)
+            ):
+                return "verifier evidence fingerprint does not match effective candidate"
+            if evidence.verifier.pass_rate != evidence.verifier_pass_rate:
+                return "verifier scalar projection does not match typed evidence"
         if evidence.geometry is not None:
             if evidence.geometry.candidate_fingerprint != subgraph_fingerprint(candidate.subgraph):
                 return "geometry evidence fingerprint does not match effective candidate"
