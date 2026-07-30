@@ -19,6 +19,7 @@ from capmas.contracts.candidates import (
     GeometryEvidence,
     PerceptionEvidence,
 )
+from capmas.verification.evidence import VerifierEvidence
 from capmas.contracts.core import ArtifactRef, EpisodeHandle, SkillRef
 from capmas.contracts.failures import FailureArtifact, FailureClass
 from capmas.contracts.experiment import ExperimentRunConfig
@@ -77,6 +78,7 @@ __all__ = [
     "GraphCandidate",
     "GeometryEvidence",
     "PerceptionEvidence",
+    "VerifierEvidence",
     "GroundedPolicyAgent",
     "GraphPolicyAgent",
     "MissionGraphManager",

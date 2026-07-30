@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from capmas.contracts.verification import PredicateReport
+
+if TYPE_CHECKING:
+    from capmas.contracts.candidates import CandidateEvidence
 
 
 VerifierPhase = Literal["static", "dynamic"]
@@ -109,6 +112,25 @@ class VerifierEvidence:
         }
 
 
+def attach_verifier_evidence(
+    base: "CandidateEvidence",
+    verifier: VerifierEvidence,
+) -> "CandidateEvidence":
+    """Return an immutable CandidateEvidence with a scalar verifier projection."""
+
+    metrics = tuple(dict.fromkeys((*base.available_metrics, "verifier")))
+    return replace(
+        base,
+        verifier_pass_rate=verifier.pass_rate,
+        evidence_refs=tuple(base.evidence_refs),
+        available_metrics=metrics,
+        scene_version=verifier.scene_version,
+        provider=verifier.provider,
+        captured_at_ns=verifier.captured_at_ns,
+        verifier=verifier,
+    )
+
+
 def summarize_verifier_results(
     results: tuple[VerifierPredicateEvidence, ...] | list[VerifierPredicateEvidence],
 ) -> tuple[float, float]:
@@ -176,6 +198,7 @@ __all__ = [
     "VerifierPhase",
     "VerifierPredicateEvidence",
     "VerifierStatus",
+    "attach_verifier_evidence",
     "predicate_report_to_evidence",
     "summarize_verifier_results",
 ]

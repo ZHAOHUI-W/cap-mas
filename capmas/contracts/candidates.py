@@ -3,11 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import hashlib
 import json
-from typing import Literal, Sequence
+from typing import TYPE_CHECKING, Literal, Sequence
 
 from capmas.contracts.core import ArtifactRef
 from capmas.contracts.graph import SubgraphSpec
 from capmas.graph.serialization import local_subgraph_to_dict
+
+if TYPE_CHECKING:
+    from capmas.verification.evidence import VerifierEvidence
 
 
 @dataclass(frozen=True)
@@ -221,6 +224,7 @@ class CandidateEvidence:
     scene_version: int | None = None
     provider: str | None = None
     captured_at_ns: int | None = None
+    verifier: "VerifierEvidence | None" = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -251,6 +255,22 @@ class CandidateEvidence:
             raise ValueError(f"unknown evidence metrics: {', '.join(sorted(unknown))}")
         if "geometry" in self.available_metrics and self.geometry is None:
             raise ValueError("geometry evidence metric requires geometry evidence")
+        if self.verifier is not None:
+            if self.verifier_pass_rate != self.verifier.pass_rate:
+                raise ValueError("verifier_pass_rate must match typed verifier evidence")
+            if self.scene_version is not None and self.scene_version != self.verifier.scene_version:
+                raise ValueError("evidence scene version must match typed verifier evidence")
+            if self.provider is not None and self.provider != self.verifier.provider:
+                raise ValueError("evidence provider must match typed verifier evidence")
+            if (
+                self.captured_at_ns is not None
+                and self.captured_at_ns != self.verifier.captured_at_ns
+            ):
+                raise ValueError(
+                    "evidence capture timestamp must match typed verifier evidence"
+                )
+            if "verifier" in self.available_metrics and self.verifier.coverage <= 0.0:
+                raise ValueError("typed verifier metric requires positive coverage")
 
 
 @dataclass(frozen=True)
