@@ -139,7 +139,7 @@ class PredicateBasedVerifier:
             ee_position = _ee_position(scene)
             if track is None:
                 return PredicateReport(name, False, reason="object track not found")
-            if predicate != "object_near_gripper" and (
+            if predicate == "object_held" and (
                 gripper_value is None or gripper_value > self.gripper_closed_threshold
             ):
                 return PredicateReport(name, False, reason="gripper is not closed")
