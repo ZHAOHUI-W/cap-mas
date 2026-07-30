@@ -266,6 +266,16 @@ SceneSnapshot-only online provider.
 - Calibrate correlated perception, verifier, rehearsal, and OOD evidence before
   using it as a learned Arbiter signal.
 
+P5.1 implementation status (2026-07-30): typed
+VerifierEvidence/VerifierPredicateEvidence, static precondition coverage,
+dynamic post-execution conversion, LIBERO provider composition, and Arbiter
+candidate/scene freshness gates are implemented. Legacy scalar
+verifier_pass_rate construction remains compatible. object_in_gripper now
+means object inside the gripper region; object_held retains the
+closed-gripper requirement. The software gate is covered by focused
+regression tests; the real LIBERO smoke and matched-seed empirical gate remain
+open until fresh run-scoped artifacts are produced.
+
 Implementation status (2026-07-29): P5.2 contracts, strict response-schema
 support for typed `motion_intent`, grounding-aware intent rebasing,
 side-effect-free reference geometry preview, Arbiter geometry gates, scheduler

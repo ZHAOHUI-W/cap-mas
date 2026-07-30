@@ -152,6 +152,24 @@ time:
    the preceding phases have locked their baseline artifacts. Any robot-action
    parallelism requires disjoint resources and an explicit graph join.
 
+### P5.1 verifier evidence experiment
+
+P5.1 records two evidence timings. Static VerifierEvidence is candidate and
+source-scene bound and may be consumed by Arbiter before execution. Dynamic
+evidence is converted from the post-execution VerificationResult; it must
+record the candidate fingerprint, checked scene version, and execution
+provenance, and cannot influence the candidate that has already run. A
+pass_rate without evidence coverage is not treated as a successful verifier
+measurement.
+
+The empirical P5.1 gate is separate from the code gate. Run one CUDA
+CUDA_VISIBLE_DEVICES=5 CAP-X/LIBERO smoke episode, then the matched seed
+set. Every seed uses a new directory containing logs/, results/,
+summary.json, summary.md, and manifest.json; logs must retain the full
+run and redact provider secrets. The gate remains open until artifacts contain
+both typed static verifier evidence and at least one post-execution dynamic
+verifier result with valid scene/fingerprint provenance.
+
 ### Phase 5 experiment artifact rule
 
 Every Phase 5 experiment and every seed gets a new run-scoped directory. No

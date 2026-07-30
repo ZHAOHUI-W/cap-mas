@@ -48,6 +48,35 @@ and Robot Skill evolution remains a later sequential phase.
 | P5.5 OOD replay | Frozen layout/object/task variants, confidence intervals, and leakage controls | Reproducible rehearsal and locked evaluation split | ID/OOD success gap and uncertainty intervals without training/eval leakage |
 | P5.6 calibration | Correct for correlated perception, verifier, rehearsal, and OOD signals | At least two independent evidence sources | Ablation showing calibrated evidence does not double-count the same fact |
 
+### P5.1 implementation status
+
+The P5.1 code slice is implemented. VerifierEvidence and
+VerifierPredicateEvidence provide immutable, candidate-specific evidence
+with pass, fail, and unknown states, deterministic pass-rate/coverage
+summaries, source provider, capture time, candidate fingerprint, and source
+SceneSnapshot.scene_version.
+
+Static evidence is collected before arbitration only from action-node
+preconditions selected as safe by the caller. The LIBERO provider currently
+selects compile-time facts such as track_exists:*; dynamic state facts,
+postconditions, and validating checkpoints are not evaluated against the
+initial scene. The provider composes typed verifier evidence with existing
+perception evidence while preserving the legacy scalar
+CandidateEvidence.verifier_pass_rate projection used by the Arbiter.
+
+Dynamic evidence is converted from post-execution VerificationResult and
+contains the checked scene version and contract provenance. It is not used to
+select the action that already executed; it is reserved for the next rolling
+cycle, Recovery, Memory, and later rehearsal/cache consumers. The Arbiter
+rejects typed verifier evidence whose candidate fingerprint or scene version
+does not match the effective candidate/current scene.
+
+The predicate contract is explicit: object_in_gripper(obj) checks object/EE
+distance and pose only, gripper_closed() checks opening independently, and
+object_held(obj) is the strict composite predicate. The code gate is covered
+by focused tests and the full repository suite; a real CAP-X/LIBERO smoke and
+matched-seed evidence artifact are still required for the empirical gate.
+
 ## Sequencing
 
 Implement the evidence packages in this order after P5.0-contract:
