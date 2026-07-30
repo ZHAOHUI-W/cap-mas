@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 
 from capmas.agents.arbiter import CandidateArbiter
-from capmas.contracts.action import SkillCall
+from capmas.contracts.action import SkillCall, SkillOutputRef
 from capmas.contracts.candidates import CandidateEvidence, GraphCandidate
 from capmas.contracts.core import SkillRef
 from capmas.contracts.graph import (
@@ -99,6 +99,47 @@ def test_graph_round_trip_is_versioned_and_rejects_unknown_fields() -> None:
     encoded["unexpected"] = True
     with pytest.raises(GraphSchemaError, match="unknown fields"):
         mission_graph_from_dict(encoded)
+
+
+def test_graph_deserializer_restores_legacy_call_index_skill_output_refs() -> None:
+    graph = _mission(
+        _subgraph(
+            "pick",
+            nodes=(
+                SubgraphNodeSpec(
+                    node_id="grasp",
+                    description="grasp",
+                    skill_calls=(
+                        SkillCall(
+                            SkillRef("goto_pose", "1.0.0"),
+                            {
+                                "position": SkillOutputRef(0, ("result", 0)),
+                            },
+                        ),
+                    ),
+                    postconditions=("step_done",),
+                    proposed_by="test-agent",
+                ),
+            ),
+        ),
+    )
+
+    decoded = mission_graph_from_dict(mission_graph_to_dict(graph))
+    decoded_args = decoded.subgraphs[0].nodes[0].skill_calls[0].args
+
+    assert decoded_args["position"] == SkillOutputRef(0, ("result", 0))
+
+    legacy = mission_graph_to_dict(graph)
+    legacy["subgraphs"][0]["nodes"][0]["skill_calls"][0]["args"]["position"] = {
+        "call_index": 0,
+        "path": ["result", 0],
+    }
+    legacy_decoded = mission_graph_from_dict(legacy)
+
+    assert legacy_decoded.subgraphs[0].nodes[0].skill_calls[0].args["position"] == SkillOutputRef(
+        0,
+        ("result", 0),
+    )
 
 
 def test_validator_rejects_unbounded_cycle_but_accepts_explicit_loop() -> None:

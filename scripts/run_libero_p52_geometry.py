@@ -33,6 +33,7 @@ class PilotSpec:
     seed: int
     run_dir: Phase5RunDirectory
     used_privileged_state: bool = False
+    geometry_depth_subsample: int = 16
 
     def run_config(self) -> dict[str, object]:
         return {
@@ -40,6 +41,7 @@ class PilotSpec:
             "mode": self.mode,
             "seed": self.seed,
             "used_privileged_state": self.used_privileged_state,
+            "geometry_depth_subsample": self.geometry_depth_subsample,
             "artifact_dir": str(self.run_dir.path),
         }
 
@@ -66,6 +68,7 @@ def build_pilot_specs(
     *,
     seeds: Sequence[int] = (1, 2, 3, 4, 5),
     modes: Sequence[str] = P52_MODES,
+    geometry_depth_subsample: int = 16,
 ) -> tuple[PilotSpec, ...]:
     unknown = sorted(set(modes) - set(P52_MODES))
     if unknown:
@@ -78,7 +81,12 @@ def build_pilot_specs(
                 "P5.2_geometry_evidence",
                 f"{mode}_seed{seed}_{uuid4().hex[:8]}",
             )
-            spec = PilotSpec(mode, int(seed), run_dir)
+            spec = PilotSpec(
+                mode,
+                int(seed),
+                run_dir,
+                geometry_depth_subsample=geometry_depth_subsample,
+            )
             run_dir.write_json("run_config.json", spec.run_config())
             specs.append(spec)
     return tuple(specs)
@@ -94,10 +102,16 @@ def run_pilot(
     seeds: Sequence[int] = (1, 2, 3, 4, 5),
     modes: Sequence[str] = P52_MODES,
     gpu: str = "5",
+    geometry_depth_subsample: int = 16,
     extra_args: Sequence[str] = (),
 ) -> tuple[PilotSpec, ...]:
     runner = PROJECT_ROOT / "scripts" / "run_libero_b3_llm.py"
-    specs = build_pilot_specs(root, seeds=seeds, modes=modes)
+    specs = build_pilot_specs(
+        root,
+        seeds=seeds,
+        modes=modes,
+        geometry_depth_subsample=geometry_depth_subsample,
+    )
     for spec in specs:
         output = spec.run_dir.path / "results" / "episode.json"
         log_path = spec.run_dir.log_path()
@@ -118,6 +132,8 @@ def run_pilot(
             "reference_motion_preview",
             "--geometry-deadline-ms",
             "50",
+            "--geometry-depth-subsample",
+            str(spec.geometry_depth_subsample),
             "--output",
             str(output),
             "--log-file",
@@ -160,6 +176,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--seeds", default="1,2,3,4,5")
     parser.add_argument("--modes", default=",".join(P52_MODES))
     parser.add_argument("--gpu", default="5")
+    parser.add_argument("--geometry-depth-subsample", type=int, default=16)
     return parser.parse_args()
 
 
@@ -176,6 +193,7 @@ def main() -> None:
         seeds=seeds,
         modes=modes,
         gpu=args.gpu,
+        geometry_depth_subsample=args.geometry_depth_subsample,
     )
 
 

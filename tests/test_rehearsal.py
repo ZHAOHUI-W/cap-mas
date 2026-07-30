@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from capmas.evaluation.rehearsal import ProcessRehearsalPool, RehearsalJob
+from capmas.evaluation.rehearsal import (
+    ProcessRehearsalPool,
+    RehearsalFailureClass,
+    RehearsalJob,
+    RehearsalResult,
+)
 
 
 def _worker(job: RehearsalJob):
@@ -36,3 +41,40 @@ def test_process_rehearsal_pool_rejects_invalid_limits() -> None:
         assert "max_workers" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("expected max_workers validation")
+
+
+def test_rehearsal_job_carries_scene_and_candidate_identity():
+    job = RehearsalJob(
+        candidate_id="candidate-a",
+        seed=7,
+        payload={"graph": "serialized"},
+        task_id="libero_spatial_0",
+        scene_version=12,
+        candidate_fingerprint="fp-a",
+        checkpoint_budget=4,
+    )
+
+    assert job.task_id == "libero_spatial_0"
+    assert job.scene_version == 12
+    assert job.candidate_fingerprint == "fp-a"
+    assert job.checkpoint_budget == 4
+
+
+def test_rehearsal_result_records_checkpoint_and_failure_details():
+    result = RehearsalResult(
+        candidate_id="candidate-a",
+        seed=7,
+        success=False,
+        latency_ms=12.5,
+        failure_class=RehearsalFailureClass.POSTCONDITION_FAILURE,
+        checkpoint_results=({"node_id": "place", "passed": False},),
+        failure_step=2,
+        failure_reason="target predicate did not hold",
+        scene_version=12,
+        candidate_fingerprint="fp-a",
+    )
+
+    assert result.failure_class == RehearsalFailureClass.POSTCONDITION_FAILURE
+    assert result.checkpoint_results[0]["passed"] is False
+    assert result.failure_step == 2
+    assert result.scene_version == 12

@@ -25,6 +25,14 @@ P5.0 TSDF + semantic adapter foundation
                           -> rules Memory Skills -> replay/promotion/rollback
 ```
 
+P5.0 is split into two gates. `P5.0-contract` closes the map-backend factory,
+fail-closed fallback semantics, and scene/candidate version compatibility
+needed by later evidence workers. `P5.0-runtime` remains open until a real
+TSDF backend and a real semantic adapter can publish versioned results.
+TSDF and real semantic adapters remain open.
+`P5.3 may proceed` after the contract gate using the locked SparseVoxel
+baseline; this does not make the TSDF or semantic runtime claims complete.
+
 Memory Lane is rules-based in Phase 5. Memory Controller RL belongs to Phase 6,
 and Robot Skill evolution remains a later sequential phase.
 
@@ -42,10 +50,10 @@ and Robot Skill evolution remains a later sequential phase.
 
 ## Sequencing
 
-Implement the evidence packages in this order after P5.0:
+Implement the evidence packages in this order after P5.0-contract:
 
 ```text
-P5.0 foundation
+P5.0-contract foundation
         ↓
 P5.1 verifier evidence
         ↓
@@ -162,15 +170,59 @@ well below the declared deadline (observed per-candidate P95 was approximately
 The endpoint smoke after the schema and grounding fixes reached physical
 execution and completed with `evaluator_success=true`.
 
-This is not yet a full P5.2 evidence-closure result. In the realistic B3-LLM
-path the reference preview still receives `local_map=None`, so the measured
-geometry breakdown is `reachability=pass` while grasp quality, clearance, and
-collision risk remain `unknown`. The online Arbiter records `evidence_score`,
-but the observed winner is separated by perception/strategy weights rather
-than by a distinct geometry score. The next blocking increment is therefore
-P5.0 local-map/semantic geometry transport into the B3-LLM evidence provider;
-P5.3 process rehearsal must wait until a realistic run can produce at least
-one candidate-specific measurable geometry difference.
+This 15-run pilot remains the historical baseline for the pre-transport path:
+the B3-LLM provider supplied `local_map=None`, so the measured geometry
+breakdown was only `reachability=pass` and the online winner was driven by
+perception/strategy weights rather than a distinct geometry score.
+
+The local-map transport closure was then validated in a fresh real endpoint
+run at
+`outputs/phase5/P5.2_live_map_fix_20260729/B3-LLM/20260729_085300_5d0d420c-4302-41b3-82e1-2f0e7d59f055/`.
+That run used the same CAP-X Spatial-0 task, CUDA device 5, realistic sensor
+mode, and `geometry_depth_subsample=16`. It completed physical execution with
+`evaluator_success=true`, `map_version=4`, `processed_observations=4`, and no
+World Model error. All four candidate geometry records used
+`map_backend=local_map`, stayed below the 50 ms budget (23.83 ms maximum in
+this run), and produced candidate-specific clearance scores (0.4713 versus
+0.3604). The Arbiter recorded `selection_basis=evidence_score` and included a
+non-zero geometry component in both action-subgoal score breakdowns.
+
+The matched post-transport five-seed pilot was subsequently completed at
+`outputs/phase5/P5.2_geometry_evidence_posttransport_20260729/` with
+`geometry_depth_subsample=16`, CUDA device 5, realistic CAP-X RGB-D input, and
+one immutable artifact directory per mode/seed pair:
+
+| mode | evaluator successes | geometry records/run | map version | processed observations | observed geometry latency | privileged state |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `geometry_disabled` | 2/5 | 0 | 0 | 0 | n/a | 0/5 |
+| `geometry_shadow` | 4/5 | 4 | 3--4 | 3--4 | 23.70--24.28 ms | 0/5 |
+| `geometry_online_bounded` | 4/5 | 4 | 3--4 | 3--4 | 23.70--24.14 ms | 0/5 |
+
+All 15 manifests and all 75 manifest-listed files passed size and SHA-256
+verification. No World Model error was recorded in the geometry-enabled runs.
+The geometry records were genuinely candidate-conditioned: each enabled run
+contained two distinct clearance values (global observed range
+0.3604--0.4895), while collision risk and reachability were measurable. The
+reference backend still reports `grasp_quality=unknown` because surface
+normal/contact estimation is intentionally not implemented.
+
+The downstream result is promising but not attributable to online geometry in
+this pilot: both `geometry_shadow` and `geometry_online_bounded` reached 4/5,
+while `geometry_disabled` reached 2/5. However, every one of the 10 enabled
+action-subgoal arbitration decisions used `selection_basis=evidence_tie_break`
+and had tied candidate score breakdowns. Thus the online Arbiter consumed
+geometry evidence, but did not yet produce a unique geometry-driven winner;
+the 4/5 result must not be reported as a causal geometry improvement. This is
+an evaluation limitation, not a transport failure.
+
+Therefore the local-map transport blocker and the P5.2 five-seed execution gate
+are closed.
+The P5.2 causal selection-quality gate remains open because candidate scores
+still tie at arbitration time, and the grasp-quality adapter also remains
+open. P5.3 isolated process rehearsal can proceed as the next engineering
+increment, but it must preserve this matched baseline and must not claim that
+geometry improves downstream success until rehearsal evidence and a non-tied
+candidate-selection analysis are available.
 
 The minimum acceptance condition is improvement on the locked downstream suite
 without a regression in CAP-X parity, scene freshness deadline, or the
@@ -179,7 +231,30 @@ terminal task reward.
 
 ## Current implementation boundary
 
-`capmas/evaluation/rehearsal.py` already defines a serializable spawned-process
-boundary and unit tests for it. That module is preparatory infrastructure only:
-it is not wired into the P3.2 online candidate provider, does not provide
-LIBERO reset/respawn semantics, and does not produce OOD or calibrated evidence.
+`P5.0-contract` is implemented: `map_factory.py` provides an explicit
+SparseVoxel backend factory with fail-closed unsupported-TSDF behavior, and
+`evidence_contracts.py` rejects stale scene or candidate evidence.
+
+P5.3 implementation is now available in `capmas/evaluation/libero_rehearsal.py`
+and `scripts/run_libero_p53_rehearsal.py`. It provides a pickle-safe CAP-X
+worker boundary, serialized graph reset/execute, checkpoint and failure
+metadata, bounded worker respawn, version-bound rehearsal evidence, and one
+artifact directory per seed. Rehearsal evidence is shadow by default; the
+explicit Arbiter attachment helper must be enabled by the caller before it can
+affect selection. The real CAP-X/LIBERO matched two-candidate, five-seed gate
+is closed at
+`outputs/phase5/P5.3_process_rehearsal_matched_fix_20260730/`: `policy-0:0`
+reached 0/5 evaluator successes and `policy-1:safety:1` reached 2/5, with
+candidate outcomes differing on seeds 1 and 5. The remaining failures were
+classified as `postcondition_failure` and every seed has a separate log and
+manifest.
+
+The gate establishes candidate-specific process evidence, not a causal
+downstream improvement. The real input artifact carries a graph-scoped
+fingerprint, whereas `merge_rehearsal_evidence()` currently validates a
+subgraph-scoped `GraphCandidate` fingerprint. Until an explicit identity
+mapping is added, real full-graph rehearsal results must remain shadow
+evidence and must not be silently used for local Arbiter selection.
+
+TSDF, real semantic adapters, evidence caching, OOD replay, and calibration
+remain outside this implementation increment.

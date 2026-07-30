@@ -312,8 +312,15 @@ def _skill_arg_to_dict(value: object) -> object:
 
 def _skill_arg_from_dict(value: object) -> object:
     if isinstance(value, Mapping):
+        reference_key: str | None = None
         if set(value) == {"$skill_output", "path"}:
-            call_index = value["$skill_output"]
+            reference_key = "$skill_output"
+        elif set(value) == {"call_index", "path"}:
+            # Compatibility for rehearsal artifacts emitted before the
+            # canonical graph serializer was used at this boundary.
+            reference_key = "call_index"
+        if reference_key is not None:
+            call_index = value[reference_key]
             path = value["path"]
             if (
                 isinstance(call_index, int)

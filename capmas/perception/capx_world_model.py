@@ -60,6 +60,11 @@ class CAPXWorldModelEnricher:
                 snapshot.publish_timestamp_ns,
                 enriched.publish_timestamp_ns,
             ),
+            # CAP-X still uses freshness_ms as a compatibility control-plane
+            # field. Do not overwrite it with sensor-to-publish latency: CAP-X
+            # object grounding may legitimately take seconds and is already
+            # represented by processing_latency_ms.
+            freshness_ms=snapshot.freshness_ms,
         )
 
 

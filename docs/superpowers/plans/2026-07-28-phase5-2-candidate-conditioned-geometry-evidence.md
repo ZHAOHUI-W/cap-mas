@@ -211,10 +211,36 @@ Interfaces:
 - [x] Every run has run_config.json, manifest.json, summary.json, summary.md, and complete logs.
 - [x] Every arbitration records evidence basis and fallback labels.
 
-Pilot gate note (2026-07-29): the endpoint-backed pilot completed, but the
-realistic B3-LLM path supplied no local map. Its online geometry records were
-therefore measurable only for reachability; grasp quality, clearance, and
-collision risk remained unknown, and geometry did not distinguish the live
-candidate winners. The implementation and controlled-provider gates pass, but
-the realistic geometry-closure gate remains open until P5.0 local-map/semantic
-geometry transport is wired into the B3-LLM provider.
+### Task 8: Close the CAP-X live local-map transport seam
+
+Files:
+
+- Create: `capmas/perception/capx_world_model.py`
+- Modify: `capmas/backends/capx.py`
+- Modify: `capmas/backends/capx_libero_factory.py`
+- Modify: `scripts/run_libero_b3_llm.py`
+- Test: `tests/test_capx_world_model_bridge.py`
+
+Rules:
+
+- Reuse the existing CAP-X RGB-D artifact boundary and reference
+  `WorldModelService`; do not add a second execution or API registry path.
+- Attach the map only when geometry mode is enabled.
+- Preserve CAP-X scene-version ownership and fail open to the base snapshot if
+  reference geometry cannot process a frame.
+- Keep `freshness_ms` compatibility semantics separate from
+  `processing_latency_ms`; do not convert a slow CAP-X grounding call into a
+  false World Model failure.
+
+- [x] Add the optional `SceneEnricher` backend seam and bridge tests.
+- [x] Wire `SparseVoxelMap` into the live B3-LLM candidate evidence provider.
+- [x] Record map version, processed observations, and bridge errors in artifacts.
+- [x] Run a real endpoint-backed LIBERO execution with measurable geometry.
+
+Transport-closure evidence (2026-07-29): the fresh run at
+`outputs/phase5/P5.2_live_map_fix_20260729/B3-LLM/20260729_085300_5d0d420c-4302-41b3-82e1-2f0e7d59f055/`
+completed physical execution with evaluator success, map version 4, four
+candidate records, candidate-specific clearance scores, and maximum geometry
+latency 23.83 ms. The five-seed post-transport pilot and grasp-quality
+surface/contact adapter remain open; this is sufficient to unblock P5.3
+engineering, not to claim a statistically significant downstream gain.

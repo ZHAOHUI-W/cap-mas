@@ -194,16 +194,53 @@ The complete P3.2-to-Phase-5 handoff is in
 the current `ProcessRehearsalPool` is an offline execution boundary, not proof
 that online candidates already have rehearsal evidence.
 
-The 2026-07-29 P5.2 endpoint pilot completed all 15 isolated mode/seed runs.
+The 2026-07-29 pre-transport P5.2 endpoint pilot completed all 15 isolated mode/seed runs.
 `geometry_disabled`, `geometry_shadow`, and `geometry_online_bounded` each
 obtained 2/5 CAP-X evaluator successes. The online provider emitted four
 candidate geometry records per run with distinct normalized fingerprints,
 `used_privileged_state=false`, and approximately 0.152--0.183 ms per-candidate
-P95 latency. However, because the B3-LLM path has not yet transported a local
-map, only conservative reachability was measurable; clearance, collision risk,
-and grasp quality stayed unknown. The Arbiter's online selection was therefore
-evidence-aware but not yet geometry-discriminative. This pilot is retained as a
-baseline/diagnostic artifact and does not by itself authorize P5.3.
+P95 latency. However, because that pilot predates live local-map transport, only
+conservative reachability was measurable; clearance, collision risk, and grasp
+quality stayed unknown. It is retained as a baseline/diagnostic artifact.
+
+The subsequent single-run transport closure used
+`--geometry-depth-subsample 16` and a fresh run-scoped directory. It produced
+`map_version=4`, four candidate records, 23.83 ms maximum geometry latency,
+candidate-specific clearance scores, and `evaluator_success=true`. This proves
+the real geometry path is wired through CAP-X RGB-D without privileged state,
+and the matched five-seed post-transport pilot is now complete at
+`outputs/phase5/P5.2_geometry_evidence_posttransport_20260729/`:
+
+| mode | evaluator successes | geometry records/run | map version | processed observations | observed geometry latency |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `geometry_disabled` | 2/5 | 0 | 0 | 0 | n/a |
+| `geometry_shadow` | 4/5 | 4 | 3--4 | 3--4 | 23.70--24.28 ms |
+| `geometry_online_bounded` | 4/5 | 4 | 3--4 | 3--4 | 23.70--24.14 ms |
+
+All 15 runs have complete logs, summaries, results, and manifests; all 75
+manifest entries passed size/SHA-256 verification. The enabled modes produced
+two distinct clearance scores per run (global range 0.3604--0.4895), but all
+10 enabled action-subgoal arbitration decisions were still
+`evidence_tie_break`. Consequently the 4/5 online result is an operational
+and safety result, not yet evidence of a unique geometry-driven winner or a
+causal downstream improvement. The P5.2 selection-quality and grasp-quality
+gates remain open.
+
+The P5.3 matched process gate was completed on 2026-07-30 at
+`outputs/phase5/P5.3_process_rehearsal_matched_fix_20260730/`. Two candidates
+were run against LIBERO Spatial-0 with the same five reset seeds and isolated
+CAP-X workers. `policy-0:0` reached 0/5 evaluator successes and
+`policy-1:safety:1` reached 2/5; the candidates differed on seeds 1 and 5,
+and all remaining failures were classified as `postcondition_failure`. Each
+seed retained its own log, result, summary, and SHA-256 manifest. This closes
+the process rehearsal/candidate-discrimination gate, but does not claim an
+online Arbiter improvement or a downstream success-rate gain.
+
+The input artifact is a full MissionGraph and therefore uses a graph-scoped
+fingerprint. The current `merge_rehearsal_evidence()` helper validates a
+subgraph-scoped `GraphCandidate` fingerprint. Until an explicit identity
+mapping is added, these real results remain auditable shadow evidence and are
+not silently used for local candidate selection.
 
 Current evidence status: the P3.1b `max_workers=2` ready-wave path has a
 successful endpoint-backed LIBERO run, but the matched `max_workers=1`

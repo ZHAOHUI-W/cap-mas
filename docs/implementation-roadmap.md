@@ -276,19 +276,51 @@ mode/seed runs with independent logs and artifacts. Each mode reached 2/5
 `evaluator_success` and the online mode did not yet improve downstream task
 success over the disabled baseline.
 
-The pilot confirms candidate fingerprints and low-latency evidence transport,
-but the realistic B3-LLM provider still supplies no local map. Consequently,
-online geometry reports only `reachability=pass`; grasp quality, clearance, and
-collision risk remain `unknown`, and the Arbiter's non-tied winner is currently
-driven by perception/strategy weights rather than a distinct geometry score.
-P5.2 is therefore implementation-complete but experiment-gate incomplete.
-P5.0 local-map/semantic geometry transport must be completed before P5.3
-process rehearsal is admitted.
+The first post-transport real run now uses the CAP-X RGB-D observation to
+update a live `SparseVoxelMap` before candidate evidence. It completed with
+`evaluator_success=true`, `map_version=4`, four candidate records, measurable
+candidate-specific clearance, and a non-zero geometry term in the Arbiter
+score breakdown. The matched post-transport five-seed pilot then completed all
+15 mode/seed runs: `geometry_disabled` reached 2/5,
+`geometry_shadow` 4/5, and `geometry_online_bounded` 4/5. Every enabled run
+used `map_backend=local_map`, processed 3--4 observations, stayed within the
+50 ms geometry budget, and used no privileged state. Each enabled run also
+contained two distinct clearance scores, but all 10 enabled action-subgoal
+decisions selected via `evidence_tie_break`; geometry did not yet yield a
+unique candidate ranking. The reference provider still leaves grasp quality
+unknown. P5.2 is therefore code-complete, transport-closed, and pilot-closed,
+but its causal selection-quality gate remains open. P5.3 isolated process
+rehearsal is the next engineering phase and must preserve the matched
+evidence/version baseline.
 
 Exit criterion: memory updates and candidate evidence are reproducible,
 attributable, versioned, and cannot change active robot execution; rehearsal
 and OOD evidence improve candidate selection without introducing regression on
 the locked suite.
+
+P5.0 contract-level closure is the prerequisite for the next isolated
+rehearsal increment. It freezes the active SparseVoxel baseline and strict
+candidate/scene version checks; TSDF and real semantic adapters remain open
+runtime work and must not be implied by P5.2 completion. P5.3 may proceed with
+the contract gate closed while preserving the matched P5.2 baseline.
+
+P5.3 code and process-gate status (2026-07-30): the serializable rehearsal
+contract, CAP-X worker boundary, bounded respawn, version-bound evidence
+conversion, shadow Arbiter attachment, and seed-scoped artifact driver are
+implemented and pass the local suite. The real matched two-candidate,
+five-seed LIBERO gate is closed at
+`outputs/phase5/P5.3_process_rehearsal_matched_fix_20260730/`. Candidate
+`policy-0:0` reached 0/5 evaluator successes and `policy-1:safety:1` reached
+2/5; the candidates differed on seeds 1 and 5, with the remaining failures
+classified as `postcondition_failure`. This demonstrates candidate-specific
+process evidence, not an online selection or downstream improvement claim.
+
+The real input artifact uses a graph-scoped fingerprint, while the current
+online Arbiter attachment helper expects a subgraph-scoped fingerprint. The
+results therefore remain auditable rehearsal evidence until an explicit
+graph-to-subgraph identity mapping is added. TSDF, real semantic adapters,
+evidence caching, OOD replay, calibration, and this online identity mapping
+remain open follow-up work.
 
 ## Phase 6 — Memory Controller learning
 

@@ -96,4 +96,6 @@ def test_capx_world_model_enricher_updates_local_map_from_live_observation() -> 
     assert enricher.local_map.map_version() >= 1
     assert initial.local_map is not None
     assert observed.local_map is not None
+    assert initial.freshness_ms == 0.0
+    assert observed.freshness_ms == 0.0
     assert enricher.last_error is None
