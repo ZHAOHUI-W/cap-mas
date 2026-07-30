@@ -508,7 +508,7 @@ def test_predicate_verifier_separates_near_gripper_geometry_from_held_state() ->
         scene,
     )
     held = PredicateBasedVerifier().approve(
-        make_contract(preconditions=("object_in_gripper(bowl)",)),
+        make_contract(preconditions=("object_held(bowl)",)),
         scene,
     )
 

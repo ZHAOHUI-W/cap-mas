@@ -122,7 +122,9 @@ def attach_verifier_evidence(
 ) -> "CandidateEvidence":
     """Return an immutable CandidateEvidence with a scalar verifier projection."""
 
-    metrics = tuple(dict.fromkeys((*base.available_metrics, "verifier")))
+    metrics = tuple(base.available_metrics)
+    if verifier.coverage > 0.0:
+        metrics = tuple(dict.fromkeys((*metrics, "verifier")))
     return replace(
         base,
         verifier_pass_rate=verifier.pass_rate,
