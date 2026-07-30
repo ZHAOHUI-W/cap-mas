@@ -7,14 +7,12 @@ from capmas.evaluation.parity import (
     load_capmas_episode,
     load_capx_trial,
 )
+from capmas.evaluation.candidate_identity import (
+    CandidateIdentity,
+    candidate_identity_from_raw_graph,
+    raw_graph_fingerprint,
+)
 
-__all__ = [
-    "NormalizedEpisode",
-    "ParityComparison",
-    "compare_artifacts",
-    "load_capmas_episode",
-    "load_capx_trial",
-]
 from capmas.evaluation.rehearsal import (
     ProcessRehearsalPool,
     RehearsalFailureClass,
@@ -26,6 +24,12 @@ from capmas.evaluation.evidence_contracts import (
     EvidenceCompatibilityError,
     EvidenceRequestContext,
     assert_evidence_compatible,
+)
+from capmas.evaluation.evidence_cache import (
+    EvidenceCacheEvent,
+    EvidenceCacheKey,
+    EvidenceCacheStats,
+    VersionedEvidenceCache,
 )
 from capmas.evaluation.libero_rehearsal import (
     LiberoRehearsalConfig,
@@ -39,8 +43,20 @@ from capmas.evaluation.rehearsal_evidence import (
     rehearsal_result_to_evidence,
     run_with_respawn,
 )
+from capmas.evaluation.shadow_arbiter import (
+    ShadowArbitrationReport,
+    run_shadow_arbitration,
+)
 
 __all__ = [
+    "CandidateIdentity",
+    "candidate_identity_from_raw_graph",
+    "raw_graph_fingerprint",
+    "NormalizedEpisode",
+    "ParityComparison",
+    "compare_artifacts",
+    "load_capmas_episode",
+    "load_capx_trial",
     "ProcessRehearsalPool",
     "RehearsalFailureClass",
     "RehearsalJob",
@@ -49,6 +65,10 @@ __all__ = [
     "EvidenceCompatibilityError",
     "EvidenceRequestContext",
     "assert_evidence_compatible",
+    "EvidenceCacheEvent",
+    "EvidenceCacheKey",
+    "EvidenceCacheStats",
+    "VersionedEvidenceCache",
     "LiberoRehearsalConfig",
     "LiberoRehearsalWorker",
     "run_libero_rehearsal_job",
@@ -57,4 +77,6 @@ __all__ = [
     "RehearsalPoolConfig",
     "rehearsal_result_to_evidence",
     "run_with_respawn",
+    "ShadowArbitrationReport",
+    "run_shadow_arbitration",
 ]

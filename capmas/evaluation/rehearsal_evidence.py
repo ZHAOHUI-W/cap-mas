@@ -30,6 +30,9 @@ class RehearsalEvidence:
     failure_class: str | None = None
     failure_reason: str | None = None
     checkpoint_results: tuple[Mapping[str, object], ...] = ()
+    fingerprint_scope: str = "subgraph"
+    arbiter_subgraph_id: str | None = None
+    arbiter_fingerprint: str | None = None
 
     def __post_init__(self) -> None:
         if not self.candidate_id or not self.candidate_fingerprint:
@@ -38,6 +41,14 @@ class RehearsalEvidence:
             raise ValueError("rehearsal evidence versions and latency must be non-negative")
         if not 0.0 <= self.score <= 1.0:
             raise ValueError("rehearsal evidence score must be in [0, 1]")
+        if self.fingerprint_scope not in {"graph", "subgraph"}:
+            raise ValueError("rehearsal fingerprint scope must be graph or subgraph")
+        if self.fingerprint_scope == "graph" and (
+            not self.arbiter_subgraph_id or not self.arbiter_fingerprint
+        ):
+            raise ValueError(
+                "graph-scoped rehearsal evidence requires arbiter identity mapping"
+            )
 
 
 @dataclass(frozen=True)
@@ -77,6 +88,9 @@ def rehearsal_result_to_evidence(
         failure_class=result.failure_class,
         failure_reason=result.failure_reason,
         checkpoint_results=tuple(result.checkpoint_results),
+        fingerprint_scope=result.fingerprint_scope,
+        arbiter_subgraph_id=result.arbiter_subgraph_id,
+        arbiter_fingerprint=result.arbiter_fingerprint,
     )
 
 

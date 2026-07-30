@@ -250,11 +250,45 @@ classified as `postcondition_failure` and every seed has a separate log and
 manifest.
 
 The gate establishes candidate-specific process evidence, not a causal
-downstream improvement. The real input artifact carries a graph-scoped
-fingerprint, whereas `merge_rehearsal_evidence()` currently validates a
-subgraph-scoped `GraphCandidate` fingerprint. Until an explicit identity
-mapping is added, real full-graph rehearsal results must remain shadow
-evidence and must not be silently used for local Arbiter selection.
+downstream improvement. The identity-closure increment now preserves the raw
+full-graph fingerprint and derives the local Arbiter identity from an explicit
+`arbiter_subgraph_id`. Graph-scoped `RehearsalEvidence` carries the mapped
+`arbiter_fingerprint`; `merge_rehearsal_evidence()` rejects missing, stale, or
+mismatched mappings rather than silently attaching evidence to a different
+candidate.
 
-TSDF, real semantic adapters, evidence caching, OOD replay, and calibration
-remain outside this implementation increment.
+The same increment adds the pure
+`capmas.evaluation.shadow_arbiter.run_shadow_arbitration()` API. It runs the
+baseline Arbiter on the original candidates, runs a hypothetical evidence-aware
+selection on copied candidates, and reports both winners, selection bases,
+score breakdowns, and mapping rejections. A changed shadow winner is
+diagnostic only: `physical_execution_required` is always false, and the
+baseline candidate remains the live selection. Missing rehearsal evidence
+leaves a candidate unchanged rather than assigning it a zero score. The
+graph-to-subgraph identity gate and pure shadow-Arbiter gate are now closed at
+the code/test level; the causal online-selection gate remains open.
+
+The remaining P5.3 evaluation work is intentionally separate: expand beyond
+the five-seed one-task pilot, compare a controlled online-selection mode, and
+measure downstream success. Ten-plus seeds, multiple tasks, physical online
+promotion, and the P5.4 versioned evidence cache are not closed by this
+increment.
+
+TSDF, real semantic adapters, OOD replay, and calibration remain outside this
+implementation increment.
+
+### P5.4 evidence cache status
+
+The P5.4 code increment is now available in
+`capmas/evaluation/evidence_cache.py`. `VersionedEvidenceCache` is a bounded,
+thread-safe, process-local LRU keyed by the canonical local candidate
+fingerprint and source `SceneSnapshot.scene_version`. A newer scene version
+invalidates older entries; stale reads return unavailable and record a
+`stale_rejection` event. Exact hits, misses, stores, invalidations, evictions,
+and bounded event history are exposed through immutable statistics. Candidate
+attachment uses `dataclasses.replace` and never mutates the live candidate.
+
+This closes the P5.4 contract/code gate only. The cache is not persistent or
+cross-process, is not implicitly wired into physical execution, and has not
+yet produced a real multi-task hit-rate or downstream success experiment.
+Those measurements remain a separate run-scoped evaluation task.

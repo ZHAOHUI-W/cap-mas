@@ -315,12 +315,27 @@ five-seed LIBERO gate is closed at
 classified as `postcondition_failure`. This demonstrates candidate-specific
 process evidence, not an online selection or downstream improvement claim.
 
-The real input artifact uses a graph-scoped fingerprint, while the current
-online Arbiter attachment helper expects a subgraph-scoped fingerprint. The
-results therefore remain auditable rehearsal evidence until an explicit
-graph-to-subgraph identity mapping is added. TSDF, real semantic adapters,
-evidence caching, OOD replay, calibration, and this online identity mapping
-remain open follow-up work.
+The real input artifact uses a graph-scoped fingerprint. The P5.3 identity
+closure now preserves that source hash and requires an explicit
+`arbiter_subgraph_id` plus a derived local subgraph fingerprint before
+attaching evidence to a `GraphCandidate`. A pure shadow-Arbiter API compares
+baseline and evidence-enriched hypothetical decisions without accessing a
+backend, lease, or executor; mapped evidence failures remain unavailable.
+This closes the graph/subgraph identity and shadow-Arbiter code gates, but it
+does not promote the shadow winner to physical execution or establish a
+downstream success-rate gain. Ten-plus seeds, multiple tasks, online physical
+selection, TSDF, real semantic adapters, evidence caching, OOD replay, and
+calibration remain open follow-up work.
+
+P5.4 code status (2026-07-30): `capmas/evaluation/evidence_cache.py` provides
+the versioned, thread-safe process-local LRU specified by the Phase 5 handoff.
+It keys entries by canonical local candidate fingerprint and source scene
+version, invalidates old entries after refresh, rejects missing or mismatched
+scene metadata, and exposes cache statistics/events for run artifacts. The
+candidate attach helper is opt-in and returns immutable candidate copies; it
+does not alter Arbiter weights or physical execution. The P5.4 code gate is
+closed, while persistent/cross-process caching, real hit-rate measurement, and
+downstream causal evaluation remain open.
 
 ## Phase 6 — Memory Controller learning
 

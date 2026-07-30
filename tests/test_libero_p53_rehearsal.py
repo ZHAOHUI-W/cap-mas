@@ -1,5 +1,13 @@
 import json
 
+import pytest
+
+from capmas.contracts.action import SkillCall, SkillOutputRef
+from capmas.contracts.core import SkillRef
+from capmas.contracts.graph import CheckpointSpec, MissionGraph, SubgraphNodeSpec, SubgraphSpec
+from capmas.evaluation.candidate_identity import raw_graph_fingerprint
+from capmas.graph.serialization import mission_graph_to_dict
+
 from capmas.evaluation.rehearsal import RehearsalResult
 from capmas.evaluation.rehearsal_evidence import RehearsalPoolConfig
 from scripts.run_libero_p53_rehearsal import (
@@ -7,6 +15,44 @@ from scripts.run_libero_p53_rehearsal import (
     load_candidate_artifact,
     run_rehearsal_batches,
 )
+
+
+def _graph_payload():
+    node = SubgraphNodeSpec(
+        node_id="act",
+        description="act",
+        skill_calls=(
+            SkillCall(
+                SkillRef("goto_pose", "1.0.0"),
+                {"position": SkillOutputRef(0, ("result", 0))},
+            ),
+        ),
+        postconditions=("step_done",),
+        proposed_by="policy",
+    )
+    subgraph = SubgraphSpec(
+        subgraph_id="sg_pick",
+        subgoal_id="pick",
+        description="pick",
+        nodes=(node,),
+        edges=(),
+        entry_node="act",
+        success_nodes=("act",),
+        failure_nodes=("act",),
+        checkpoints=(CheckpointSpec("check", ("step_done",)),),
+    )
+    return mission_graph_to_dict(
+        MissionGraph(
+            mission_id="mission",
+            task="pick",
+            subgraphs=(subgraph,),
+            edges=(),
+            bindings=(),
+            entry_subgraph="sg_pick",
+            success_subgraphs=("sg_pick",),
+            failure_subgraphs=("sg_pick",),
+        )
+    )
 
 
 def test_candidate_artifact_builds_seeded_serializable_jobs(tmp_path):
@@ -37,6 +83,53 @@ def test_candidate_artifact_builds_seeded_serializable_jobs(tmp_path):
     assert jobs[0].scene_version == 8
     assert jobs[0].candidate_fingerprint == "fp-a"
     assert jobs[0].payload["graph"]["mission_id"] == "m"
+
+
+def test_graph_scoped_candidate_derives_explicit_arbiter_identity():
+    from scripts.run_libero_p53_rehearsal import parse_candidate_mapping
+
+    graph = _graph_payload()
+    candidates = parse_candidate_mapping(
+        {
+            "task_id": "task",
+            "scene_version": 4,
+            "candidates": [
+                {
+                    "candidate_id": "candidate-a",
+                    "candidate_fingerprint": raw_graph_fingerprint(graph),
+                    "fingerprint_scope": "graph",
+                    "arbiter_subgraph_id": "sg_pick",
+                    "graph": graph,
+                }
+            ],
+        }
+    )
+
+    assert candidates[0].identity is not None
+    assert candidates[0].identity.subgraph_id == "sg_pick"
+    assert candidates[0].identity.graph_fingerprint == candidates[0].candidate_fingerprint
+
+
+def test_graph_scoped_candidate_rejects_missing_explicit_arbiter_subgraph():
+    from scripts.run_libero_p53_rehearsal import parse_candidate_mapping
+
+    graph = _graph_payload()
+    with pytest.raises(ValueError, match="unknown target subgraph"):
+        parse_candidate_mapping(
+            {
+                "task_id": "task",
+                "scene_version": 4,
+                "candidates": [
+                    {
+                        "candidate_id": "candidate-a",
+                        "candidate_fingerprint": raw_graph_fingerprint(graph),
+                        "fingerprint_scope": "graph",
+                        "arbiter_subgraph_id": "sg_missing",
+                        "graph": graph,
+                    }
+                ],
+            }
+        )
 
 
 def test_run_batches_allocates_independent_secret_free_artifacts(tmp_path):

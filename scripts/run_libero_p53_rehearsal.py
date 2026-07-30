@@ -16,6 +16,10 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from capmas.evaluation.libero_rehearsal import LiberoRehearsalConfig, LiberoRehearsalWorker
+from capmas.evaluation.candidate_identity import (
+    CandidateIdentity,
+    candidate_identity_from_raw_graph,
+)
 from capmas.evaluation.phase5_artifacts import Phase5RunDirectory
 from capmas.evaluation.rehearsal import RehearsalJob, RehearsalResult
 from capmas.evaluation.rehearsal_evidence import RehearsalPoolConfig, run_with_respawn
@@ -28,6 +32,8 @@ class CandidateSpec:
     task_id: str
     scene_version: int
     candidate_fingerprint: str
+    fingerprint_scope: str = "subgraph"
+    identity: CandidateIdentity | None = None
 
 
 def load_candidate_artifact(path: str | Path) -> tuple[CandidateSpec, ...]:
@@ -54,12 +60,33 @@ def parse_candidate_mapping(raw: object) -> tuple[CandidateSpec, ...]:
         candidate_id = item.get("candidate_id")
         graph = item.get("graph")
         fingerprint = item.get("candidate_fingerprint", candidate_id)
+        fingerprint_scope = item.get("fingerprint_scope", "subgraph")
+        arbiter_subgraph_id = item.get("arbiter_subgraph_id")
         if not isinstance(candidate_id, str) or not candidate_id:
             raise ValueError(f"candidate artifact candidates[{index}].candidate_id is required")
         if not isinstance(graph, Mapping):
             raise ValueError(f"candidate artifact candidates[{index}].graph must be an object")
         if not isinstance(fingerprint, str) or not fingerprint:
             raise ValueError(f"candidate artifact candidates[{index}].candidate_fingerprint is required")
+        if fingerprint_scope not in {"graph", "subgraph"}:
+            raise ValueError(
+                f"candidate artifact candidates[{index}].fingerprint_scope must be graph or subgraph"
+            )
+        identity = None
+        if fingerprint_scope == "graph":
+            if not isinstance(arbiter_subgraph_id, str) or not arbiter_subgraph_id:
+                raise ValueError(
+                    f"candidate artifact candidates[{index}].arbiter_subgraph_id is required"
+                )
+            identity = candidate_identity_from_raw_graph(
+                graph,
+                arbiter_subgraph_id,
+                scene_version,
+            )
+            if fingerprint != identity.graph_fingerprint:
+                raise ValueError(
+                    f"candidate artifact candidates[{index}] graph fingerprint mismatch"
+                )
         parsed.append(
             CandidateSpec(
                 candidate_id=candidate_id,
@@ -67,6 +94,8 @@ def parse_candidate_mapping(raw: object) -> tuple[CandidateSpec, ...]:
                 task_id=task_id,
                 scene_version=scene_version,
                 candidate_fingerprint=fingerprint,
+                fingerprint_scope=fingerprint_scope,
+                identity=identity,
             )
         )
     return tuple(parsed)
@@ -86,6 +115,11 @@ def build_rehearsal_jobs(
             task_id=candidate.task_id,
             scene_version=candidate.scene_version,
             candidate_fingerprint=candidate.candidate_fingerprint,
+            fingerprint_scope=candidate.fingerprint_scope,
+            arbiter_subgraph_id=(candidate.identity.subgraph_id if candidate.identity else None),
+            arbiter_fingerprint=(
+                candidate.identity.subgraph_fingerprint if candidate.identity else None
+            ),
             checkpoint_budget=checkpoint_budget,
         )
         for candidate in candidates

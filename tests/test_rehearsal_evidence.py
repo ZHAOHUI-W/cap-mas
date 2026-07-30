@@ -20,6 +20,9 @@ def _result(**overrides):
         "latency_ms": 12.0,
         "scene_version": 4,
         "candidate_fingerprint": "fp-a",
+        "fingerprint_scope": "graph",
+        "arbiter_subgraph_id": "sg_pick",
+        "arbiter_fingerprint": "sub-fp-a",
     }
     values.update(overrides)
     return RehearsalResult(**values)
@@ -35,6 +38,9 @@ def test_rehearsal_result_becomes_version_bound_evidence():
     assert evidence.success is True
     assert evidence.score == 1.0
     assert evidence.scene_version == 4
+    assert evidence.fingerprint_scope == "graph"
+    assert evidence.arbiter_subgraph_id == "sg_pick"
+    assert evidence.arbiter_fingerprint == "sub-fp-a"
 
 
 def test_stale_rehearsal_result_cannot_become_evidence():

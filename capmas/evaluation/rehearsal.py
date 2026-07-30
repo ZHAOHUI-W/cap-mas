@@ -32,6 +32,9 @@ class RehearsalJob:
     scene_version: int = 0
     candidate_fingerprint: str = ""
     checkpoint_budget: int = 0
+    fingerprint_scope: str = "subgraph"
+    arbiter_subgraph_id: str | None = None
+    arbiter_fingerprint: str | None = None
 
     def __post_init__(self) -> None:
         if not self.candidate_id:
@@ -40,6 +43,11 @@ class RehearsalJob:
             raise ValueError("rehearsal scene version must not be negative")
         if self.checkpoint_budget < 0:
             raise ValueError("rehearsal checkpoint budget must not be negative")
+        _validate_fingerprint_fields(
+            self.fingerprint_scope,
+            self.arbiter_subgraph_id,
+            self.arbiter_fingerprint,
+        )
         if not self.candidate_fingerprint:
             object.__setattr__(self, "candidate_fingerprint", self.candidate_id)
 
@@ -57,6 +65,9 @@ class RehearsalResult:
     failure_reason: str | None = None
     scene_version: int | None = None
     candidate_fingerprint: str | None = None
+    fingerprint_scope: str = "subgraph"
+    arbiter_subgraph_id: str | None = None
+    arbiter_fingerprint: str | None = None
 
     def __post_init__(self) -> None:
         if not self.candidate_id:
@@ -67,9 +78,27 @@ class RehearsalResult:
             raise ValueError("rehearsal failure step must not be negative")
         if self.scene_version is not None and self.scene_version < 0:
             raise ValueError("rehearsal scene version must not be negative")
+        _validate_fingerprint_fields(
+            self.fingerprint_scope,
+            self.arbiter_subgraph_id,
+            self.arbiter_fingerprint,
+        )
 
 
 RehearsalWorker = Callable[[RehearsalJob], RehearsalResult]
+
+
+def _validate_fingerprint_fields(
+    scope: str,
+    arbiter_subgraph_id: str | None,
+    arbiter_fingerprint: str | None,
+) -> None:
+    if scope not in {"graph", "subgraph"}:
+        raise ValueError("rehearsal fingerprint scope must be graph or subgraph")
+    if scope == "graph" and (not arbiter_subgraph_id or not arbiter_fingerprint):
+        raise ValueError(
+            "graph-scoped rehearsal identity requires arbiter_subgraph_id and arbiter_fingerprint"
+        )
 
 
 class RehearsalTimeout(RuntimeError):

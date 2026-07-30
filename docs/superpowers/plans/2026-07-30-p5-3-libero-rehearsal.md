@@ -123,9 +123,11 @@ improvement claim: the run is an isolated evidence collection experiment and
 does not select or execute a live robot action.
 
 The serialized input is a full MissionGraph artifact whose fingerprint is
-graph-scoped. The existing `merge_rehearsal_evidence()` helper validates
-subgraph-scoped `GraphCandidate` fingerprints. Therefore these real results
-are persisted as rehearsal evidence but are not silently attached to a local
-Arbiter candidate until an explicit graph-to-subgraph identity mapping is
-implemented. This is a follow-up integration item, not a reason to discard
-the process gate result.
+graph-scoped. The P5.3 identity closure preserves that source fingerprint and
+requires an explicit `arbiter_subgraph_id` plus a derived local fingerprint
+before attaching evidence to a `GraphCandidate`. The pure shadow-Arbiter path
+now compares the baseline with an evidence-enriched hypothetical selection,
+records mapping rejections, and keeps `physical_execution_required=false`.
+This closes the identity and shadow code gates without promoting a shadow
+winner to live physical execution. Ten-plus seeds, multiple tasks, online
+physical selection, and P5.4 cache remain follow-up work.

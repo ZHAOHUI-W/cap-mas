@@ -1,3 +1,5 @@
+import pytest
+
 from capmas.agents.arbiter import CandidateArbiter
 from capmas.contracts.action import SkillCall
 from capmas.contracts.candidates import GraphCandidate, subgraph_fingerprint
@@ -42,6 +44,21 @@ def _evidence(candidate: GraphCandidate, score: float) -> RehearsalEvidence:
     )
 
 
+def _graph_evidence(candidate: GraphCandidate, score: float, *, fingerprint=None):
+    return RehearsalEvidence(
+        candidate_id=candidate.candidate_id,
+        candidate_fingerprint="full-graph-fingerprint",
+        seed=1,
+        scene_version=0,
+        success=score == 1.0,
+        score=score,
+        latency_ms=3.0,
+        fingerprint_scope="graph",
+        arbiter_subgraph_id=candidate.subgraph.subgraph_id,
+        arbiter_fingerprint=fingerprint or subgraph_fingerprint(candidate.subgraph),
+    )
+
+
 def test_shadow_rehearsal_is_recorded_without_changing_arbiter_input():
     candidate = _candidate("candidate-a", "a")
 
@@ -69,3 +86,44 @@ def test_online_rehearsal_evidence_changes_arbiter_score_and_winner():
     assert result.selected.candidate_id == "candidate-b"
     assert result.selection_basis == "evidence_score"
     assert result.score_breakdowns["candidate-b"]["rehearsal"] > 0.0
+
+
+def test_graph_scoped_rehearsal_attaches_using_mapped_subgraph_fingerprint():
+    candidate = _candidate("candidate-a", "a")
+
+    enriched = merge_rehearsal_evidence(
+        candidate,
+        _graph_evidence(candidate, 1.0),
+        include_in_arbiter=True,
+    )
+
+    assert enriched.evidence is not None
+    assert enriched.evidence.rehearsal_success_rate == 1.0
+    assert "rehearsal" in enriched.evidence.available_metrics
+
+
+def test_graph_scoped_rehearsal_rejects_wrong_mapped_subgraph_fingerprint():
+    candidate = _candidate("candidate-a", "a")
+
+    with pytest.raises(ValueError, match="fingerprint"):
+        merge_rehearsal_evidence(
+            candidate,
+            _graph_evidence(candidate, 1.0, fingerprint="wrong-subgraph"),
+            include_in_arbiter=True,
+        )
+
+
+def test_graph_scoped_rehearsal_requires_identity_mapping():
+    candidate = _candidate("candidate-a", "a")
+
+    with pytest.raises(ValueError, match="identity mapping"):
+        RehearsalEvidence(
+            candidate_id=candidate.candidate_id,
+            candidate_fingerprint="full-graph-fingerprint",
+            seed=1,
+            scene_version=0,
+            success=True,
+            score=1.0,
+            latency_ms=3.0,
+            fingerprint_scope="graph",
+        )

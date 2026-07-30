@@ -51,12 +51,18 @@ def test_rehearsal_job_carries_scene_and_candidate_identity():
         task_id="libero_spatial_0",
         scene_version=12,
         candidate_fingerprint="fp-a",
+        fingerprint_scope="graph",
+        arbiter_subgraph_id="sg_pick",
+        arbiter_fingerprint="sub-fp-a",
         checkpoint_budget=4,
     )
 
     assert job.task_id == "libero_spatial_0"
     assert job.scene_version == 12
     assert job.candidate_fingerprint == "fp-a"
+    assert job.fingerprint_scope == "graph"
+    assert job.arbiter_subgraph_id == "sg_pick"
+    assert job.arbiter_fingerprint == "sub-fp-a"
     assert job.checkpoint_budget == 4
 
 
@@ -72,9 +78,14 @@ def test_rehearsal_result_records_checkpoint_and_failure_details():
         failure_reason="target predicate did not hold",
         scene_version=12,
         candidate_fingerprint="fp-a",
+        fingerprint_scope="graph",
+        arbiter_subgraph_id="sg_pick",
+        arbiter_fingerprint="sub-fp-a",
     )
 
     assert result.failure_class == RehearsalFailureClass.POSTCONDITION_FAILURE
     assert result.checkpoint_results[0]["passed"] is False
     assert result.failure_step == 2
     assert result.scene_version == 12
+    assert result.fingerprint_scope == "graph"
+    assert result.arbiter_fingerprint == "sub-fp-a"

@@ -237,10 +237,25 @@ the process rehearsal/candidate-discrimination gate, but does not claim an
 online Arbiter improvement or a downstream success-rate gain.
 
 The input artifact is a full MissionGraph and therefore uses a graph-scoped
-fingerprint. The current `merge_rehearsal_evidence()` helper validates a
-subgraph-scoped `GraphCandidate` fingerprint. Until an explicit identity
-mapping is added, these real results remain auditable shadow evidence and are
-not silently used for local candidate selection.
+fingerprint. The P5.3 identity closure now requires an explicit
+`arbiter_subgraph_id` and carries the derived local subgraph fingerprint into
+`RehearsalEvidence`; mismatched or unmapped evidence is rejected. The pure
+`run_shadow_arbitration()` path reports whether mapped rehearsal evidence would
+change the winner and records baseline/shadow selection bases, but it never
+executes the hypothetical winner. Thus these artifacts can support a shadow
+selection analysis without claiming an online Arbiter or downstream success
+improvement.
+
+The five-seed, one-task process result is still insufficient for the remaining
+statistical gate: ten-plus seeds, multiple tasks, controlled physical online
+selection, and the P5.4 evidence cache remain open.
+
+P5.4 now has a process-local versioned cache implementation with exact
+candidate/scene keys and observable hit, miss, stale-rejection, invalidation,
+and eviction counters. No experiment artifact has yet enabled the cache or
+reported a hit-rate/downstream comparison; such a result must use a new
+run-scoped directory and must compare cache-disabled, cache-shadow, and any
+later explicitly enabled online mode under matched seeds.
 
 Current evidence status: the P3.1b `max_workers=2` ready-wave path has a
 successful endpoint-backed LIBERO run, but the matched `max_workers=1`

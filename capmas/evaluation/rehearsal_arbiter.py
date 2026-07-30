@@ -23,7 +23,13 @@ def merge_rehearsal_evidence(
 
     if rehearsal.candidate_id != candidate.candidate_id:
         raise ValueError("rehearsal candidate id does not match GraphCandidate")
-    if rehearsal.candidate_fingerprint != subgraph_fingerprint(candidate.subgraph):
+    if rehearsal.fingerprint_scope == "graph":
+        if rehearsal.arbiter_subgraph_id != candidate.subgraph.subgraph_id:
+            raise ValueError("rehearsal target subgraph does not match GraphCandidate")
+        effective_fingerprint = rehearsal.arbiter_fingerprint
+    else:
+        effective_fingerprint = rehearsal.candidate_fingerprint
+    if effective_fingerprint != subgraph_fingerprint(candidate.subgraph):
         raise ValueError("rehearsal candidate fingerprint does not match GraphCandidate")
     if rehearsal.scene_version != candidate.parent_scene_version:
         raise ValueError("rehearsal scene version does not match GraphCandidate")

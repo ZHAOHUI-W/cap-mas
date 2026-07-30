@@ -130,6 +130,9 @@ def run_libero_rehearsal_job(
             failure_reason=failure_reason,
             scene_version=job.scene_version,
             candidate_fingerprint=job.candidate_fingerprint,
+            fingerprint_scope=job.fingerprint_scope,
+            arbiter_subgraph_id=job.arbiter_subgraph_id,
+            arbiter_fingerprint=job.arbiter_fingerprint,
         )
     except GraphSchemaError as exc:
         return _failure_result(job, started_ns, worker_pid, RehearsalFailureClass.INVALID_GRAPH, str(exc))
@@ -171,6 +174,9 @@ def _failure_result(
         failure_reason=reason,
         scene_version=job.scene_version,
         candidate_fingerprint=job.candidate_fingerprint,
+        fingerprint_scope=job.fingerprint_scope,
+        arbiter_subgraph_id=job.arbiter_subgraph_id,
+        arbiter_fingerprint=job.arbiter_fingerprint,
     )
 
 
