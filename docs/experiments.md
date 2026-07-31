@@ -379,3 +379,19 @@ starting a backend and requires `task_id` and `seed` to be supplied by the
 experiment driver. `scripts/compare_artifacts.py` produces one matched record;
 batch execution and statistical aggregation remain outside this read-only
 normalizer.
+
+### P5.4 isolated evidence-cache evaluation (2026-07-31)
+
+The run-scoped driver is `scripts/run_p54_evidence_cache.py`. It executes the
+same deterministic eleven-operation trace in two independent lanes:
+`cache_disabled` calls the local evidence provider for every logical query,
+while `cache_enabled` uses `VersionedEvidenceCache` keyed by candidate
+fingerprint and scene version. Each lane writes its own directory under
+`outputs/phase5/P5.4_cache_evaluation/` with trace, summary, log, and manifest
+artifacts. Failure runs retain partial trace and redacted error artifacts.
+
+The isolated evaluation is designed to measure exact hits, scene-version
+invalidation, stale rejection, and provider-call reduction. It does not start
+CAP-X, call an LLM, execute LIBERO, or establish a downstream robot success
+improvement. The formal run result and artifact paths will be appended after
+the local experiment completes.

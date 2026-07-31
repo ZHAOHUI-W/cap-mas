@@ -114,3 +114,21 @@ def test_cache_failure_artifacts_redact_provider_secret(tmp_path):
         if path.is_file() and path.name != "manifest.json"
     )
     assert secret not in text
+
+
+def test_phase5_cache_docs_name_the_isolated_evaluation():
+    from pathlib import Path
+
+    root = Path(__file__).parents[1]
+    text = "\n".join(
+        (root / name).read_text(encoding="utf-8")
+        for name in (
+            "docs/experiments.md",
+            "docs/phase5-evidence-evolution.md",
+            "docs/implementation-roadmap.md",
+        )
+    )
+    assert "run_p54_evidence_cache.py" in text
+    assert "cache_disabled" in text
+    assert "cache_enabled" in text
+    assert "does not establish" in text

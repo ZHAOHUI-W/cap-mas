@@ -437,3 +437,19 @@ This closes the P5.4 contract/code gate only. The cache is not persistent or
 cross-process, is not implicitly wired into physical execution, and has not
 yet produced a real multi-task hit-rate or downstream success experiment.
 Those measurements remain a separate run-scoped evaluation task.
+
+### P5.4 isolated evaluation implementation (2026-07-31)
+
+The isolated evaluation driver is `scripts/run_p54_evidence_cache.py`. It
+compares `cache_disabled` and `cache_enabled` on an identical deterministic
+trace containing first misses, repeated exact-version requests, a scene
+refresh, a stale probe, and a distinct candidate fingerprint. The two modes
+are stored in separate run directories under
+`outputs/phase5/P5.4_cache_evaluation/` and include cache trace, metrics,
+bounded event history, logs, and SHA-256 manifests. Provider failures retain
+partial artifacts and redact `sk-*` tokens from failure output.
+
+This evaluation is intentionally process-local and has no LLM, CAP-X, LIBERO,
+or physical execution path. Its result can close the isolated cache hit-rate
+contract only; it does not establish a downstream success-rate improvement or
+replace the later online and multi-task evaluation.

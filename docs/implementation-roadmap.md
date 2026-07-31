@@ -399,6 +399,16 @@ does not alter Arbiter weights or physical execution. The P5.4 code gate is
 closed, while persistent/cross-process caching, real hit-rate measurement, and
 downstream causal evaluation remain open.
 
+P5.4 isolated evaluation implementation (2026-07-31):
+`scripts/run_p54_evidence_cache.py` compares `cache_disabled` and
+`cache_enabled` using the same deterministic request trace. It records exact
+hits, invalidations, stale rejections, provider calls, bounded cache events,
+failure artifacts, and per-lane manifests under
+`outputs/phase5/P5.4_cache_evaluation/`. This is an isolated local cache
+evaluation; it does not call an LLM, start CAP-X/LIBERO, execute a robot, or
+establish a downstream success-rate improvement. The formal run artifact and
+observed metrics remain to be recorded after execution.
+
 ## Phase 6 — Memory Controller learning
 
 - Add verified terminal and intermediate learning-return calculation.
