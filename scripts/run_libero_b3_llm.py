@@ -247,6 +247,24 @@ def _world_model_metrics(enricher: object | None, local_map: object | None) -> d
     }
 
 
+def _verifier_evidence_payload(
+    arbitrations: object,
+    execution_result: object | None,
+) -> dict[str, object]:
+    """Build the static/dynamic verifier artifact without changing selection."""
+    from capmas.evaluation.verifier_artifacts import (
+        collect_dynamic_verifier_artifacts,
+        static_verifier_artifacts_from_arbitrations,
+    )
+
+    traces = tuple(getattr(execution_result, "traces", ()) or ())
+    dynamic = collect_dynamic_verifier_artifacts(traces)
+    return {
+        "static": list(static_verifier_artifacts_from_arbitrations(arbitrations)),
+        "dynamic": [item.to_dict() for item in dynamic],
+    }
+
+
 def main() -> None:
     args = parse_args()
     if not args.api_base:
@@ -326,6 +344,7 @@ def main() -> None:
     )
     from capmas.contracts.experiment import ExperimentRunConfig
     from capmas.graph.normalizer import CandidateNormalizer
+    from capmas.graph.condition_defaults import SkillConditionEnricher
     from capmas.graph.serialization import mission_graph_to_dict
     from capmas.llm.capx_compatible import CAPXCompatibleLLMClient
     from capmas.llm.protocol import LLMTraceCollector
@@ -352,8 +371,8 @@ def main() -> None:
     from capmas.runtime.state_store import InMemoryStateStore
     from capmas.verification.libero import (
         LiberoObservableVerifier,
-        compile_time_preconditions,
         ground_libero_grasp_subgraph,
+        pre_dispatch_preconditions,
         libero_candidate_evidence,
         repair_libero_grasp_subgraph,
         validate_libero_grasp_subgraph,
@@ -372,6 +391,7 @@ def main() -> None:
     artifact_failures = ()
     artifact_result = None
     scheduler_metrics = {}
+    verifier_evidence_payload: dict[str, object] = {"static": [], "dynamic": []}
     try:
         if not args.skip_api_servers:
             from capx.envs.runner import _start_api_servers
@@ -497,6 +517,10 @@ def main() -> None:
                         )
                     ),
                     agent_name=_policy_agent_name(index, policy_strategies[index]),
+                    policy_strategy=policy_strategies[index],
+                    condition_enricher=SkillConditionEnricher(
+                        bundle.skill_registry
+                    ).enrich,
                     proposal_retries=args.llm_proposal_retries,
                     repair_request_builder=(
                         lambda subgoal, current_scene, context, feedback,
@@ -570,7 +594,7 @@ def main() -> None:
                         contract = subgraph.to_action_contract(node.node_id, typed_context)
                         validate_libero_skill_sequence(contract.skills)
                         bundle.skill_registry.validate_contract(contract)
-                        static_preconditions = compile_time_preconditions(
+                        static_preconditions = pre_dispatch_preconditions(
                             contract.preconditions
                         )
                         if static_preconditions:
@@ -622,7 +646,11 @@ def main() -> None:
             require_policy_proposals=not args.allow_manager_plan_fallback,
             skill_validator=validate_skills,
             candidate_evidence_provider=candidate_evidence,
-            candidate_normalizer=CandidateNormalizer(bundle.skill_registry),
+            condition_enricher=SkillConditionEnricher(bundle.skill_registry).enrich,
+            candidate_normalizer=CandidateNormalizer(
+                bundle.skill_registry,
+                condition_enricher=SkillConditionEnricher(bundle.skill_registry).enrich,
+            ),
             candidate_evidence_timeout_ms=(
                 max(1.0, float(args.geometry_deadline_ms) - 10.0)
                 if args.geometry_mode != "disabled"
@@ -750,6 +778,11 @@ def main() -> None:
                     geometry_local_map,
                 ),
             }
+        verifier_evidence_payload = _verifier_evidence_payload(
+            artifact_arbitrations,
+            artifact_result,
+        )
+        scheduler_metrics["verifier_evidence"] = verifier_evidence_payload
         payload = {
             "baseline": f"B3-LLM-{args.graph_protocol}-{args.execution_mode}",
             "log_file": str(log_path),
@@ -773,6 +806,7 @@ def main() -> None:
         if phase5_run is not None:
             phase5_run.write_json("run_config.json", run_config.to_dict())
             phase5_run.write_json("summary.json", payload)
+            phase5_run.write_json("evidence/verifier.json", verifier_evidence_payload)
             phase5_run.write_text(
                 "summary.md",
                 "# CAP-MAS Phase 5 run\n\n"
@@ -808,6 +842,7 @@ def main() -> None:
             "proposal_failures": artifact_failures,
             "partial_result": artifact_result,
             "scheduler_metrics": scheduler_metrics,
+            "verifier_evidence": verifier_evidence_payload,
             "scene": (
                 runtime.state_store.latest()
                 if runtime is not None

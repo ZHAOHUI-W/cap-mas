@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from dataclasses import replace
 from collections.abc import Iterable
+from typing import Callable
 
 from capmas.contracts.candidates import GraphCandidate, rewrite_report_for
 from capmas.contracts.graph import MotionIntent, SubgraphNodeSpec, SubgraphSpec
+from capmas.contracts.scene import SceneSnapshot
 from capmas.skills.registry import SkillRegistry
 
 
@@ -41,17 +43,33 @@ def normalize_motion_intent(node: SubgraphNodeSpec) -> SubgraphNodeSpec:
 class CandidateNormalizer:
     """Normalize an effective candidate against the registered skill schema."""
 
-    def __init__(self, registry: SkillRegistry | None = None) -> None:
+    def __init__(
+        self,
+        registry: SkillRegistry | None = None,
+        condition_enricher: Callable[[SubgraphSpec, SceneSnapshot, str], SubgraphSpec]
+        | None = None,
+    ) -> None:
         self.registry = registry
+        self.condition_enricher = condition_enricher
 
-    def normalize(self, candidate: GraphCandidate) -> GraphCandidate:
+    def normalize(
+        self,
+        candidate: GraphCandidate,
+        scene: SceneSnapshot | None = None,
+    ) -> GraphCandidate:
         raw = candidate.raw_subgraph or candidate.subgraph
-        if self.registry is not None:
-            self._validate_registered_arguments(candidate.subgraph.nodes)
         normalized = replace(
             candidate.subgraph,
             nodes=tuple(normalize_motion_intent(node) for node in candidate.subgraph.nodes),
         )
+        if self.condition_enricher is not None and scene is not None:
+            normalized = self.condition_enricher(
+                normalized,
+                scene,
+                candidate.strategy or "balanced",
+            )
+        if self.registry is not None:
+            self._validate_registered_arguments(normalized.nodes)
         report = rewrite_report_for(raw, normalized)
         return replace(
             candidate,

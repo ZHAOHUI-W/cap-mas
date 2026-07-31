@@ -13,6 +13,7 @@ from capmas.verification.evidence import (
     collect_static_verifier_evidence,
     verifier_evidence_from_result,
 )
+from capmas.verification.libero import compile_time_preconditions
 from capmas.verification.predicates import PredicateBasedVerifier
 
 
@@ -97,3 +98,30 @@ def test_dynamic_conversion_preserves_result_provenance_and_three_state() -> Non
     assert [item.status for item in evidence.dynamic_results] == ["fail", "unknown"]
     assert evidence.pass_rate == 0.0
     assert evidence.coverage == 0.5
+
+
+def test_static_collection_reports_scene_freshness_coverage() -> None:
+    original = _candidate()
+    node = original.subgraph.node("action")
+    candidate = replace(
+        original,
+        subgraph=replace(
+            original.subgraph,
+            nodes=(replace(node, preconditions=("scene_fresh(2000)",)),),
+        ),
+    )
+    scene = _scene()
+    evidence = collect_static_verifier_evidence(
+        candidate,
+        scene,
+        PredicateBasedVerifier(clock=lambda: scene.publish_timestamp_ns),
+        predicate_selector=lambda predicate: predicate in compile_time_preconditions(
+            (predicate,)
+        ),
+        clock=lambda: 999,
+    )
+
+    assert [item.predicate for item in evidence.static_results] == [
+        "scene_fresh(2000)"
+    ]
+    assert evidence.coverage == 1.0

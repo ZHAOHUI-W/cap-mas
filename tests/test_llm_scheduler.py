@@ -141,6 +141,38 @@ def test_llm_scheduler_scene_aware_rewriter_receives_current_scene() -> None:
     assert compiled.graph.subgraph("first").description == "scene-4"
 
 
+def test_llm_scheduler_enriches_empty_action_postconditions_before_arbitration() -> None:
+    def enrich(subgraph, _scene, _strategy):
+        node = subgraph.node(subgraph.entry_node)
+        enriched = replace(node, postconditions=("scene_fresh(2000)",))
+        return replace(
+            subgraph,
+            nodes=tuple(enriched if item.node_id == node.node_id else item for item in subgraph.nodes),
+            checkpoints=(CheckpointSpec("fresh", ("scene_fresh(2000)",)),),
+        )
+
+    empty_agent = CallableGraphPolicyAgent(
+        lambda _subgoal, _scene, _context: replace(
+            _subgraph("first", description="empty"),
+            nodes=(replace(_subgraph("first").node("first-action"), postconditions=()),),
+            checkpoints=(CheckpointSpec("first-checkpoint", ("scene_fresh(2000)",)),),
+        )
+    )
+    empty_agent.name = "policy-empty"  # type: ignore[attr-defined]
+    scheduler = LLMGraphScheduler(
+        _Manager(),
+        {"first": (empty_agent,)},
+        require_policy_proposals=False,
+        condition_enricher=enrich,
+    )
+
+    compiled = scheduler.compile("test task", _scene())
+
+    assert compiled.graph.subgraph("first").node("first-action").postconditions == (
+        "scene_fresh(2000)",
+    )
+
+
 def test_llm_scheduler_does_not_execute_when_required_policy_proposal_fails() -> None:
     failing = CallableGraphPolicyAgent(
         lambda _subgoal, _scene, _context: (_ for _ in ()).throw(RuntimeError("bad model"))

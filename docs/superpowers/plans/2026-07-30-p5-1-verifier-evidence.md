@@ -220,13 +220,23 @@ Validate non-empty identifiers, non-negative versions/timestamps, ranges in [0, 
 
 ### Task 8: Run the complete software gate
 
+### Follow-up: typed skill condition defaults (2026-07-31)
+
+The P5.1 closure follow-up is tracked in
+`docs/superpowers/plans/2026-07-31-p5-1-condition-defaults.md`. It adds
+`SkillConditionEnricher` metadata and strategy-aware preconditions while
+preserving the original candidate fingerprint, scene-version, dynamic
+evidence, and independent run-directory requirements. The follow-up must
+report static evidence coverage separately from evaluator success and graph
+completion; it does not revise the earlier 2/5 evaluator-success result.
+
 **Files:**
 - No source changes expected.
 - New artifacts only under fresh outputs/phase5/P5.1_* directories.
 
-- [ ] Step 1: Run the focused P5.1 suite: pytest -q tests/test_verifier_evidence.py tests/test_candidate_verifier_evidence.py tests/test_verifier_evidence_collection.py tests/test_libero_verifier_evidence.py tests/test_verifier_arbiter_gate.py tests/test_predicate_semantics.py.
-- [ ] Step 2: Run pytest -q. Expected: zero failures and errors. Record the exact count in the final manifest.
-- [ ] Step 3: Run python -m compileall -q capmas scripts; git diff --check; git status --short. Do not revert unrelated changes.
+- [x] Step 1: Run the focused P5.1 suite: pytest -q tests/test_verifier_evidence.py tests/test_candidate_verifier_evidence.py tests/test_verifier_evidence_collection.py tests/test_libero_verifier_evidence.py tests/test_verifier_arbiter_gate.py tests/test_predicate_semantics.py.
+- [x] Step 2: Run pytest -q. Expected: zero failures and errors. Record the exact count in the final manifest.
+- [x] Step 3: Run python -m compileall -q capmas scripts; git diff --check; git status --short. Do not revert unrelated changes.
 
 ### Task 9: Run the empirical LIBERO P5.1 gate
 
@@ -241,11 +251,11 @@ Validate non-empty identifiers, non-negative versions/timestamps, ranges in [0, 
 - Pass API endpoint/model/key through the runner's existing command-line or environment handling; never write the key to files or logs.
 - Preserve stdout/stderr in each run's logs directory.
 
-- [ ] Step 1: Run one fixed-seed smoke episode and verify logs/, results/, summary.json, summary.md, and manifest.json exist.
-- [ ] Step 2: Verify at least one candidate artifact has typed static evidence and one post-execution dynamic result. If runner integration cannot emit dynamic evidence, report the exact missing boundary and leave the empirical gate open.
-- [ ] Step 3: Run the matched seed set used by the current Phase 5 baseline, one fresh directory per seed. Record seed, task, scene version, candidate fingerprint, static/dynamic results, selection basis, success, failure class, and latency.
-- [ ] Step 4: Validate required files, absence of the literal API key in logs, evidence identity/version fields, and dynamic evidence ordering after its execution trace.
-- [ ] Step 5: Update phase documents only with measured results after artifact validation; otherwise document the remaining integration gap without claiming empirical success.
+- [x] Step 1: Run one fixed-seed smoke episode and verify logs/, results/, summary.json, summary.md, and manifest.json exist.
+- [x] Step 2: Verify at least one candidate artifact has typed static evidence and one post-execution dynamic result. The runtime emits both; static coverage quality remains an explicit open gate.
+- [x] Step 3: Run the matched seed set used by the current Phase 5 baseline, one fresh directory per seed. Record seed, task, scene version, candidate fingerprint, static/dynamic results, selection basis, success, failure class, and latency.
+- [x] Step 4: Validate required files, absence of the literal API key in logs, evidence identity/version fields, and dynamic evidence ordering after its execution trace.
+- [x] Step 5: Update phase documents only with measured results after artifact validation; otherwise document the remaining integration gap without claiming empirical success.
 
 ## Plan Self-Review
 

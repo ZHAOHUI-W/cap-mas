@@ -125,7 +125,7 @@ def mission_graph_response_schema(
             "inputs": {"type": "array", "items": port},
             "outputs": {"type": "array", "items": port},
             "preconditions": string_list,
-            "postconditions": {**string_list, "minItems": 1},
+            "postconditions": string_list,
             "resources": {"type": "array", "items": resource},
             "max_duration_ms": {"type": "integer", "minimum": 1},
             "max_sim_steps": {"type": "integer", "minimum": 1},
@@ -784,6 +784,8 @@ def _staged_policy_system_prompt(policy_strategy: str = "balanced") -> str:
         "checkpoint; do not paraphrase or omit them. Do not emit a mission "
         "Use only supported observable predicate forms for preconditions and postconditions; "
         "if no supported precondition applies, use an empty list instead of prose. Do not emit a mission "
+        "If a typed physical skill has no explicit postcondition, the runtime adds typed-skill default predicates "
+        "before validation; still declare task-specific success predicates in the graph. "
         "graph wrapper, topology, Python, env handles, arbitrary imports, or privileged "
         "evaluator signals. If a previous rejection is supplied, correct that exact issue. "
         + _policy_strategy_guidance(policy_strategy)

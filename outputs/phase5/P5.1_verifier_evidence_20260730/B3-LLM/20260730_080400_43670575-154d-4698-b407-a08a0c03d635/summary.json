@@ -1,0 +1,661 @@
+{
+  "arbitrations": {
+    "sg_pick_akita_black_bowl": "ArbitrationResult(selected=GraphCandidate(candidate_id='sg_pick_akita_black_bowl:policy-1:safety:1', subgraph=SubgraphSpec(subgraph_id='sg_pick_akita_black_bowl', subgoal_id='pick_akita_black_bowl', description='Pick the akita black bowl using a sampled grasp pose, guarded by success and failure checkpoints.', nodes=(SubgraphNodeSpec(node_id='act_pick_akita_black_bowl', description='Sample a grasp for the akita black bowl, move to the sampled grasp pose, and close the gripper.', skill_calls=(SkillCall(skill=SkillRef(skill_id='sample_grasp_pose', version='capx-compat-1'), args={'object_name': 'akita black bowl', 'use_multiview': True}), SkillCall(skill=SkillRef(skill_id='goto_pose', version='capx-compat-1'), args={'position': SkillOutputRef(call_index=0, path=('result', 0)), 'quaternion_wxyz': SkillOutputRef(call_index=0, path=('result', 1)), 'z_approach': 0.1}), SkillCall(skill=SkillRef(skill_id='close_gripper', version='capx-compat-1'), args={}), SkillCall(skill=SkillRef(skill_id='lift_after_grasp', version='capx-compat-1'), args={'position': SkillOutputRef(call_index=0, path=('result', 0)), 'quaternion_wxyz': SkillOutputRef(call_index=0, path=('result', 1)), 'z_lift': 0.12})), inputs=(), outputs=(), preconditions=('scene_fresh(1000)',), postconditions=('object_in_gripper(akita black bowl)', 'gripper_closed()'), resources=(ResourceRequirement(resource_id='robot_arm', mode='exclusive'), ResourceRequirement(resource_id='gripper', mode='exclusive')), max_duration_ms=15000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='If grasp sampling or motion fails, stop with gripper state observable and route to failure checkpoint; do not retry without a fresh scene snapshot.', node_type='action', motion_intent=MotionIntent(kind='grasp', object_track_id='akita black bowl', target_track_id=None, approach_vector_xyz=(0.0, 0.0, -1.0), standoff_m=0.08, target_pose_wxyz_xyz=(0.08563322695490952, 0.13373579578675873, 0.9872887303238777, -0.00653072293370746, 0.6043336805436834, 0.211015603639419, 0.02074547249039447))), SubgraphNodeSpec(node_id='cp_verify_pick_akita_black_bowl', description='Validate that the akita black bowl is in the gripper and the gripper is closed.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_in_gripper(akita black bowl)', 'gripper_closed()'), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='On validation failure, preserve current state and report failure for replanning with a fresh scene snapshot.', node_type='checkpoint', motion_intent=None), SubgraphNodeSpec(node_id='cp_pick_failure_open_gripper', description='Validate observable failure condition for an unsuccessful pick attempt.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('gripper_open()',), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='Stop and request replanning after failure checkpoint validation.', node_type='checkpoint', motion_intent=None)), edges=(GraphEdge(source='act_pick_akita_black_bowl', target='cp_verify_pick_akita_black_bowl', condition='skill_sequence_complete'), GraphEdge(source='act_pick_akita_black_bowl', target='cp_pick_failure_open_gripper', condition='failure')), entry_node='act_pick_akita_black_bowl', success_nodes=('cp_verify_pick_akita_black_bowl',), failure_nodes=('cp_pick_failure_open_gripper',), inputs=(), outputs=(), bindings=(), output_bindings=(), checkpoints=(CheckpointSpec(name='verify_pick_akita_black_bowl', predicates=('object_in_gripper(akita black bowl)', 'gripper_closed()'), validate=True, weight=1.0), CheckpointSpec(name='verify_pick_failure_open_gripper', predicates=('gripper_open()',), validate=True, weight=1.0)), assigned_agent='robot', loops=()), parent_scene_version=0, producer_agent='policy-1:safety', confidence=None, rationale='', evidence=CandidateEvidence(verifier_pass_rate=0.0, rehearsal_success_rate=0.0, ood_success_rate=0.0, expected_latency_ms=0.0, recovery_cost=0.0, evidence_refs=(), perception=PerceptionEvidence(scene_freshness=1.0, scene_confidence=1.0, target_visibility=1.0, track_confidence=1.0, identity_confidence=1.0, pose_reliability=1.0, evidence_refs=()), geometry=None, available_metrics=('perception',), scene_version=0, provider='libero_scene_snapshot', captured_at_ns=1785398735011486209, verifier=VerifierEvidence(candidate_fingerprint='551bb406e1c30901024a2fdf2130d8c328841a8c744d9c0f41939abe6c5bc162', scene_version=0, pass_rate=0.0, coverage=0.0, provider='libero_observable_verifier.static', captured_at_ns=1785398735011486209, static_results=(), dynamic_results=(), source_verification=None)), strategy='safety', raw_subgraph=SubgraphSpec(subgraph_id='sg_pick_akita_black_bowl', subgoal_id='pick_akita_black_bowl', description='Pick the akita black bowl using a sampled grasp pose, guarded by success and failure checkpoints.', nodes=(SubgraphNodeSpec(node_id='act_pick_akita_black_bowl', description='Sample a grasp for the akita black bowl, move to the sampled grasp pose, and close the gripper.', skill_calls=(SkillCall(skill=SkillRef(skill_id='sample_grasp_pose', version='capx-compat-1'), args={'object_name': 'akita black bowl', 'use_multiview': True, 'z_approach': 0.08, 'z_lift': 0.1}), SkillCall(skill=SkillRef(skill_id='goto_pose', version='capx-compat-1'), args={'position': 'SkillOutputRef(sample_grasp_pose.position)', 'quaternion_wxyz': 'SkillOutputRef(sample_grasp_pose.quaternion_wxyz)'}), SkillCall(skill=SkillRef(skill_id='close_gripper', version='capx-compat-1'), args={})), inputs=(), outputs=(), preconditions=('scene_fresh(1000)',), postconditions=('object_in_gripper(akita black bowl)', 'gripper_closed()'), resources=(ResourceRequirement(resource_id='robot_arm', mode='exclusive'), ResourceRequirement(resource_id='gripper', mode='exclusive')), max_duration_ms=15000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='If grasp sampling or motion fails, stop with gripper state observable and route to failure checkpoint; do not retry without a fresh scene snapshot.', node_type='action', motion_intent=MotionIntent(kind='grasp', object_track_id='akita black bowl', target_track_id=None, approach_vector_xyz=(0.0, 0.0, -1.0), standoff_m=0.08, target_pose_wxyz_xyz=(0.08563322695490952, 0.13373579578675873, 0.9872887303238777, -0.00653072293370746, 0.6043336805436834, 0.211015603639419, 0.02074547249039447))), SubgraphNodeSpec(node_id='cp_verify_pick_akita_black_bowl', description='Validate that the akita black bowl is in the gripper and the gripper is closed.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_in_gripper(akita black bowl)', 'gripper_closed()'), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='On validation failure, preserve current state and report failure for replanning with a fresh scene snapshot.', node_type='checkpoint', motion_intent=None), SubgraphNodeSpec(node_id='cp_pick_failure_open_gripper', description='Validate observable failure condition for an unsuccessful pick attempt.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('gripper_open()',), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='Stop and request replanning after failure checkpoint validation.', node_type='checkpoint', motion_intent=None)), edges=(GraphEdge(source='act_pick_akita_black_bowl', target='cp_verify_pick_akita_black_bowl', condition='skill_sequence_complete'), GraphEdge(source='act_pick_akita_black_bowl', target='cp_pick_failure_open_gripper', condition='failure')), entry_node='act_pick_akita_black_bowl', success_nodes=('cp_verify_pick_akita_black_bowl',), failure_nodes=('cp_pick_failure_open_gripper',), inputs=(), outputs=(), bindings=(), output_bindings=(), checkpoints=(CheckpointSpec(name='verify_pick_akita_black_bowl', predicates=('object_in_gripper(akita black bowl)', 'gripper_closed()'), validate=True, weight=1.0), CheckpointSpec(name='verify_pick_failure_open_gripper', predicates=('gripper_open()',), validate=True, weight=1.0)), assigned_agent='robot', loops=()), rewrite_report=CandidateRewriteReport(raw_fingerprint='c70de77ffc5540ba0ee3ccb291cef006c2b2260758aa8650d72854d38ca330ac', normalized_fingerprint='551bb406e1c30901024a2fdf2130d8c328841a8c744d9c0f41939abe6c5bc162', changed=True, rewrite_count=1, operations=('scene_or_safety_normalization',))), considered=(GraphCandidate(candidate_id='sg_pick_akita_black_bowl:policy-0:0', subgraph=SubgraphSpec(subgraph_id='sg_pick_akita_black_bowl', subgoal_id='pick_akita_black_bowl', description='Pick the akita black bowl.', nodes=(SubgraphNodeSpec(node_id='pick_akita_black_bowl_action', description='Sample a grasp pose for the akita black bowl, move to that sampled pose, and close the gripper to pick it.', skill_calls=(SkillCall(skill=SkillRef(skill_id='sample_grasp_pose', version='capx-compat-1'), args={'object_name': 'akita black bowl'}), SkillCall(skill=SkillRef(skill_id='goto_pose', version='capx-compat-1'), args={'position': SkillOutputRef(call_index=0, path=('result', 0)), 'quaternion_wxyz': SkillOutputRef(call_index=0, path=('result', 1)), 'z_approach': 0.1}), SkillCall(skill=SkillRef(skill_id='close_gripper', version='capx-compat-1'), args={}), SkillCall(skill=SkillRef(skill_id='lift_after_grasp', version='capx-compat-1'), args={'position': SkillOutputRef(call_index=0, path=('result', 0)), 'quaternion_wxyz': SkillOutputRef(call_index=0, path=('result', 1)), 'z_lift': 0.12})), inputs=(), outputs=(), preconditions=(), postconditions=('object_in_gripper(akita black bowl)', 'gripper_closed()'), resources=(ResourceRequirement(resource_id='robot_arm', mode='exclusive'), ResourceRequirement(resource_id='gripper', mode='exclusive')), max_duration_ms=20000, max_sim_steps=3, proposed_by='local_policy_agent', recovery_policy='retry_from_fresh_scene_or_fail', node_type='action', motion_intent=MotionIntent(kind='grasp', object_track_id='akita black bowl', target_track_id=None, approach_vector_xyz=(0.0, 0.0, -1.0), standoff_m=0.05, target_pose_wxyz_xyz=(0.08563322695490952, 0.13373579578675873, 0.9872887303238777, -0.00653072293370746, 0.6043336805436834, 0.211015603639419, 0.02074547249039447))), SubgraphNodeSpec(node_id='verify_pick_akita_black_bowl', description='Validate that the akita black bowl is in the gripper and the gripper is closed.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_in_gripper(akita black bowl)', 'gripper_closed()'), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='fail', node_type='checkpoint', motion_intent=None)), edges=(GraphEdge(source='pick_akita_black_bowl_action', target='verify_pick_akita_black_bowl', condition='success'),), entry_node='pick_akita_black_bowl_action', success_nodes=('verify_pick_akita_black_bowl',), failure_nodes=('pick_akita_black_bowl_action',), inputs=(), outputs=(), bindings=(), output_bindings=(), checkpoints=(CheckpointSpec(name='verify_pick_akita_black_bowl', predicates=('object_in_gripper(akita black bowl)', 'gripper_closed()'), validate=True, weight=1.0),), assigned_agent='robot', loops=()), parent_scene_version=0, producer_agent='policy-0', confidence=None, rationale='', evidence=CandidateEvidence(verifier_pass_rate=0.0, rehearsal_success_rate=0.0, ood_success_rate=0.0, expected_latency_ms=0.0, recovery_cost=0.0, evidence_refs=(), perception=PerceptionEvidence(scene_freshness=1.0, scene_confidence=1.0, target_visibility=1.0, track_confidence=1.0, identity_confidence=1.0, pose_reliability=1.0, evidence_refs=()), geometry=None, available_metrics=('perception',), scene_version=0, provider='libero_scene_snapshot', captured_at_ns=1785398735011486209, verifier=VerifierEvidence(candidate_fingerprint='19c66614bcbe9ddd676ff799fc6f91856f4a30e529189bdabaf822397c687060', scene_version=0, pass_rate=0.0, coverage=0.0, provider='libero_observable_verifier.static', captured_at_ns=1785398735011486209, static_results=(), dynamic_results=(), source_verification=None)), strategy='balanced', raw_subgraph=SubgraphSpec(subgraph_id='sg_pick_akita_black_bowl', subgoal_id='pick_akita_black_bowl', description='Pick the akita black bowl.', nodes=(SubgraphNodeSpec(node_id='pick_akita_black_bowl_action', description='Sample a grasp pose for the akita black bowl, move to that sampled pose, and close the gripper to pick it.', skill_calls=(SkillCall(skill=SkillRef(skill_id='sample_grasp_pose', version='capx-compat-1'), args={'object_name': 'akita black bowl'}), SkillCall(skill=SkillRef(skill_id='goto_pose', version='capx-compat-1'), args={'position': 'SkillOutputRef(sample_grasp_pose.position)', 'quaternion_wxyz': 'SkillOutputRef(sample_grasp_pose.quaternion_wxyz)'}), SkillCall(skill=SkillRef(skill_id='close_gripper', version='capx-compat-1'), args={})), inputs=(), outputs=(), preconditions=(), postconditions=('object_in_gripper(akita black bowl)', 'gripper_closed()'), resources=(ResourceRequirement(resource_id='robot_arm', mode='exclusive'), ResourceRequirement(resource_id='gripper', mode='exclusive')), max_duration_ms=20000, max_sim_steps=3, proposed_by='local_policy_agent', recovery_policy='retry_from_fresh_scene_or_fail', node_type='action', motion_intent=MotionIntent(kind='grasp', object_track_id='akita black bowl', target_track_id=None, approach_vector_xyz=(0.0, 0.0, -1.0), standoff_m=0.05, target_pose_wxyz_xyz=(0.08563322695490952, 0.13373579578675873, 0.9872887303238777, -0.00653072293370746, 0.6043336805436834, 0.211015603639419, 0.02074547249039447))), SubgraphNodeSpec(node_id='verify_pick_akita_black_bowl', description='Validate that the akita black bowl is in the gripper and the gripper is closed.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_in_gripper(akita black bowl)', 'gripper_closed()'), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='fail', node_type='checkpoint', motion_intent=None)), edges=(GraphEdge(source='pick_akita_black_bowl_action', target='verify_pick_akita_black_bowl', condition='success'),), entry_node='pick_akita_black_bowl_action', success_nodes=('verify_pick_akita_black_bowl',), failure_nodes=('pick_akita_black_bowl_action',), inputs=(), outputs=(), bindings=(), output_bindings=(), checkpoints=(CheckpointSpec(name='verify_pick_akita_black_bowl', predicates=('object_in_gripper(akita black bowl)', 'gripper_closed()'), validate=True, weight=1.0),), assigned_agent='robot', loops=()), rewrite_report=CandidateRewriteReport(raw_fingerprint='2f5d75145dc2d8a6dc01d5dc55c7130ec16604e0f93e426263640cd84fdce23d', normalized_fingerprint='19c66614bcbe9ddd676ff799fc6f91856f4a30e529189bdabaf822397c687060', changed=True, rewrite_count=1, operations=('scene_or_safety_normalization',))), GraphCandidate(candidate_id='sg_pick_akita_black_bowl:policy-1:safety:1', subgraph=SubgraphSpec(subgraph_id='sg_pick_akita_black_bowl', subgoal_id='pick_akita_black_bowl', description='Pick the akita black bowl using a sampled grasp pose, guarded by success and failure checkpoints.', nodes=(SubgraphNodeSpec(node_id='act_pick_akita_black_bowl', description='Sample a grasp for the akita black bowl, move to the sampled grasp pose, and close the gripper.', skill_calls=(SkillCall(skill=SkillRef(skill_id='sample_grasp_pose', version='capx-compat-1'), args={'object_name': 'akita black bowl', 'use_multiview': True}), SkillCall(skill=SkillRef(skill_id='goto_pose', version='capx-compat-1'), args={'position': SkillOutputRef(call_index=0, path=('result', 0)), 'quaternion_wxyz': SkillOutputRef(call_index=0, path=('result', 1)), 'z_approach': 0.1}), SkillCall(skill=SkillRef(skill_id='close_gripper', version='capx-compat-1'), args={}), SkillCall(skill=SkillRef(skill_id='lift_after_grasp', version='capx-compat-1'), args={'position': SkillOutputRef(call_index=0, path=('result', 0)), 'quaternion_wxyz': SkillOutputRef(call_index=0, path=('result', 1)), 'z_lift': 0.12})), inputs=(), outputs=(), preconditions=('scene_fresh(1000)',), postconditions=('object_in_gripper(akita black bowl)', 'gripper_closed()'), resources=(ResourceRequirement(resource_id='robot_arm', mode='exclusive'), ResourceRequirement(resource_id='gripper', mode='exclusive')), max_duration_ms=15000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='If grasp sampling or motion fails, stop with gripper state observable and route to failure checkpoint; do not retry without a fresh scene snapshot.', node_type='action', motion_intent=MotionIntent(kind='grasp', object_track_id='akita black bowl', target_track_id=None, approach_vector_xyz=(0.0, 0.0, -1.0), standoff_m=0.08, target_pose_wxyz_xyz=(0.08563322695490952, 0.13373579578675873, 0.9872887303238777, -0.00653072293370746, 0.6043336805436834, 0.211015603639419, 0.02074547249039447))), SubgraphNodeSpec(node_id='cp_verify_pick_akita_black_bowl', description='Validate that the akita black bowl is in the gripper and the gripper is closed.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_in_gripper(akita black bowl)', 'gripper_closed()'), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='On validation failure, preserve current state and report failure for replanning with a fresh scene snapshot.', node_type='checkpoint', motion_intent=None), SubgraphNodeSpec(node_id='cp_pick_failure_open_gripper', description='Validate observable failure condition for an unsuccessful pick attempt.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('gripper_open()',), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='Stop and request replanning after failure checkpoint validation.', node_type='checkpoint', motion_intent=None)), edges=(GraphEdge(source='act_pick_akita_black_bowl', target='cp_verify_pick_akita_black_bowl', condition='skill_sequence_complete'), GraphEdge(source='act_pick_akita_black_bowl', target='cp_pick_failure_open_gripper', condition='failure')), entry_node='act_pick_akita_black_bowl', success_nodes=('cp_verify_pick_akita_black_bowl',), failure_nodes=('cp_pick_failure_open_gripper',), inputs=(), outputs=(), bindings=(), output_bindings=(), checkpoints=(CheckpointSpec(name='verify_pick_akita_black_bowl', predicates=('object_in_gripper(akita black bowl)', 'gripper_closed()'), validate=True, weight=1.0), CheckpointSpec(name='verify_pick_failure_open_gripper', predicates=('gripper_open()',), validate=True, weight=1.0)), assigned_agent='robot', loops=()), parent_scene_version=0, producer_agent='policy-1:safety', confidence=None, rationale='', evidence=CandidateEvidence(verifier_pass_rate=0.0, rehearsal_success_rate=0.0, ood_success_rate=0.0, expected_latency_ms=0.0, recovery_cost=0.0, evidence_refs=(), perception=PerceptionEvidence(scene_freshness=1.0, scene_confidence=1.0, target_visibility=1.0, track_confidence=1.0, identity_confidence=1.0, pose_reliability=1.0, evidence_refs=()), geometry=None, available_metrics=('perception',), scene_version=0, provider='libero_scene_snapshot', captured_at_ns=1785398735011486209, verifier=VerifierEvidence(candidate_fingerprint='551bb406e1c30901024a2fdf2130d8c328841a8c744d9c0f41939abe6c5bc162', scene_version=0, pass_rate=0.0, coverage=0.0, provider='libero_observable_verifier.static', captured_at_ns=1785398735011486209, static_results=(), dynamic_results=(), source_verification=None)), strategy='safety', raw_subgraph=SubgraphSpec(subgraph_id='sg_pick_akita_black_bowl', subgoal_id='pick_akita_black_bowl', description='Pick the akita black bowl using a sampled grasp pose, guarded by success and failure checkpoints.', nodes=(SubgraphNodeSpec(node_id='act_pick_akita_black_bowl', description='Sample a grasp for the akita black bowl, move to the sampled grasp pose, and close the gripper.', skill_calls=(SkillCall(skill=SkillRef(skill_id='sample_grasp_pose', version='capx-compat-1'), args={'object_name': 'akita black bowl', 'use_multiview': True, 'z_approach': 0.08, 'z_lift': 0.1}), SkillCall(skill=SkillRef(skill_id='goto_pose', version='capx-compat-1'), args={'position': 'SkillOutputRef(sample_grasp_pose.position)', 'quaternion_wxyz': 'SkillOutputRef(sample_grasp_pose.quaternion_wxyz)'}), SkillCall(skill=SkillRef(skill_id='close_gripper', version='capx-compat-1'), args={})), inputs=(), outputs=(), preconditions=('scene_fresh(1000)',), postconditions=('object_in_gripper(akita black bowl)', 'gripper_closed()'), resources=(ResourceRequirement(resource_id='robot_arm', mode='exclusive'), ResourceRequirement(resource_id='gripper', mode='exclusive')), max_duration_ms=15000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='If grasp sampling or motion fails, stop with gripper state observable and route to failure checkpoint; do not retry without a fresh scene snapshot.', node_type='action', motion_intent=MotionIntent(kind='grasp', object_track_id='akita black bowl', target_track_id=None, approach_vector_xyz=(0.0, 0.0, -1.0), standoff_m=0.08, target_pose_wxyz_xyz=(0.08563322695490952, 0.13373579578675873, 0.9872887303238777, -0.00653072293370746, 0.6043336805436834, 0.211015603639419, 0.02074547249039447))), SubgraphNodeSpec(node_id='cp_verify_pick_akita_black_bowl', description='Validate that the akita black bowl is in the gripper and the gripper is closed.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_in_gripper(akita black bowl)', 'gripper_closed()'), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='On validation failure, preserve current state and report failure for replanning with a fresh scene snapshot.', node_type='checkpoint', motion_intent=None), SubgraphNodeSpec(node_id='cp_pick_failure_open_gripper', description='Validate observable failure condition for an unsuccessful pick attempt.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('gripper_open()',), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='Stop and request replanning after failure checkpoint validation.', node_type='checkpoint', motion_intent=None)), edges=(GraphEdge(source='act_pick_akita_black_bowl', target='cp_verify_pick_akita_black_bowl', condition='skill_sequence_complete'), GraphEdge(source='act_pick_akita_black_bowl', target='cp_pick_failure_open_gripper', condition='failure')), entry_node='act_pick_akita_black_bowl', success_nodes=('cp_verify_pick_akita_black_bowl',), failure_nodes=('cp_pick_failure_open_gripper',), inputs=(), outputs=(), bindings=(), output_bindings=(), checkpoints=(CheckpointSpec(name='verify_pick_akita_black_bowl', predicates=('object_in_gripper(akita black bowl)', 'gripper_closed()'), validate=True, weight=1.0), CheckpointSpec(name='verify_pick_failure_open_gripper', predicates=('gripper_open()',), validate=True, weight=1.0)), assigned_agent='robot', loops=()), rewrite_report=CandidateRewriteReport(raw_fingerprint='c70de77ffc5540ba0ee3ccb291cef006c2b2260758aa8650d72854d38ca330ac', normalized_fingerprint='551bb406e1c30901024a2fdf2130d8c328841a8c744d9c0f41939abe6c5bc162', changed=True, rewrite_count=1, operations=('scene_or_safety_normalization',)))), rejections=(), selection_basis='evidence_score', tie_broken=False, score_breakdowns={'sg_pick_akita_black_bowl:policy-0:0': {'perception': 0.25}, 'sg_pick_akita_black_bowl:policy-1:safety:1': {'perception': 0.55}})",
+    "sg_place_akita_black_bowl_on_plate": "ArbitrationResult(selected=GraphCandidate(candidate_id='sg_place_akita_black_bowl_on_plate:policy-1:safety:1', subgraph=SubgraphSpec(subgraph_id='sg_place_akita_black_bowl_on_plate', subgoal_id='place_akita_black_bowl_on_plate', description='Place the akita black bowl on the plate, then release it and validate the requested placement predicates.', nodes=(SubgraphNodeSpec(node_id='place_akita_black_bowl_on_plate_action', description='Move the grasped akita black bowl to a conservative release pose above the plate and open the gripper.', skill_calls=(SkillCall(skill=SkillRef(skill_id='goto_pose', version='capx-compat-1'), args={'position': (0.7240562703064574, 0.2149666809305928, 0.0008378472539520818), 'quaternion_wxyz': (0.0, 1.0, 0.0, 0.0), 'z_approach': 0.12}), SkillCall(skill=SkillRef(skill_id='open_gripper', version='capx-compat-1'), args={})), inputs=(), outputs=(), preconditions=('object_in_gripper(akita black bowl)',), postconditions=('object_at_target(akita black bowl,plate)', 'gripper_open()'), resources=(ResourceRequirement(resource_id='robot.arm', mode='exclusive'), ResourceRequirement(resource_id='robot.gripper', mode='exclusive')), max_duration_ms=10000, max_sim_steps=200, proposed_by='local_policy_agent', recovery_policy='If placement validation fails while the bowl remains in the gripper, keep the gripper closed and replan a safer placement pose above the plate; otherwise stop for inspection.', node_type='action', motion_intent=MotionIntent(kind='place', object_track_id='akita black bowl', target_track_id='plate', approach_vector_xyz=(0.0, 0.0, -1.0), standoff_m=0.08, target_pose_wxyz_xyz=(0.0, 1.0, 0.0, 0.0, 0.7240562703064574, 0.2149666809305928, 0.0008378472539520818))), SubgraphNodeSpec(node_id='place_success_checkpoint', description='Validate that the akita black bowl is at the plate and the gripper is open.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_at_target(akita black bowl,plate)', 'gripper_open()'), resources=(), max_duration_ms=1000, max_sim_steps=20, proposed_by='local_policy_agent', recovery_policy='Proceed only if both placement predicates are observed.', node_type='checkpoint', motion_intent=None), SubgraphNodeSpec(node_id='place_failure_checkpoint', description='Validate recoverable failure condition that the akita black bowl remains in the gripper.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_in_gripper(akita black bowl)',), resources=(), max_duration_ms=1000, max_sim_steps=20, proposed_by='local_policy_agent', recovery_policy='If the bowl remains in the gripper, replan placement with adjusted height or approach.', node_type='checkpoint', motion_intent=None)), edges=(GraphEdge(source='place_akita_black_bowl_on_plate_action', target='place_success_checkpoint', condition='success'), GraphEdge(source='place_success_checkpoint', target='place_failure_checkpoint', condition='if_success_validation_fails')), entry_node='place_akita_black_bowl_on_plate_action', success_nodes=('place_success_checkpoint',), failure_nodes=('place_failure_checkpoint',), inputs=(), outputs=(), bindings=(), output_bindings=(), checkpoints=(CheckpointSpec(name='place_success_validation', predicates=('object_at_target(akita black bowl,plate)', 'gripper_open()'), validate=True, weight=1.0), CheckpointSpec(name='place_failure_validation', predicates=('object_in_gripper(akita black bowl)',), validate=True, weight=1.0)), assigned_agent='robot', loops=()), parent_scene_version=0, producer_agent='policy-1:safety', confidence=None, rationale='', evidence=CandidateEvidence(verifier_pass_rate=0.0, rehearsal_success_rate=0.0, ood_success_rate=0.0, expected_latency_ms=0.0, recovery_cost=0.0, evidence_refs=(), perception=PerceptionEvidence(scene_freshness=1.0, scene_confidence=1.0, target_visibility=1.0, track_confidence=1.0, identity_confidence=1.0, pose_reliability=1.0, evidence_refs=()), geometry=None, available_metrics=('perception',), scene_version=0, provider='libero_scene_snapshot', captured_at_ns=1785398735011486209, verifier=VerifierEvidence(candidate_fingerprint='9800bfc263b1e390548fb031fdc61436b5d79721c4eab448eb209d24964af4c0', scene_version=0, pass_rate=0.0, coverage=0.0, provider='libero_observable_verifier.static', captured_at_ns=1785398735011486209, static_results=(), dynamic_results=(), source_verification=None)), strategy='safety', raw_subgraph=SubgraphSpec(subgraph_id='sg_place_akita_black_bowl_on_plate', subgoal_id='place_akita_black_bowl_on_plate', description='Place the akita black bowl on the plate, then release it and validate the requested placement predicates.', nodes=(SubgraphNodeSpec(node_id='place_akita_black_bowl_on_plate_action', description='Move the grasped akita black bowl to a conservative release pose above the plate and open the gripper.', skill_calls=(SkillCall(skill=SkillRef(skill_id='goto_pose', version='capx-compat-1'), args={'position': '[0.7240562703064574, 0.2149666809305928, 0.08083784725395208]', 'quaternion_wxyz': '[-0.000006995296258254999, 0.9995966048795351, 0.0002462128340272596, -0.02840012048587299]'}), SkillCall(skill=SkillRef(skill_id='open_gripper', version='capx-compat-1'), args={})), inputs=(), outputs=(), preconditions=('object_in_gripper(akita black bowl)',), postconditions=('object_at_target(akita black bowl,plate)', 'gripper_open()'), resources=(ResourceRequirement(resource_id='robot.arm', mode='exclusive'), ResourceRequirement(resource_id='robot.gripper', mode='exclusive')), max_duration_ms=10000, max_sim_steps=200, proposed_by='local_policy_agent', recovery_policy='If placement validation fails while the bowl remains in the gripper, keep the gripper closed and replan a safer placement pose above the plate; otherwise stop for inspection.', node_type='action', motion_intent=MotionIntent(kind='place', object_track_id='akita black bowl', target_track_id='plate', approach_vector_xyz=(0.0, 0.0, -1.0), standoff_m=0.08, target_pose_wxyz_xyz=(0.0024766578812275516, -0.6781668495361818, 0.7346411349160795, 0.019646710796559674, 0.7240562703064574, 0.2149666809305928, 0.0008378472539520818))), SubgraphNodeSpec(node_id='place_success_checkpoint', description='Validate that the akita black bowl is at the plate and the gripper is open.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_at_target(akita black bowl,plate)', 'gripper_open()'), resources=(), max_duration_ms=1000, max_sim_steps=20, proposed_by='local_policy_agent', recovery_policy='Proceed only if both placement predicates are observed.', node_type='checkpoint', motion_intent=None), SubgraphNodeSpec(node_id='place_failure_checkpoint', description='Validate recoverable failure condition that the akita black bowl remains in the gripper.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_in_gripper(akita black bowl)',), resources=(), max_duration_ms=1000, max_sim_steps=20, proposed_by='local_policy_agent', recovery_policy='If the bowl remains in the gripper, replan placement with adjusted height or approach.', node_type='checkpoint', motion_intent=None)), edges=(GraphEdge(source='place_akita_black_bowl_on_plate_action', target='place_success_checkpoint', condition='success'), GraphEdge(source='place_success_checkpoint', target='place_failure_checkpoint', condition='if_success_validation_fails')), entry_node='place_akita_black_bowl_on_plate_action', success_nodes=('place_success_checkpoint',), failure_nodes=('place_failure_checkpoint',), inputs=(), outputs=(), bindings=(), output_bindings=(), checkpoints=(CheckpointSpec(name='place_success_validation', predicates=('object_at_target(akita black bowl,plate)', 'gripper_open()'), validate=True, weight=1.0), CheckpointSpec(name='place_failure_validation', predicates=('object_in_gripper(akita black bowl)',), validate=True, weight=1.0)), assigned_agent='robot', loops=()), rewrite_report=CandidateRewriteReport(raw_fingerprint='45fbdba841f005d5b3c0cc1b6813ee3400d67b7bcdd783ec6194517ab3345a9e', normalized_fingerprint='9800bfc263b1e390548fb031fdc61436b5d79721c4eab448eb209d24964af4c0', changed=True, rewrite_count=1, operations=('scene_or_safety_normalization',))), considered=(GraphCandidate(candidate_id='sg_place_akita_black_bowl_on_plate:policy-0:0', subgraph=SubgraphSpec(subgraph_id='sg_place_akita_black_bowl_on_plate', subgoal_id='place_akita_black_bowl_on_plate', description='Place the akita black bowl on the plate.', nodes=(SubgraphNodeSpec(node_id='place_akita_black_bowl_on_plate_action', description='Move the grasped akita black bowl to the plate pose and release it.', skill_calls=(SkillCall(skill=SkillRef(skill_id='goto_pose', version='capx-compat-1'), args={'position': (0.7240562703064574, 0.2149666809305928, 0.0008378472539520818), 'quaternion_wxyz': (0.0, 1.0, 0.0, 0.0), 'z_approach': 0.12}), SkillCall(skill=SkillRef(skill_id='open_gripper', version='capx-compat-1'), args={})), inputs=(), outputs=(), preconditions=('object_in_gripper(akita black bowl)',), postconditions=('object_at_target(akita black bowl,plate)', 'gripper_open()'), resources=(ResourceRequirement(resource_id='robot_arm', mode='exclusive'), ResourceRequirement(resource_id='gripper', mode='exclusive')), max_duration_ms=10000, max_sim_steps=25, proposed_by='local_policy_agent', recovery_policy='If placement verification fails and the bowl remains in gripper, keep grasp and request recovery/retry planning from a fresh scene snapshot.', node_type='action', motion_intent=MotionIntent(kind='place', object_track_id='akita black bowl', target_track_id='plate', approach_vector_xyz=(0.0, 0.0, -1.0), standoff_m=0.05, target_pose_wxyz_xyz=(0.0, 1.0, 0.0, 0.0, 0.7240562703064574, 0.2149666809305928, 0.0008378472539520818))), SubgraphNodeSpec(node_id='place_success_checkpoint', description='Validate that the akita black bowl is on the plate and the gripper is open.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_at_target(akita black bowl,plate)', 'gripper_open()'), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='No recovery needed on successful validation.', node_type='checkpoint', motion_intent=None), SubgraphNodeSpec(node_id='place_failure_checkpoint', description='Validate failure condition that the akita black bowl remains in the gripper.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_in_gripper(akita black bowl)',), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='Preserve grasp and request recovery/retry planning from a fresh scene snapshot.', node_type='checkpoint', motion_intent=None)), edges=(GraphEdge(source='place_akita_black_bowl_on_plate_action', target='place_success_checkpoint', condition='success'), GraphEdge(source='place_akita_black_bowl_on_plate_action', target='place_failure_checkpoint', condition='failure')), entry_node='place_akita_black_bowl_on_plate_action', success_nodes=('place_success_checkpoint',), failure_nodes=('place_failure_checkpoint',), inputs=(), outputs=(), bindings=(), output_bindings=(), checkpoints=(CheckpointSpec(name='verify_place_akita_black_bowl_on_plate', predicates=('object_at_target(akita black bowl,plate)', 'gripper_open()'), validate=True, weight=1.0), CheckpointSpec(name='verify_place_failed_bowl_still_in_gripper', predicates=('object_in_gripper(akita black bowl)',), validate=True, weight=1.0)), assigned_agent='robot', loops=()), parent_scene_version=0, producer_agent='policy-0', confidence=None, rationale='', evidence=CandidateEvidence(verifier_pass_rate=0.0, rehearsal_success_rate=0.0, ood_success_rate=0.0, expected_latency_ms=0.0, recovery_cost=0.0, evidence_refs=(), perception=PerceptionEvidence(scene_freshness=1.0, scene_confidence=1.0, target_visibility=1.0, track_confidence=1.0, identity_confidence=1.0, pose_reliability=1.0, evidence_refs=()), geometry=None, available_metrics=('perception',), scene_version=0, provider='libero_scene_snapshot', captured_at_ns=1785398735011486209, verifier=VerifierEvidence(candidate_fingerprint='b34bdfd0007995aa06d2754e007d96e14db8ca6a1a982d397a3db16f706b3174', scene_version=0, pass_rate=0.0, coverage=0.0, provider='libero_observable_verifier.static', captured_at_ns=1785398735011486209, static_results=(), dynamic_results=(), source_verification=None)), strategy='balanced', raw_subgraph=SubgraphSpec(subgraph_id='sg_place_akita_black_bowl_on_plate', subgoal_id='place_akita_black_bowl_on_plate', description='Place the akita black bowl on the plate.', nodes=(SubgraphNodeSpec(node_id='place_akita_black_bowl_on_plate_action', description='Move the grasped akita black bowl to the plate pose and release it.', skill_calls=(SkillCall(skill=SkillRef(skill_id='goto_pose', version='capx-compat-1'), args={'position': '[0.7240562703064574, 0.2149666809305928, 0.08083784725395208]', 'quaternion_wxyz': '[0.0024766578812275516, -0.6781668495361818, 0.7346411349160795, 0.019646710796559674]'}), SkillCall(skill=SkillRef(skill_id='open_gripper', version='capx-compat-1'), args={})), inputs=(), outputs=(), preconditions=('object_in_gripper(akita black bowl)',), postconditions=('object_at_target(akita black bowl,plate)', 'gripper_open()'), resources=(ResourceRequirement(resource_id='robot_arm', mode='exclusive'), ResourceRequirement(resource_id='gripper', mode='exclusive')), max_duration_ms=10000, max_sim_steps=25, proposed_by='local_policy_agent', recovery_policy='If placement verification fails and the bowl remains in gripper, keep grasp and request recovery/retry planning from a fresh scene snapshot.', node_type='action', motion_intent=MotionIntent(kind='place', object_track_id='akita black bowl', target_track_id='plate', approach_vector_xyz=(0.0, 0.0, -1.0), standoff_m=0.05, target_pose_wxyz_xyz=(0.0024766578812275516, -0.6781668495361818, 0.7346411349160795, 0.019646710796559674, 0.7240562703064574, 0.2149666809305928, 0.0008378472539520818))), SubgraphNodeSpec(node_id='place_success_checkpoint', description='Validate that the akita black bowl is on the plate and the gripper is open.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_at_target(akita black bowl,plate)', 'gripper_open()'), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='No recovery needed on successful validation.', node_type='checkpoint', motion_intent=None), SubgraphNodeSpec(node_id='place_failure_checkpoint', description='Validate failure condition that the akita black bowl remains in the gripper.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_in_gripper(akita black bowl)',), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='local_policy_agent', recovery_policy='Preserve grasp and request recovery/retry planning from a fresh scene snapshot.', node_type='checkpoint', motion_intent=None)), edges=(GraphEdge(source='place_akita_black_bowl_on_plate_action', target='place_success_checkpoint', condition='success'), GraphEdge(source='place_akita_black_bowl_on_plate_action', target='place_failure_checkpoint', condition='failure')), entry_node='place_akita_black_bowl_on_plate_action', success_nodes=('place_success_checkpoint',), failure_nodes=('place_failure_checkpoint',), inputs=(), outputs=(), bindings=(), output_bindings=(), checkpoints=(CheckpointSpec(name='verify_place_akita_black_bowl_on_plate', predicates=('object_at_target(akita black bowl,plate)', 'gripper_open()'), validate=True, weight=1.0), CheckpointSpec(name='verify_place_failed_bowl_still_in_gripper', predicates=('object_in_gripper(akita black bowl)',), validate=True, weight=1.0)), assigned_agent='robot', loops=()), rewrite_report=CandidateRewriteReport(raw_fingerprint='faa39642e9098c5aa804f7cef3c845e0e3500dca7bbbf507155adabf92beec05', normalized_fingerprint='b34bdfd0007995aa06d2754e007d96e14db8ca6a1a982d397a3db16f706b3174', changed=True, rewrite_count=1, operations=('scene_or_safety_normalization',))), GraphCandidate(candidate_id='sg_place_akita_black_bowl_on_plate:policy-1:safety:1', subgraph=SubgraphSpec(subgraph_id='sg_place_akita_black_bowl_on_plate', subgoal_id='place_akita_black_bowl_on_plate', description='Place the akita black bowl on the plate, then release it and validate the requested placement predicates.', nodes=(SubgraphNodeSpec(node_id='place_akita_black_bowl_on_plate_action', description='Move the grasped akita black bowl to a conservative release pose above the plate and open the gripper.', skill_calls=(SkillCall(skill=SkillRef(skill_id='goto_pose', version='capx-compat-1'), args={'position': (0.7240562703064574, 0.2149666809305928, 0.0008378472539520818), 'quaternion_wxyz': (0.0, 1.0, 0.0, 0.0), 'z_approach': 0.12}), SkillCall(skill=SkillRef(skill_id='open_gripper', version='capx-compat-1'), args={})), inputs=(), outputs=(), preconditions=('object_in_gripper(akita black bowl)',), postconditions=('object_at_target(akita black bowl,plate)', 'gripper_open()'), resources=(ResourceRequirement(resource_id='robot.arm', mode='exclusive'), ResourceRequirement(resource_id='robot.gripper', mode='exclusive')), max_duration_ms=10000, max_sim_steps=200, proposed_by='local_policy_agent', recovery_policy='If placement validation fails while the bowl remains in the gripper, keep the gripper closed and replan a safer placement pose above the plate; otherwise stop for inspection.', node_type='action', motion_intent=MotionIntent(kind='place', object_track_id='akita black bowl', target_track_id='plate', approach_vector_xyz=(0.0, 0.0, -1.0), standoff_m=0.08, target_pose_wxyz_xyz=(0.0, 1.0, 0.0, 0.0, 0.7240562703064574, 0.2149666809305928, 0.0008378472539520818))), SubgraphNodeSpec(node_id='place_success_checkpoint', description='Validate that the akita black bowl is at the plate and the gripper is open.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_at_target(akita black bowl,plate)', 'gripper_open()'), resources=(), max_duration_ms=1000, max_sim_steps=20, proposed_by='local_policy_agent', recovery_policy='Proceed only if both placement predicates are observed.', node_type='checkpoint', motion_intent=None), SubgraphNodeSpec(node_id='place_failure_checkpoint', description='Validate recoverable failure condition that the akita black bowl remains in the gripper.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_in_gripper(akita black bowl)',), resources=(), max_duration_ms=1000, max_sim_steps=20, proposed_by='local_policy_agent', recovery_policy='If the bowl remains in the gripper, replan placement with adjusted height or approach.', node_type='checkpoint', motion_intent=None)), edges=(GraphEdge(source='place_akita_black_bowl_on_plate_action', target='place_success_checkpoint', condition='success'), GraphEdge(source='place_success_checkpoint', target='place_failure_checkpoint', condition='if_success_validation_fails')), entry_node='place_akita_black_bowl_on_plate_action', success_nodes=('place_success_checkpoint',), failure_nodes=('place_failure_checkpoint',), inputs=(), outputs=(), bindings=(), output_bindings=(), checkpoints=(CheckpointSpec(name='place_success_validation', predicates=('object_at_target(akita black bowl,plate)', 'gripper_open()'), validate=True, weight=1.0), CheckpointSpec(name='place_failure_validation', predicates=('object_in_gripper(akita black bowl)',), validate=True, weight=1.0)), assigned_agent='robot', loops=()), parent_scene_version=0, producer_agent='policy-1:safety', confidence=None, rationale='', evidence=CandidateEvidence(verifier_pass_rate=0.0, rehearsal_success_rate=0.0, ood_success_rate=0.0, expected_latency_ms=0.0, recovery_cost=0.0, evidence_refs=(), perception=PerceptionEvidence(scene_freshness=1.0, scene_confidence=1.0, target_visibility=1.0, track_confidence=1.0, identity_confidence=1.0, pose_reliability=1.0, evidence_refs=()), geometry=None, available_metrics=('perception',), scene_version=0, provider='libero_scene_snapshot', captured_at_ns=1785398735011486209, verifier=VerifierEvidence(candidate_fingerprint='9800bfc263b1e390548fb031fdc61436b5d79721c4eab448eb209d24964af4c0', scene_version=0, pass_rate=0.0, coverage=0.0, provider='libero_observable_verifier.static', captured_at_ns=1785398735011486209, static_results=(), dynamic_results=(), source_verification=None)), strategy='safety', raw_subgraph=SubgraphSpec(subgraph_id='sg_place_akita_black_bowl_on_plate', subgoal_id='place_akita_black_bowl_on_plate', description='Place the akita black bowl on the plate, then release it and validate the requested placement predicates.', nodes=(SubgraphNodeSpec(node_id='place_akita_black_bowl_on_plate_action', description='Move the grasped akita black bowl to a conservative release pose above the plate and open the gripper.', skill_calls=(SkillCall(skill=SkillRef(skill_id='goto_pose', version='capx-compat-1'), args={'position': '[0.7240562703064574, 0.2149666809305928, 0.08083784725395208]', 'quaternion_wxyz': '[-0.000006995296258254999, 0.9995966048795351, 0.0002462128340272596, -0.02840012048587299]'}), SkillCall(skill=SkillRef(skill_id='open_gripper', version='capx-compat-1'), args={})), inputs=(), outputs=(), preconditions=('object_in_gripper(akita black bowl)',), postconditions=('object_at_target(akita black bowl,plate)', 'gripper_open()'), resources=(ResourceRequirement(resource_id='robot.arm', mode='exclusive'), ResourceRequirement(resource_id='robot.gripper', mode='exclusive')), max_duration_ms=10000, max_sim_steps=200, proposed_by='local_policy_agent', recovery_policy='If placement validation fails while the bowl remains in the gripper, keep the gripper closed and replan a safer placement pose above the plate; otherwise stop for inspection.', node_type='action', motion_intent=MotionIntent(kind='place', object_track_id='akita black bowl', target_track_id='plate', approach_vector_xyz=(0.0, 0.0, -1.0), standoff_m=0.08, target_pose_wxyz_xyz=(0.0024766578812275516, -0.6781668495361818, 0.7346411349160795, 0.019646710796559674, 0.7240562703064574, 0.2149666809305928, 0.0008378472539520818))), SubgraphNodeSpec(node_id='place_success_checkpoint', description='Validate that the akita black bowl is at the plate and the gripper is open.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_at_target(akita black bowl,plate)', 'gripper_open()'), resources=(), max_duration_ms=1000, max_sim_steps=20, proposed_by='local_policy_agent', recovery_policy='Proceed only if both placement predicates are observed.', node_type='checkpoint', motion_intent=None), SubgraphNodeSpec(node_id='place_failure_checkpoint', description='Validate recoverable failure condition that the akita black bowl remains in the gripper.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('object_in_gripper(akita black bowl)',), resources=(), max_duration_ms=1000, max_sim_steps=20, proposed_by='local_policy_agent', recovery_policy='If the bowl remains in the gripper, replan placement with adjusted height or approach.', node_type='checkpoint', motion_intent=None)), edges=(GraphEdge(source='place_akita_black_bowl_on_plate_action', target='place_success_checkpoint', condition='success'), GraphEdge(source='place_success_checkpoint', target='place_failure_checkpoint', condition='if_success_validation_fails')), entry_node='place_akita_black_bowl_on_plate_action', success_nodes=('place_success_checkpoint',), failure_nodes=('place_failure_checkpoint',), inputs=(), outputs=(), bindings=(), output_bindings=(), checkpoints=(CheckpointSpec(name='place_success_validation', predicates=('object_at_target(akita black bowl,plate)', 'gripper_open()'), validate=True, weight=1.0), CheckpointSpec(name='place_failure_validation', predicates=('object_in_gripper(akita black bowl)',), validate=True, weight=1.0)), assigned_agent='robot', loops=()), rewrite_report=CandidateRewriteReport(raw_fingerprint='45fbdba841f005d5b3c0cc1b6813ee3400d67b7bcdd783ec6194517ab3345a9e', normalized_fingerprint='9800bfc263b1e390548fb031fdc61436b5d79721c4eab448eb209d24964af4c0', changed=True, rewrite_count=1, operations=('scene_or_safety_normalization',)))), rejections=(), selection_basis='evidence_score', tie_broken=False, score_breakdowns={'sg_place_akita_black_bowl_on_plate:policy-0:0': {'perception': 0.25}, 'sg_place_akita_black_bowl_on_plate:policy-1:safety:1': {'perception': 0.55}})",
+    "sg_verify_akita_black_bowl_on_plate": "ArbitrationResult(selected=GraphCandidate(candidate_id='sg_verify_akita_black_bowl_on_plate:checkpoint_compiler:0', subgraph=SubgraphSpec(subgraph_id='sg_verify_akita_black_bowl_on_plate', subgoal_id='verify_akita_black_bowl_on_plate', description='Verify the akita black bowl is on the plate with a fresh scene observation.', nodes=(SubgraphNodeSpec(node_id='sg_verify_akita_black_bowl_on_plate:checkpoint', description='Verify the akita black bowl is on the plate with a fresh scene observation.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('scene_fresh(1000)', 'object_at_target(akita black bowl,plate)'), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='checkpoint_compiler', recovery_policy='replan', node_type='checkpoint', motion_intent=None), SubgraphNodeSpec(node_id='sg_verify_akita_black_bowl_on_plate:checkpoint_failure', description='record failed checkpoint for verify_akita_black_bowl_on_plate', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=(), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='checkpoint_compiler', recovery_policy='fail_terminal', node_type='checkpoint', motion_intent=None)), edges=(GraphEdge(source='sg_verify_akita_black_bowl_on_plate:checkpoint', target='sg_verify_akita_black_bowl_on_plate:checkpoint_failure', condition='failure'),), entry_node='sg_verify_akita_black_bowl_on_plate:checkpoint', success_nodes=('sg_verify_akita_black_bowl_on_plate:checkpoint',), failure_nodes=('sg_verify_akita_black_bowl_on_plate:checkpoint_failure',), inputs=(), outputs=(), bindings=(), output_bindings=(), checkpoints=(CheckpointSpec(name='sg_verify_akita_black_bowl_on_plate:checkpoint', predicates=('scene_fresh(1000)', 'object_at_target(akita black bowl,plate)'), validate=True, weight=1.0),), assigned_agent='checkpoint_compiler', loops=()), parent_scene_version=0, producer_agent='checkpoint_compiler', confidence=None, rationale='', evidence=None, strategy='balanced', raw_subgraph=SubgraphSpec(subgraph_id='sg_verify_akita_black_bowl_on_plate', subgoal_id='verify_akita_black_bowl_on_plate', description='Verify the akita black bowl is on the plate with a fresh scene observation.', nodes=(SubgraphNodeSpec(node_id='sg_verify_akita_black_bowl_on_plate:checkpoint', description='Verify the akita black bowl is on the plate with a fresh scene observation.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('scene_fresh(1000)', 'object_at_target(akita black bowl,plate)'), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='checkpoint_compiler', recovery_policy='replan', node_type='checkpoint', motion_intent=None), SubgraphNodeSpec(node_id='sg_verify_akita_black_bowl_on_plate:checkpoint_failure', description='record failed checkpoint for verify_akita_black_bowl_on_plate', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=(), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='checkpoint_compiler', recovery_policy='fail_terminal', node_type='checkpoint', motion_intent=None)), edges=(GraphEdge(source='sg_verify_akita_black_bowl_on_plate:checkpoint', target='sg_verify_akita_black_bowl_on_plate:checkpoint_failure', condition='failure'),), entry_node='sg_verify_akita_black_bowl_on_plate:checkpoint', success_nodes=('sg_verify_akita_black_bowl_on_plate:checkpoint',), failure_nodes=('sg_verify_akita_black_bowl_on_plate:checkpoint_failure',), inputs=(), outputs=(), bindings=(), output_bindings=(), checkpoints=(CheckpointSpec(name='sg_verify_akita_black_bowl_on_plate:checkpoint', predicates=('scene_fresh(1000)', 'object_at_target(akita black bowl,plate)'), validate=True, weight=1.0),), assigned_agent='checkpoint_compiler', loops=()), rewrite_report=CandidateRewriteReport(raw_fingerprint='', normalized_fingerprint='', changed=False, rewrite_count=0, operations=())), considered=(GraphCandidate(candidate_id='sg_verify_akita_black_bowl_on_plate:checkpoint_compiler:0', subgraph=SubgraphSpec(subgraph_id='sg_verify_akita_black_bowl_on_plate', subgoal_id='verify_akita_black_bowl_on_plate', description='Verify the akita black bowl is on the plate with a fresh scene observation.', nodes=(SubgraphNodeSpec(node_id='sg_verify_akita_black_bowl_on_plate:checkpoint', description='Verify the akita black bowl is on the plate with a fresh scene observation.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('scene_fresh(1000)', 'object_at_target(akita black bowl,plate)'), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='checkpoint_compiler', recovery_policy='replan', node_type='checkpoint', motion_intent=None), SubgraphNodeSpec(node_id='sg_verify_akita_black_bowl_on_plate:checkpoint_failure', description='record failed checkpoint for verify_akita_black_bowl_on_plate', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=(), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='checkpoint_compiler', recovery_policy='fail_terminal', node_type='checkpoint', motion_intent=None)), edges=(GraphEdge(source='sg_verify_akita_black_bowl_on_plate:checkpoint', target='sg_verify_akita_black_bowl_on_plate:checkpoint_failure', condition='failure'),), entry_node='sg_verify_akita_black_bowl_on_plate:checkpoint', success_nodes=('sg_verify_akita_black_bowl_on_plate:checkpoint',), failure_nodes=('sg_verify_akita_black_bowl_on_plate:checkpoint_failure',), inputs=(), outputs=(), bindings=(), output_bindings=(), checkpoints=(CheckpointSpec(name='sg_verify_akita_black_bowl_on_plate:checkpoint', predicates=('scene_fresh(1000)', 'object_at_target(akita black bowl,plate)'), validate=True, weight=1.0),), assigned_agent='checkpoint_compiler', loops=()), parent_scene_version=0, producer_agent='checkpoint_compiler', confidence=None, rationale='', evidence=None, strategy='balanced', raw_subgraph=SubgraphSpec(subgraph_id='sg_verify_akita_black_bowl_on_plate', subgoal_id='verify_akita_black_bowl_on_plate', description='Verify the akita black bowl is on the plate with a fresh scene observation.', nodes=(SubgraphNodeSpec(node_id='sg_verify_akita_black_bowl_on_plate:checkpoint', description='Verify the akita black bowl is on the plate with a fresh scene observation.', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=('scene_fresh(1000)', 'object_at_target(akita black bowl,plate)'), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='checkpoint_compiler', recovery_policy='replan', node_type='checkpoint', motion_intent=None), SubgraphNodeSpec(node_id='sg_verify_akita_black_bowl_on_plate:checkpoint_failure', description='record failed checkpoint for verify_akita_black_bowl_on_plate', skill_calls=(), inputs=(), outputs=(), preconditions=(), postconditions=(), resources=(), max_duration_ms=1000, max_sim_steps=1, proposed_by='checkpoint_compiler', recovery_policy='fail_terminal', node_type='checkpoint', motion_intent=None)), edges=(GraphEdge(source='sg_verify_akita_black_bowl_on_plate:checkpoint', target='sg_verify_akita_black_bowl_on_plate:checkpoint_failure', condition='failure'),), entry_node='sg_verify_akita_black_bowl_on_plate:checkpoint', success_nodes=('sg_verify_akita_black_bowl_on_plate:checkpoint',), failure_nodes=('sg_verify_akita_black_bowl_on_plate:checkpoint_failure',), inputs=(), outputs=(), bindings=(), output_bindings=(), checkpoints=(CheckpointSpec(name='sg_verify_akita_black_bowl_on_plate:checkpoint', predicates=('scene_fresh(1000)', 'object_at_target(akita black bowl,plate)'), validate=True, weight=1.0),), assigned_agent='checkpoint_compiler', loops=()), rewrite_report=CandidateRewriteReport(raw_fingerprint='', normalized_fingerprint='', changed=False, rewrite_count=0, operations=())),), rejections=(), selection_basis='deterministic_checkpoint', tie_broken=False, score_breakdowns={})"
+  },
+  "baseline": "B3-LLM-staged-fixed_graph",
+  "evaluator_success": true,
+  "graph": {
+    "bindings": [],
+    "edges": [
+      {
+        "condition": "success",
+        "source": "sg_pick_akita_black_bowl",
+        "target": "sg_place_akita_black_bowl_on_plate"
+      },
+      {
+        "condition": "success",
+        "source": "sg_place_akita_black_bowl_on_plate",
+        "target": "sg_verify_akita_black_bowl_on_plate"
+      }
+    ],
+    "entry_subgraph": "sg_pick_akita_black_bowl",
+    "failure_subgraphs": [
+      "sg_place_akita_black_bowl_on_plate"
+    ],
+    "graph_version": 1,
+    "loops": [],
+    "mission_id": "mission_d6d86cd9_akita_black_bowl_to_plate",
+    "parent_scene_version": 1,
+    "schema_version": 1,
+    "subgraphs": [
+      {
+        "assigned_agent": "robot",
+        "bindings": [],
+        "checkpoints": [
+          {
+            "name": "verify_pick_akita_black_bowl",
+            "predicates": [
+              "object_in_gripper(akita black bowl)",
+              "gripper_closed()"
+            ],
+            "validate": true,
+            "weight": 1.0
+          },
+          {
+            "name": "verify_pick_failure_open_gripper",
+            "predicates": [
+              "gripper_open()"
+            ],
+            "validate": true,
+            "weight": 1.0
+          }
+        ],
+        "description": "Pick the akita black bowl using a sampled grasp pose, guarded by success and failure checkpoints.",
+        "edges": [
+          {
+            "condition": "skill_sequence_complete",
+            "source": "act_pick_akita_black_bowl",
+            "target": "cp_verify_pick_akita_black_bowl"
+          },
+          {
+            "condition": "failure",
+            "source": "act_pick_akita_black_bowl",
+            "target": "cp_pick_failure_open_gripper"
+          }
+        ],
+        "entry_node": "act_pick_akita_black_bowl",
+        "failure_nodes": [
+          "cp_pick_failure_open_gripper"
+        ],
+        "inputs": [],
+        "loops": [],
+        "nodes": [
+          {
+            "description": "Sample a grasp for the akita black bowl, move to the sampled grasp pose, and close the gripper.",
+            "inputs": [],
+            "max_duration_ms": 15000,
+            "max_sim_steps": 1,
+            "motion_intent": {
+              "approach_vector_xyz": [
+                0.0,
+                0.0,
+                -1.0
+              ],
+              "kind": "grasp",
+              "object_track_id": "akita black bowl",
+              "standoff_m": 0.08,
+              "target_pose_wxyz_xyz": [
+                0.08563322695490952,
+                0.13373579578675873,
+                0.9872887303238777,
+                -0.00653072293370746,
+                0.6043336805436834,
+                0.211015603639419,
+                0.02074547249039447
+              ],
+              "target_track_id": null
+            },
+            "node_id": "act_pick_akita_black_bowl",
+            "node_type": "action",
+            "outputs": [],
+            "postconditions": [
+              "object_in_gripper(akita black bowl)",
+              "gripper_closed()"
+            ],
+            "preconditions": [
+              "scene_fresh(1000)"
+            ],
+            "proposed_by": "local_policy_agent",
+            "recovery_policy": "If grasp sampling or motion fails, stop with gripper state observable and route to failure checkpoint; do not retry without a fresh scene snapshot.",
+            "resources": [
+              {
+                "mode": "exclusive",
+                "resource_id": "robot_arm"
+              },
+              {
+                "mode": "exclusive",
+                "resource_id": "gripper"
+              }
+            ],
+            "skill_calls": [
+              {
+                "args": {
+                  "object_name": "akita black bowl",
+                  "use_multiview": true
+                },
+                "skill": {
+                  "skill_id": "sample_grasp_pose",
+                  "version": "capx-compat-1"
+                }
+              },
+              {
+                "args": {
+                  "position": {
+                    "$skill_output": 0,
+                    "path": [
+                      "result",
+                      0
+                    ]
+                  },
+                  "quaternion_wxyz": {
+                    "$skill_output": 0,
+                    "path": [
+                      "result",
+                      1
+                    ]
+                  },
+                  "z_approach": 0.1
+                },
+                "skill": {
+                  "skill_id": "goto_pose",
+                  "version": "capx-compat-1"
+                }
+              },
+              {
+                "args": {},
+                "skill": {
+                  "skill_id": "close_gripper",
+                  "version": "capx-compat-1"
+                }
+              },
+              {
+                "args": {
+                  "position": {
+                    "$skill_output": 0,
+                    "path": [
+                      "result",
+                      0
+                    ]
+                  },
+                  "quaternion_wxyz": {
+                    "$skill_output": 0,
+                    "path": [
+                      "result",
+                      1
+                    ]
+                  },
+                  "z_lift": 0.12
+                },
+                "skill": {
+                  "skill_id": "lift_after_grasp",
+                  "version": "capx-compat-1"
+                }
+              }
+            ]
+          },
+          {
+            "description": "Validate that the akita black bowl is in the gripper and the gripper is closed.",
+            "inputs": [],
+            "max_duration_ms": 1000,
+            "max_sim_steps": 1,
+            "motion_intent": null,
+            "node_id": "cp_verify_pick_akita_black_bowl",
+            "node_type": "checkpoint",
+            "outputs": [],
+            "postconditions": [
+              "object_in_gripper(akita black bowl)",
+              "gripper_closed()"
+            ],
+            "preconditions": [],
+            "proposed_by": "local_policy_agent",
+            "recovery_policy": "On validation failure, preserve current state and report failure for replanning with a fresh scene snapshot.",
+            "resources": [],
+            "skill_calls": []
+          },
+          {
+            "description": "Validate observable failure condition for an unsuccessful pick attempt.",
+            "inputs": [],
+            "max_duration_ms": 1000,
+            "max_sim_steps": 1,
+            "motion_intent": null,
+            "node_id": "cp_pick_failure_open_gripper",
+            "node_type": "checkpoint",
+            "outputs": [],
+            "postconditions": [
+              "gripper_open()"
+            ],
+            "preconditions": [],
+            "proposed_by": "local_policy_agent",
+            "recovery_policy": "Stop and request replanning after failure checkpoint validation.",
+            "resources": [],
+            "skill_calls": []
+          }
+        ],
+        "output_bindings": [],
+        "outputs": [],
+        "subgoal_id": "pick_akita_black_bowl",
+        "subgraph_id": "sg_pick_akita_black_bowl",
+        "success_nodes": [
+          "cp_verify_pick_akita_black_bowl"
+        ]
+      },
+      {
+        "assigned_agent": "robot",
+        "bindings": [],
+        "checkpoints": [
+          {
+            "name": "place_success_validation",
+            "predicates": [
+              "object_at_target(akita black bowl,plate)",
+              "gripper_open()"
+            ],
+            "validate": true,
+            "weight": 1.0
+          },
+          {
+            "name": "place_failure_validation",
+            "predicates": [
+              "object_in_gripper(akita black bowl)"
+            ],
+            "validate": true,
+            "weight": 1.0
+          }
+        ],
+        "description": "Place the akita black bowl on the plate, then release it and validate the requested placement predicates.",
+        "edges": [
+          {
+            "condition": "success",
+            "source": "place_akita_black_bowl_on_plate_action",
+            "target": "place_success_checkpoint"
+          },
+          {
+            "condition": "if_success_validation_fails",
+            "source": "place_success_checkpoint",
+            "target": "place_failure_checkpoint"
+          }
+        ],
+        "entry_node": "place_akita_black_bowl_on_plate_action",
+        "failure_nodes": [
+          "place_failure_checkpoint"
+        ],
+        "inputs": [],
+        "loops": [],
+        "nodes": [
+          {
+            "description": "Move the grasped akita black bowl to a conservative release pose above the plate and open the gripper.",
+            "inputs": [],
+            "max_duration_ms": 10000,
+            "max_sim_steps": 200,
+            "motion_intent": {
+              "approach_vector_xyz": [
+                0.0,
+                0.0,
+                -1.0
+              ],
+              "kind": "place",
+              "object_track_id": "akita black bowl",
+              "standoff_m": 0.08,
+              "target_pose_wxyz_xyz": [
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.7302393822496259,
+                0.2146819558423696,
+                0.0007183794578745372
+              ],
+              "target_track_id": "plate"
+            },
+            "node_id": "place_akita_black_bowl_on_plate_action",
+            "node_type": "action",
+            "outputs": [],
+            "postconditions": [
+              "object_at_target(akita black bowl,plate)",
+              "gripper_open()"
+            ],
+            "preconditions": [
+              "object_in_gripper(akita black bowl)"
+            ],
+            "proposed_by": "local_policy_agent",
+            "recovery_policy": "If placement validation fails while the bowl remains in the gripper, keep the gripper closed and replan a safer placement pose above the plate; otherwise stop for inspection.",
+            "resources": [
+              {
+                "mode": "exclusive",
+                "resource_id": "robot.arm"
+              },
+              {
+                "mode": "exclusive",
+                "resource_id": "robot.gripper"
+              }
+            ],
+            "skill_calls": [
+              {
+                "args": {
+                  "position": [
+                    0.7302393822496259,
+                    0.2146819558423696,
+                    0.0007183794578745372
+                  ],
+                  "quaternion_wxyz": [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  "z_approach": 0.12
+                },
+                "skill": {
+                  "skill_id": "goto_pose",
+                  "version": "capx-compat-1"
+                }
+              },
+              {
+                "args": {},
+                "skill": {
+                  "skill_id": "open_gripper",
+                  "version": "capx-compat-1"
+                }
+              }
+            ]
+          },
+          {
+            "description": "Validate that the akita black bowl is at the plate and the gripper is open.",
+            "inputs": [],
+            "max_duration_ms": 1000,
+            "max_sim_steps": 20,
+            "motion_intent": null,
+            "node_id": "place_success_checkpoint",
+            "node_type": "checkpoint",
+            "outputs": [],
+            "postconditions": [
+              "object_at_target(akita black bowl,plate)",
+              "gripper_open()"
+            ],
+            "preconditions": [],
+            "proposed_by": "local_policy_agent",
+            "recovery_policy": "Proceed only if both placement predicates are observed.",
+            "resources": [],
+            "skill_calls": []
+          },
+          {
+            "description": "Validate recoverable failure condition that the akita black bowl remains in the gripper.",
+            "inputs": [],
+            "max_duration_ms": 1000,
+            "max_sim_steps": 20,
+            "motion_intent": null,
+            "node_id": "place_failure_checkpoint",
+            "node_type": "checkpoint",
+            "outputs": [],
+            "postconditions": [
+              "object_in_gripper(akita black bowl)"
+            ],
+            "preconditions": [],
+            "proposed_by": "local_policy_agent",
+            "recovery_policy": "If the bowl remains in the gripper, replan placement with adjusted height or approach.",
+            "resources": [],
+            "skill_calls": []
+          }
+        ],
+        "output_bindings": [],
+        "outputs": [],
+        "subgoal_id": "place_akita_black_bowl_on_plate",
+        "subgraph_id": "sg_place_akita_black_bowl_on_plate",
+        "success_nodes": [
+          "place_success_checkpoint"
+        ]
+      },
+      {
+        "assigned_agent": "checkpoint_compiler",
+        "bindings": [],
+        "checkpoints": [
+          {
+            "name": "sg_verify_akita_black_bowl_on_plate:checkpoint",
+            "predicates": [
+              "scene_fresh(1000)",
+              "object_at_target(akita black bowl,plate)"
+            ],
+            "validate": true,
+            "weight": 1.0
+          }
+        ],
+        "description": "Verify the akita black bowl is on the plate with a fresh scene observation.",
+        "edges": [
+          {
+            "condition": "failure",
+            "source": "sg_verify_akita_black_bowl_on_plate:checkpoint",
+            "target": "sg_verify_akita_black_bowl_on_plate:checkpoint_failure"
+          }
+        ],
+        "entry_node": "sg_verify_akita_black_bowl_on_plate:checkpoint",
+        "failure_nodes": [
+          "sg_verify_akita_black_bowl_on_plate:checkpoint_failure"
+        ],
+        "inputs": [],
+        "loops": [],
+        "nodes": [
+          {
+            "description": "Verify the akita black bowl is on the plate with a fresh scene observation.",
+            "inputs": [],
+            "max_duration_ms": 1000,
+            "max_sim_steps": 1,
+            "motion_intent": null,
+            "node_id": "sg_verify_akita_black_bowl_on_plate:checkpoint",
+            "node_type": "checkpoint",
+            "outputs": [],
+            "postconditions": [
+              "scene_fresh(1000)",
+              "object_at_target(akita black bowl,plate)"
+            ],
+            "preconditions": [],
+            "proposed_by": "checkpoint_compiler",
+            "recovery_policy": "replan",
+            "resources": [],
+            "skill_calls": []
+          },
+          {
+            "description": "record failed checkpoint for verify_akita_black_bowl_on_plate",
+            "inputs": [],
+            "max_duration_ms": 1000,
+            "max_sim_steps": 1,
+            "motion_intent": null,
+            "node_id": "sg_verify_akita_black_bowl_on_plate:checkpoint_failure",
+            "node_type": "checkpoint",
+            "outputs": [],
+            "postconditions": [],
+            "preconditions": [],
+            "proposed_by": "checkpoint_compiler",
+            "recovery_policy": "fail_terminal",
+            "resources": [],
+            "skill_calls": []
+          }
+        ],
+        "output_bindings": [],
+        "outputs": [],
+        "subgoal_id": "verify_akita_black_bowl_on_plate",
+        "subgraph_id": "sg_verify_akita_black_bowl_on_plate",
+        "success_nodes": [
+          "sg_verify_akita_black_bowl_on_plate:checkpoint"
+        ]
+      }
+    ],
+    "success_subgraphs": [
+      "sg_verify_akita_black_bowl_on_plate"
+    ],
+    "task": "Pick the akita black bowl between the plate and the ramekin and place it on the plate"
+  },
+  "graph_protocol": "staged",
+  "llm_calls": [
+    "LLMCallTrace(request_id='b5fce60e-055d-43f2-8fcf-3b024251eee7', agent_name='mission_manager', model='gpt-5.5', status='completed', started_at_ns=1785398735012353665, finished_at_ns=1785398745953132246, latency_ms=10940.781007520854, attempts=1, input_tokens=1904, output_tokens=466, provider_status_code=200, schema_mode='strict_provider_schema', schema_hash='33fe850317621667adb4ff723f41187ae161533da8b3bc34e87e401a2f762060', structured_output_fallback=False, error_type=None, error_message=None)",
+    "LLMCallTrace(request_id='5831c4d7-1488-499d-9fb1-b0fbe6eea2d1', agent_name='policy-0', model='gpt-5.5', status='completed', started_at_ns=1785398745954652325, finished_at_ns=1785398774135323858, latency_ms=28180.6744588539, attempts=1, input_tokens=2869, output_tokens=1244, provider_status_code=200, schema_mode='strict_provider_schema', schema_hash='0dbc2256d097e381d08e37105570d0f199ab08050b0f584289530ecd958939f9', structured_output_fallback=False, error_type=None, error_message=None)",
+    "LLMCallTrace(request_id='c780a4e8-e862-438c-98b9-91741220cc46', agent_name='policy-1:safety', model='gpt-5.5', status='completed', started_at_ns=1785398745955990561, finished_at_ns=1785398792656610632, latency_ms=46700.6219625473, attempts=1, input_tokens=2872, output_tokens=1969, provider_status_code=200, schema_mode='strict_provider_schema', schema_hash='0dbc2256d097e381d08e37105570d0f199ab08050b0f584289530ecd958939f9', structured_output_fallback=False, error_type=None, error_message=None)",
+    "LLMCallTrace(request_id='5b5fdb86-9084-4c23-a8b6-8a517b30a175', agent_name='policy-0', model='gpt-5.5', status='completed', started_at_ns=1785398792659253453, finished_at_ns=1785398824916911640, latency_ms=32257.66044203192, attempts=1, input_tokens=2890, output_tokens=1445, provider_status_code=200, schema_mode='strict_provider_schema', schema_hash='0dbc2256d097e381d08e37105570d0f199ab08050b0f584289530ecd958939f9', structured_output_fallback=False, error_type=None, error_message=None)",
+    "LLMCallTrace(request_id='3b1aa3fa-2a97-48ee-b5b8-e093e6db1bf0', agent_name='policy-1:safety', model='gpt-5.5', status='completed', started_at_ns=1785398792660118777, finished_at_ns=1785398824196401591, latency_ms=31536.284427158535, attempts=1, input_tokens=2893, output_tokens=1442, provider_status_code=200, schema_mode='strict_provider_schema', schema_hash='0dbc2256d097e381d08e37105570d0f199ab08050b0f584289530ecd958939f9', structured_output_fallback=False, error_type=None, error_message=None)"
+  ],
+  "log_file": "outputs/phase5/P5.1_verifier_evidence_20260730/B3-LLM/20260730_080400_43670575-154d-4698-b407-a08a0c03d635/logs/runner.log",
+  "model": "gpt-5.5",
+  "proposal_failures": [],
+  "result": "GraphExecutionResult(completed=True, scene=SceneSnapshot(episode_id='d6d86cd9-9814-4429-a073-7673c477a3cf', episode_epoch=1, scene_version=3, sensor_timestamp_ns=1785398908193394945, publish_timestamp_ns=1785398918567888045, robot={'joint_position': ArtifactRef(uri='artifact://memory/d412a5b9-5c3c-4d14-9e8c-96f648a9d74f', media_type='array/joint-position', sha256=None, byte_size=None), 'ee_pose': ArtifactRef(uri='artifact://memory/5ee82795-252c-4e0c-b626-9028c2fbbdff', media_type='array/ee-pose', sha256=None, byte_size=None), 'ee_pose_wxyz_xyz': (-0.022105480744506245, 0.9995910925635162, 0.009732876848494942, 0.015305766788392867, 0.7336144230216805, 0.24083684353248702, 0.1359509719285154), 'gripper_opening': 0.9916369592621201}, objects=(ObjectTrack(track_id='akita black bowl', label='akita black bowl', pose_wxyz_xyz=(0.23180979184579276, 0.6772111222451578, 0.6391336677134641, 0.2813493755226754, 0.7571729348332223, 0.19944471115390092, 0.026114009598964216), confidence=1.0, last_seen_ns=1785398908193394945, covariance=None, evidence=(), visual_evidence=(), velocity_xyz=None, prediction_timestamp_ns=None, track_status='observed'), ObjectTrack(track_id='plate', label='plate', pose_wxyz_xyz=(0.005617691967547541, 0.8737783867662327, -0.4862628595979809, -0.005310718666242977, 0.777786874833929, 0.21303197049539815, 0.021827897156201877), confidence=1.0, last_seen_ns=1785398908193394945, covariance=None, evidence=(), visual_evidence=(), velocity_xyz=None, prediction_timestamp_ns=None, track_status='observed')), local_map=None, freshness_ms=0.0, source_artifacts=(ArtifactRef(uri='artifact://memory/b45bc826-1dc5-428b-8758-8b6799d978d8', media_type='image/rgb', sha256=None, byte_size=None), ArtifactRef(uri='artifact://memory/e3e36e51-fb5b-41b8-b9c2-a38215d66565', media_type='image/depth', sha256=None, byte_size=None), ArtifactRef(uri='artifact://memory/1f0527ff-215e-4df8-842e-0ba14e0430c0', media_type='image/rgb', sha256=None, byte_size=None), ArtifactRef(uri='artifact://memory/e66aec43-2df3-4cf2-b4d7-3d7de5d01bf5', media_type='image/depth', sha256=None, byte_size=None)), visual_evidence=(VisualEvidence(artifact=ArtifactRef(uri='artifact://memory/b45bc826-1dc5-428b-8758-8b6799d978d8', media_type='image/rgb', sha256=None, byte_size=None), evidence_type='image/rgb', captured_at_ns=1785398908193394945, camera_id='agentview', region_xyxy=None, track_id=None), VisualEvidence(artifact=ArtifactRef(uri='artifact://memory/e3e36e51-fb5b-41b8-b9c2-a38215d66565', media_type='image/depth', sha256=None, byte_size=None), evidence_type='image/depth', captured_at_ns=1785398908193394945, camera_id='agentview', region_xyxy=None, track_id=None), VisualEvidence(artifact=ArtifactRef(uri='artifact://memory/1f0527ff-215e-4df8-842e-0ba14e0430c0', media_type='image/rgb', sha256=None, byte_size=None), evidence_type='image/rgb', captured_at_ns=1785398908193394945, camera_id='robot0_eye_in_hand', region_xyxy=None, track_id=None), VisualEvidence(artifact=ArtifactRef(uri='artifact://memory/e66aec43-2df3-4cf2-b4d7-3d7de5d01bf5', media_type='image/depth', sha256=None, byte_size=None), evidence_type='image/depth', captured_at_ns=1785398908193394945, camera_id='robot0_eye_in_hand', region_xyxy=None, track_id=None)), spatial_relations=(), uncertainty=SceneUncertainty(scene_confidence=1.0, ambiguous_track_ids=(), stale_track_ids=(), notes=()), processing_latency_ms=10374.4931), context=AgentContext(task_id='mission_d6d86cd9_akita_black_bowl_to_plate', episode_id='d6d86cd9-9814-4429-a073-7673c477a3cf', episode_epoch=1, scene=SceneSnapshot(episode_id='d6d86cd9-9814-4429-a073-7673c477a3cf', episode_epoch=1, scene_version=3, sensor_timestamp_ns=1785398908193394945, publish_timestamp_ns=1785398918567888045, robot={'joint_position': ArtifactRef(uri='artifact://memory/d412a5b9-5c3c-4d14-9e8c-96f648a9d74f', media_type='array/joint-position', sha256=None, byte_size=None), 'ee_pose': ArtifactRef(uri='artifact://memory/5ee82795-252c-4e0c-b626-9028c2fbbdff', media_type='array/ee-pose', sha256=None, byte_size=None), 'ee_pose_wxyz_xyz': (-0.022105480744506245, 0.9995910925635162, 0.009732876848494942, 0.015305766788392867, 0.7336144230216805, 0.24083684353248702, 0.1359509719285154), 'gripper_opening': 0.9916369592621201}, objects=(ObjectTrack(track_id='akita black bowl', label='akita black bowl', pose_wxyz_xyz=(0.23180979184579276, 0.6772111222451578, 0.6391336677134641, 0.2813493755226754, 0.7571729348332223, 0.19944471115390092, 0.026114009598964216), confidence=1.0, last_seen_ns=1785398908193394945, covariance=None, evidence=(), visual_evidence=(), velocity_xyz=None, prediction_timestamp_ns=None, track_status='observed'), ObjectTrack(track_id='plate', label='plate', pose_wxyz_xyz=(0.005617691967547541, 0.8737783867662327, -0.4862628595979809, -0.005310718666242977, 0.777786874833929, 0.21303197049539815, 0.021827897156201877), confidence=1.0, last_seen_ns=1785398908193394945, covariance=None, evidence=(), visual_evidence=(), velocity_xyz=None, prediction_timestamp_ns=None, track_status='observed')), local_map=None, freshness_ms=0.0, source_artifacts=(ArtifactRef(uri='artifact://memory/b45bc826-1dc5-428b-8758-8b6799d978d8', media_type='image/rgb', sha256=None, byte_size=None), ArtifactRef(uri='artifact://memory/e3e36e51-fb5b-41b8-b9c2-a38215d66565', media_type='image/depth', sha256=None, byte_size=None), ArtifactRef(uri='artifact://memory/1f0527ff-215e-4df8-842e-0ba14e0430c0', media_type='image/rgb', sha256=None, byte_size=None), ArtifactRef(uri='artifact://memory/e66aec43-2df3-4cf2-b4d7-3d7de5d01bf5', media_type='image/depth', sha256=None, byte_size=None)), visual_evidence=(VisualEvidence(artifact=ArtifactRef(uri='artifact://memory/b45bc826-1dc5-428b-8758-8b6799d978d8', media_type='image/rgb', sha256=None, byte_size=None), evidence_type='image/rgb', captured_at_ns=1785398908193394945, camera_id='agentview', region_xyxy=None, track_id=None), VisualEvidence(artifact=ArtifactRef(uri='artifact://memory/e3e36e51-fb5b-41b8-b9c2-a38215d66565', media_type='image/depth', sha256=None, byte_size=None), evidence_type='image/depth', captured_at_ns=1785398908193394945, camera_id='agentview', region_xyxy=None, track_id=None), VisualEvidence(artifact=ArtifactRef(uri='artifact://memory/1f0527ff-215e-4df8-842e-0ba14e0430c0', media_type='image/rgb', sha256=None, byte_size=None), evidence_type='image/rgb', captured_at_ns=1785398908193394945, camera_id='robot0_eye_in_hand', region_xyxy=None, track_id=None), VisualEvidence(artifact=ArtifactRef(uri='artifact://memory/e66aec43-2df3-4cf2-b4d7-3d7de5d01bf5', media_type='image/depth', sha256=None, byte_size=None), evidence_type='image/depth', captured_at_ns=1785398908193394945, camera_id='robot0_eye_in_hand', region_xyxy=None, track_id=None)), spatial_relations=(), uncertainty=SceneUncertainty(scene_confidence=1.0, ambiguous_track_ids=(), stale_track_ids=(), notes=()), processing_latency_ms=10374.4931), memories=None, budget={}, history=CycleHistory(traces=(ExecutionTrace(trace_id='c545da49-00e2-4434-ade5-192569e96ae0', episode_id='d6d86cd9-9814-4429-a073-7673c477a3cf', episode_epoch=1, contract_id='eaa0f10a-2eec-4f45-bd8a-342e23634ac1', lease_id='lease-1', parent_scene_version=1, start_scene_version=1, end_scene_version=2, started_at_ns=1785398834457322463, finished_at_ns=1785398884388262522, status='completed', skill_traces=(SkillTrace(invocation_id='ec9d567e-4d72-4008-98ca-667d72537ebb', skill_id='sample_grasp_pose', skill_version='capx-compat-1', args={'object_name': 'akita black bowl', 'use_multiview': True}, started_at_ns=1785398834457380682, finished_at_ns=1785398834457421400, status='completed', error_type=None, error_message=None, output={'result': ((0.6042697551332045, 0.21123259208814665, 0.020517855980034756), (0.0, 1.0, 0.0, 0.0))}), SkillTrace(invocation_id='dde9895a-79f9-4c01-8e09-30b9a49e0594', skill_id='goto_pose', skill_version='capx-compat-1', args={'position': (0.6042697551332045, 0.21123259208814665, 0.020517855980034756), 'quaternion_wxyz': (0.0, 1.0, 0.0, 0.0), 'z_approach': 0.1}, started_at_ns=1785398834457441897, finished_at_ns=1785398862615032731, status='completed', error_type=None, error_message=None, output={'result': None}), SkillTrace(invocation_id='43ac76b0-8d5a-44ca-83c4-4db02329d577', skill_id='close_gripper', skill_version='capx-compat-1', args={}, started_at_ns=1785398862615163647, finished_at_ns=1785398864036371704, status='completed', error_type=None, error_message=None, output={'result': None}), SkillTrace(invocation_id='0b0a22e8-35e8-4679-b813-83e9ef1caaa6', skill_id='lift_after_grasp', skill_version='capx-compat-1', args={'position': (0.6042697551332045, 0.21123259208814665, 0.020517855980034756), 'quaternion_wxyz': (0.0, 1.0, 0.0, 0.0), 'z_lift': 0.12}, started_at_ns=1785398864036458661, finished_at_ns=1785398864894477136, status='completed', error_type=None, error_message=None, output={'result': None})), precondition_result=VerificationResult(contract_id='eaa0f10a-2eec-4f45-bd8a-342e23634ac1', decision='approve', checked_scene_version=1, predicate_results=(PredicateReport(name='scene_fresh(1000)', passed=True, confidence=1.0, evidence=(), reason=None),), violated_invariants=(), failure_class=None), postcondition_result=VerificationResult(contract_id='eaa0f10a-2eec-4f45-bd8a-342e23634ac1', decision='commit', checked_scene_version=2, predicate_results=(PredicateReport(name='object_in_gripper(akita black bowl)', passed=True, confidence=1.0, evidence=('akita black bowl',), reason=None), PredicateReport(name='gripper_closed()', passed=True, confidence=1.0, evidence=(), reason=None)), violated_invariants=(), failure_class=None), failure_class=None, observation_before=None, observation_after=None, metadata={'subgraph_id': 'sg_pick_akita_black_bowl', 'node_id': 'act_pick_akita_black_bowl', 'candidate_fingerprint': '551bb406e1c30901024a2fdf2130d8c328841a8c744d9c0f41939abe6c5bc162'}), ExecutionTrace(trace_id='e990665d-657f-4c98-920b-3c373695cb9d', episode_id='d6d86cd9-9814-4429-a073-7673c477a3cf', episode_epoch=1, contract_id='2d405dec-ee10-4953-a4f0-e92d647382f3', lease_id='lease-2', parent_scene_version=2, start_scene_version=2, end_scene_version=3, started_at_ns=1785398884390635953, finished_at_ns=1785398918567956758, status='completed', skill_traces=(SkillTrace(invocation_id='9cc57943-0827-47f2-862b-63aca85d5322', skill_id='goto_pose', skill_version='capx-compat-1', args={'position': (0.7302393822496259, 0.2146819558423696, 0.0007183794578745372), 'quaternion_wxyz': (0.0, 1.0, 0.0, 0.0), 'z_approach': 0.12}, started_at_ns=1785398884390683724, finished_at_ns=1785398907208312273, status='completed', error_type=None, error_message=None, output={'result': None}), SkillTrace(invocation_id='784441fb-d126-4cbf-86bc-90b3f3a4d34c', skill_id='open_gripper', skill_version='capx-compat-1', args={}, started_at_ns=1785398907208420984, finished_at_ns=1785398908188279988, status='completed', error_type=None, error_message=None, output={'result': None})), precondition_result=VerificationResult(contract_id='2d405dec-ee10-4953-a4f0-e92d647382f3', decision='approve', checked_scene_version=2, predicate_results=(PredicateReport(name='object_in_gripper(akita black bowl)', passed=True, confidence=1.0, evidence=('akita black bowl',), reason=None),), violated_invariants=(), failure_class=None), postcondition_result=VerificationResult(contract_id='2d405dec-ee10-4953-a4f0-e92d647382f3', decision='commit', checked_scene_version=3, predicate_results=(PredicateReport(name='object_at_target(akita black bowl,plate)', passed=True, confidence=1.0, evidence=('akita black bowl', 'plate'), reason=None), PredicateReport(name='gripper_open()', passed=True, confidence=1.0, evidence=(), reason=None)), violated_invariants=(), failure_class=None), failure_class=None, observation_before=None, observation_after=None, metadata={'subgraph_id': 'sg_place_akita_black_bowl_on_plate', 'node_id': 'place_akita_black_bowl_on_plate_action', 'candidate_fingerprint': '4ee573301d23fd9220507a5ecbf12ddd7251ab4bcef9cc6dc7a3daca87522eb9'})), last_verification=VerificationResult(contract_id='2d405dec-ee10-4953-a4f0-e92d647382f3', decision='commit', checked_scene_version=3, predicate_results=(PredicateReport(name='object_at_target(akita black bowl,plate)', passed=True, confidence=1.0, evidence=('akita black bowl', 'plate'), reason=None), PredicateReport(name='gripper_open()', passed=True, confidence=1.0, evidence=(), reason=None)), violated_invariants=(), failure_class=None), current_subgoal='place_akita_black_bowl_on_plate', recovery_count=0)), terminal_subgraph='sg_verify_akita_black_bowl_on_plate', traces=(ExecutionTrace(trace_id='c545da49-00e2-4434-ade5-192569e96ae0', episode_id='d6d86cd9-9814-4429-a073-7673c477a3cf', episode_epoch=1, contract_id='eaa0f10a-2eec-4f45-bd8a-342e23634ac1', lease_id='lease-1', parent_scene_version=1, start_scene_version=1, end_scene_version=2, started_at_ns=1785398834457322463, finished_at_ns=1785398884388262522, status='completed', skill_traces=(SkillTrace(invocation_id='ec9d567e-4d72-4008-98ca-667d72537ebb', skill_id='sample_grasp_pose', skill_version='capx-compat-1', args={'object_name': 'akita black bowl', 'use_multiview': True}, started_at_ns=1785398834457380682, finished_at_ns=1785398834457421400, status='completed', error_type=None, error_message=None, output={'result': ((0.6042697551332045, 0.21123259208814665, 0.020517855980034756), (0.0, 1.0, 0.0, 0.0))}), SkillTrace(invocation_id='dde9895a-79f9-4c01-8e09-30b9a49e0594', skill_id='goto_pose', skill_version='capx-compat-1', args={'position': (0.6042697551332045, 0.21123259208814665, 0.020517855980034756), 'quaternion_wxyz': (0.0, 1.0, 0.0, 0.0), 'z_approach': 0.1}, started_at_ns=1785398834457441897, finished_at_ns=1785398862615032731, status='completed', error_type=None, error_message=None, output={'result': None}), SkillTrace(invocation_id='43ac76b0-8d5a-44ca-83c4-4db02329d577', skill_id='close_gripper', skill_version='capx-compat-1', args={}, started_at_ns=1785398862615163647, finished_at_ns=1785398864036371704, status='completed', error_type=None, error_message=None, output={'result': None}), SkillTrace(invocation_id='0b0a22e8-35e8-4679-b813-83e9ef1caaa6', skill_id='lift_after_grasp', skill_version='capx-compat-1', args={'position': (0.6042697551332045, 0.21123259208814665, 0.020517855980034756), 'quaternion_wxyz': (0.0, 1.0, 0.0, 0.0), 'z_lift': 0.12}, started_at_ns=1785398864036458661, finished_at_ns=1785398864894477136, status='completed', error_type=None, error_message=None, output={'result': None})), precondition_result=VerificationResult(contract_id='eaa0f10a-2eec-4f45-bd8a-342e23634ac1', decision='approve', checked_scene_version=1, predicate_results=(PredicateReport(name='scene_fresh(1000)', passed=True, confidence=1.0, evidence=(), reason=None),), violated_invariants=(), failure_class=None), postcondition_result=VerificationResult(contract_id='eaa0f10a-2eec-4f45-bd8a-342e23634ac1', decision='commit', checked_scene_version=2, predicate_results=(PredicateReport(name='object_in_gripper(akita black bowl)', passed=True, confidence=1.0, evidence=('akita black bowl',), reason=None), PredicateReport(name='gripper_closed()', passed=True, confidence=1.0, evidence=(), reason=None)), violated_invariants=(), failure_class=None), failure_class=None, observation_before=None, observation_after=None, metadata={'subgraph_id': 'sg_pick_akita_black_bowl', 'node_id': 'act_pick_akita_black_bowl', 'candidate_fingerprint': '551bb406e1c30901024a2fdf2130d8c328841a8c744d9c0f41939abe6c5bc162'}), ExecutionTrace(trace_id='e990665d-657f-4c98-920b-3c373695cb9d', episode_id='d6d86cd9-9814-4429-a073-7673c477a3cf', episode_epoch=1, contract_id='2d405dec-ee10-4953-a4f0-e92d647382f3', lease_id='lease-2', parent_scene_version=2, start_scene_version=2, end_scene_version=3, started_at_ns=1785398884390635953, finished_at_ns=1785398918567956758, status='completed', skill_traces=(SkillTrace(invocation_id='9cc57943-0827-47f2-862b-63aca85d5322', skill_id='goto_pose', skill_version='capx-compat-1', args={'position': (0.7302393822496259, 0.2146819558423696, 0.0007183794578745372), 'quaternion_wxyz': (0.0, 1.0, 0.0, 0.0), 'z_approach': 0.12}, started_at_ns=1785398884390683724, finished_at_ns=1785398907208312273, status='completed', error_type=None, error_message=None, output={'result': None}), SkillTrace(invocation_id='784441fb-d126-4cbf-86bc-90b3f3a4d34c', skill_id='open_gripper', skill_version='capx-compat-1', args={}, started_at_ns=1785398907208420984, finished_at_ns=1785398908188279988, status='completed', error_type=None, error_message=None, output={'result': None})), precondition_result=VerificationResult(contract_id='2d405dec-ee10-4953-a4f0-e92d647382f3', decision='approve', checked_scene_version=2, predicate_results=(PredicateReport(name='object_in_gripper(akita black bowl)', passed=True, confidence=1.0, evidence=('akita black bowl',), reason=None),), violated_invariants=(), failure_class=None), postcondition_result=VerificationResult(contract_id='2d405dec-ee10-4953-a4f0-e92d647382f3', decision='commit', checked_scene_version=3, predicate_results=(PredicateReport(name='object_at_target(akita black bowl,plate)', passed=True, confidence=1.0, evidence=('akita black bowl', 'plate'), reason=None), PredicateReport(name='gripper_open()', passed=True, confidence=1.0, evidence=(), reason=None)), violated_invariants=(), failure_class=None), failure_class=None, observation_before=None, observation_after=None, metadata={'subgraph_id': 'sg_place_akita_black_bowl_on_plate', 'node_id': 'place_akita_black_bowl_on_plate_action', 'candidate_fingerprint': '4ee573301d23fd9220507a5ecbf12ddd7251ab4bcef9cc6dc7a3daca87522eb9'})), failure=None, outputs={'sg_pick_akita_black_bowl': {}, 'sg_place_akita_black_bowl_on_plate': {}, 'sg_verify_akita_black_bowl_on_plate': {}}, next_subgraph=None)",
+  "run_config": {
+    "artifact_dir": "outputs/phase5/P5.1_verifier_evidence_20260730/B3-LLM/20260730_080400_43670575-154d-4698-b407-a08a0c03d635",
+    "endpoint_host": "api.wangzhaohui.xyz",
+    "execution_mode": "fixed_graph",
+    "geometry_deadline_ms": 50,
+    "geometry_depth_subsample": 16,
+    "geometry_mode": "disabled",
+    "llm_deadline_ms": 60000,
+    "llm_max_output_tokens": 1536,
+    "llm_max_retries": 2,
+    "llm_proposal_retries": 1,
+    "manager_plan_fallback": false,
+    "max_workers": 2,
+    "model": "gpt-5.5",
+    "policy_agents": 2,
+    "policy_strategies": [
+      "balanced",
+      "safety"
+    ],
+    "preview_backend": "none",
+    "privilege_mode": "realistic_sensor",
+    "proposal_mode": "subgoal_serial",
+    "protocol": "staged",
+    "run_id": "02e8a271-3227-49b0-8d1a-81916b49915d",
+    "runner_version": "capmas-0.1",
+    "schema_mode": "strict_provider_schema",
+    "seed": 1,
+    "task": "Pick the akita black bowl between the plate and the ramekin and place it on the plate",
+    "task_id": "libero_spatial_0"
+  },
+  "scheduler_metrics": {
+    "compile_latency_ms": 89908.08994974941,
+    "execution_mode": "fixed_graph",
+    "geometry_evidence": [],
+    "manager_topology_calls": 1,
+    "planning_scope": "full_graph",
+    "proposal_mode": "subgoal_serial",
+    "proposal_waves": [
+      [
+        "sg_pick_akita_black_bowl"
+      ],
+      [
+        "sg_place_akita_black_bowl_on_plate"
+      ],
+      [
+        "sg_verify_akita_black_bowl_on_plate"
+      ]
+    ],
+    "verifier_evidence": {
+      "dynamic": [
+        {
+          "candidate_fingerprint": "551bb406e1c30901024a2fdf2130d8c328841a8c744d9c0f41939abe6c5bc162",
+          "evidence": {
+            "candidate_fingerprint": "551bb406e1c30901024a2fdf2130d8c328841a8c744d9c0f41939abe6c5bc162",
+            "captured_at_ns": 1785398918570623215,
+            "coverage": 1.0,
+            "dynamic_results": [
+              {
+                "confidence": 1.0,
+                "evidence_refs": [
+                  "akita black bowl"
+                ],
+                "phase": "dynamic",
+                "predicate": "object_in_gripper(akita black bowl)",
+                "reason": null,
+                "status": "pass"
+              },
+              {
+                "confidence": 1.0,
+                "evidence_refs": [],
+                "phase": "dynamic",
+                "predicate": "gripper_closed()",
+                "reason": null,
+                "status": "pass"
+              }
+            ],
+            "pass_rate": 1.0,
+            "provider": "predicate_verifier.dynamic",
+            "scene_version": 2,
+            "source_verification": "eaa0f10a-2eec-4f45-bd8a-342e23634ac1",
+            "static_results": []
+          },
+          "execution_order": 0,
+          "node_id": "act_pick_akita_black_bowl",
+          "subgraph_id": "sg_pick_akita_black_bowl",
+          "trace_id": "c545da49-00e2-4434-ade5-192569e96ae0"
+        },
+        {
+          "candidate_fingerprint": "4ee573301d23fd9220507a5ecbf12ddd7251ab4bcef9cc6dc7a3daca87522eb9",
+          "evidence": {
+            "candidate_fingerprint": "4ee573301d23fd9220507a5ecbf12ddd7251ab4bcef9cc6dc7a3daca87522eb9",
+            "captured_at_ns": 1785398918570671160,
+            "coverage": 1.0,
+            "dynamic_results": [
+              {
+                "confidence": 1.0,
+                "evidence_refs": [
+                  "akita black bowl",
+                  "plate"
+                ],
+                "phase": "dynamic",
+                "predicate": "object_at_target(akita black bowl,plate)",
+                "reason": null,
+                "status": "pass"
+              },
+              {
+                "confidence": 1.0,
+                "evidence_refs": [],
+                "phase": "dynamic",
+                "predicate": "gripper_open()",
+                "reason": null,
+                "status": "pass"
+              }
+            ],
+            "pass_rate": 1.0,
+            "provider": "predicate_verifier.dynamic",
+            "scene_version": 3,
+            "source_verification": "2d405dec-ee10-4953-a4f0-e92d647382f3",
+            "static_results": []
+          },
+          "execution_order": 1,
+          "node_id": "place_akita_black_bowl_on_plate_action",
+          "subgraph_id": "sg_place_akita_black_bowl_on_plate",
+          "trace_id": "e990665d-657f-4c98-920b-3c373695cb9d"
+        }
+      ],
+      "static": [
+        {
+          "candidate_fingerprint": "551bb406e1c30901024a2fdf2130d8c328841a8c744d9c0f41939abe6c5bc162",
+          "candidate_id": "sg_pick_akita_black_bowl:policy-1:safety:1",
+          "evidence": {
+            "candidate_fingerprint": "551bb406e1c30901024a2fdf2130d8c328841a8c744d9c0f41939abe6c5bc162",
+            "captured_at_ns": 1785398735011486209,
+            "coverage": 0.0,
+            "dynamic_results": [],
+            "pass_rate": 0.0,
+            "provider": "libero_observable_verifier.static",
+            "scene_version": 0,
+            "source_verification": null,
+            "static_results": []
+          },
+          "subgraph_id": "sg_pick_akita_black_bowl"
+        },
+        {
+          "candidate_fingerprint": "9800bfc263b1e390548fb031fdc61436b5d79721c4eab448eb209d24964af4c0",
+          "candidate_id": "sg_place_akita_black_bowl_on_plate:policy-1:safety:1",
+          "evidence": {
+            "candidate_fingerprint": "9800bfc263b1e390548fb031fdc61436b5d79721c4eab448eb209d24964af4c0",
+            "captured_at_ns": 1785398735011486209,
+            "coverage": 0.0,
+            "dynamic_results": [],
+            "pass_rate": 0.0,
+            "provider": "libero_observable_verifier.static",
+            "scene_version": 0,
+            "source_verification": null,
+            "static_results": []
+          },
+          "subgraph_id": "sg_place_akita_black_bowl_on_plate"
+        }
+      ]
+    },
+    "world_model": {
+      "enabled": false,
+      "last_error": null,
+      "map_version": null,
+      "processed_observations": 0
+    }
+  },
+  "seed": 1,
+  "task_id": "libero_spatial_0",
+  "task_language": "Pick the akita black bowl between the plate and the ramekin and place it on the plate"
+}

@@ -170,6 +170,55 @@ run and redact provider secrets. The gate remains open until artifacts contain
 both typed static verifier evidence and at least one post-execution dynamic
 verifier result with valid scene/fingerprint provenance.
 
+The 2026-07-31 condition-default follow-up uses the same artifact rule. Each
+action candidate is enriched from registered typed skills before validation;
+the selected candidate's static evidence should therefore include at least
+one `scene_fresh(2000)` or uniquely resolved `track_exists:*` result. Static
+coverage is reported separately from evaluator success and graph completion,
+and an improved coverage measurement is not treated as a downstream success
+rate improvement. The matched run must use a fresh directory for every seed
+and retain the complete log, result, summary, manifest, and verifier evidence.
+
+The fresh 2026-07-31 condition-default rerun used the non-privileged
+`franka_libero_spatial_0.yaml` CAP-X backend, CUDA device 5, gpt-5.5, staged
+`ready_wave`, two Policies (`balanced,safety`), fixed-graph execution, and
+`geometry_mode=disabled`. The matched seeds 1--5 are stored under
+`outputs/phase5/P5.1_condition_defaults_20260731/`, with one run-scoped
+directory per invocation. The post-fix seed-1 smoke was used as the matched
+seed-1 result; the earlier pre-refresh seed-1 failure remains separately
+preserved as a diagnostic artifact.
+
+| seed | evaluator success | graph completed | run outcome |
+| --- | --- | --- | --- |
+| 1 | true | true | normal success |
+| 2 | false | false | normal execution, task failure |
+| 3 | true | false | evaluator success, graph did not fully converge |
+| 4 | unavailable | unavailable | both Policy requests hit the 60 s upstream LLM read timeout |
+| 5 | false | false | normal execution, task failure |
+
+The matched pilot therefore measured evaluator success `2/5`, graph
+completion `1/5`, and four normal summary runs. Those four runs emitted eight
+static candidate evidence records with positive coverage (`1.0` per selected
+collection) and seven dynamic verifier records. Static `scene_fresh(...)`
+pass rates remain below one because static evidence is captured before the
+long LLM compilation interval; the pre-dispatch refresh fixes the execution
+boundary but does not retroactively make the compile-time evidence fresh.
+Seed 4 retained `failure.json`, `episode.failure.json`, `manifest.json`, and
+the full log; it has no verifier artifact because no candidate reached
+arbitration. This closes the empirical condition-default/evidence-publication
+check, but does not establish a downstream success-rate improvement or close
+the upstream LLM availability/latency risk.
+
+The 2026-07-30 run used gpt-5.5 on `franka_libero_spatial_0` with two staged
+Policy Agents. The seed-1 smoke and matched seeds 2--5 all produced complete
+run directories and dynamic evidence with valid trace identity, scene version,
+and effective-candidate fingerprint. Evaluator success was 2/5; graph
+completion was 1/5. Static typed evidence was emitted in every run, but its
+coverage was zero in all ten selected-candidate collections because the LLM
+graphs did not expose a compile-time `track_exists:*` precondition. This is a
+valid runtime/artifact integration result, but not closure of the meaningful
+static-coverage gate.
+
 ### Phase 5 experiment artifact rule
 
 Every Phase 5 experiment and every seed gets a new run-scoped directory. No

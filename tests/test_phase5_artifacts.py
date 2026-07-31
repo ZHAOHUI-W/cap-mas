@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import json
 
 from capmas.evaluation.phase5_artifacts import Phase5RunDirectory
+
+
+@dataclass(frozen=True)
+class _DataclassSummary:
+    completed: bool
+    traces: tuple[str, ...]
 
 
 def test_phase5_run_directory_is_unique_and_creates_expected_subdirectories(tmp_path) -> None:
@@ -41,3 +48,15 @@ def test_phase5_artifacts_are_atomic_and_manifest_has_sha256(tmp_path) -> None:
     assert payload["api_key"] == "[REDACTED]"
     assert entries["run_config.json"]["sha256"] == digest
     assert entries["logs/runner.log"]["size"] == len("runner output")
+
+
+def test_phase5_json_writer_preserves_structured_dataclass_payloads(tmp_path) -> None:
+    run = Phase5RunDirectory.create(tmp_path, "experiment", "run-structured")
+
+    output = run.write_json(
+        "summary.json",
+        {"result": _DataclassSummary(True, ("trace-1",))},
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["result"] == {"completed": True, "traces": ["trace-1"]}

@@ -542,6 +542,50 @@ def test_local_decoder_normalizes_terminal_predicate_edges_to_typed_outcomes() -
     )
 
 
+def test_local_decoder_enriches_empty_action_postconditions_before_validation() -> None:
+    action = SubgraphNodeSpec(
+        node_id="action",
+        description="perform action",
+        skill_calls=(SkillCall(SkillRef("noop", "1.0.0"), {}),),
+        postconditions=(),
+    )
+    checkpoint = SubgraphNodeSpec(
+        node_id="checkpoint",
+        description="verify action",
+        node_type="checkpoint",
+        postconditions=("scene_fresh(2000)",),
+    )
+    subgraph = SubgraphSpec(
+        subgraph_id="first",
+        subgoal_id="first",
+        description="first",
+        nodes=(action, checkpoint),
+        edges=(GraphEdge("action", "checkpoint", "success"),),
+        entry_node="action",
+        success_nodes=("checkpoint",),
+        failure_nodes=("action",),
+        checkpoints=(CheckpointSpec("verify", ("scene_fresh(2000)",)),),
+    )
+
+    def enrich(value: SubgraphSpec, _scene: SceneSnapshot) -> SubgraphSpec:
+        return replace(
+            value,
+            nodes=(replace(value.node("action"), postconditions=("scene_fresh(2000)",)), value.node("checkpoint")),
+        )
+
+    decoded = LocalSubgraphDecoder(condition_enricher=enrich).decode(
+        LLMResponse("policy", "", structured=local_subgraph_to_dict(subgraph)),
+        _scene(),
+        request=LLMRequest("policy", "policy", ()),
+        expected_subgraph_id="first",
+        expected_subgoal_id="first",
+    )
+
+    assert decoded.accepted
+    assert decoded.subgraph is not None
+    assert decoded.subgraph.node("action").postconditions == ("scene_fresh(2000)",)
+
+
 def test_topology_assembly_deduplicates_identical_success_edges() -> None:
     topology = replace(
         _topology(),

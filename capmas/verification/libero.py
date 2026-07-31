@@ -101,10 +101,27 @@ def compile_time_preconditions(preconditions: Sequence[str]) -> tuple[str, ...]:
     runtime dispatch point. A downstream subgraph may depend on a grasp or
     release established by an earlier subgraph, so evaluating those facts
     against the episode's initial scene would reject valid candidates.
+    Freshness is safe to evaluate before dispatch because it describes the
+    current source snapshot rather than a future robot state.
     """
-    stable_prefixes = ("track_exists:", "object_visible:")
+    stable_prefixes = ("track_exists:", "object_visible:", "scene_fresh(")
     return tuple(
         predicate for predicate in preconditions if predicate.startswith(stable_prefixes)
+    )
+
+
+def pre_dispatch_preconditions(preconditions: Sequence[str]) -> tuple[str, ...]:
+    """Return compile-time facts safe to hard-gate before physical dispatch.
+
+    ``scene_fresh`` remains useful static evidence, but it is time-sensitive:
+    a long LLM request can make the source snapshot stale before validation.
+    The runner refreshes and rebases the graph before execution, where the
+    complete contract precondition is checked by ``RuntimeOrchestrator``.
+    """
+    return tuple(
+        predicate
+        for predicate in compile_time_preconditions(preconditions)
+        if not predicate.startswith("scene_fresh(")
     )
 
 

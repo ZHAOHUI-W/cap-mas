@@ -163,15 +163,31 @@ class LLMStagedGraphPolicyAgent(GraphPolicyAgent):
         *,
         decoder: LocalSubgraphDecoder | None = None,
         agent_name: str = "llm_staged_graph_policy",
+        policy_strategy: str = "balanced",
         proposal_retries: int = 0,
         repair_request_builder: Callable[[AgentArtifact, SceneSnapshot, AgentContext, str], LLMRequest] | None = None,
+        condition_enricher: Callable[[SubgraphSpec, SceneSnapshot, str], SubgraphSpec]
+        | None = None,
     ) -> None:
         if proposal_retries < 0:
             raise ValueError("proposal_retries must not be negative")
+        from capmas.contracts.strategy import StrategyProfile
+
+        StrategyProfile.for_name(policy_strategy)
         self.llm = llm
         self.request_builder = request_builder
-        self.decoder = decoder or LocalSubgraphDecoder()
+        if decoder is not None:
+            self.decoder = decoder
+        elif condition_enricher is None:
+            self.decoder = LocalSubgraphDecoder()
+        else:
+            self.decoder = LocalSubgraphDecoder(
+                condition_enricher=lambda subgraph, scene: condition_enricher(
+                    subgraph, scene, policy_strategy
+                )
+            )
         self.name = agent_name
+        self.policy_strategy = policy_strategy
         self.proposal_retries = proposal_retries
         self.repair_request_builder = repair_request_builder
 

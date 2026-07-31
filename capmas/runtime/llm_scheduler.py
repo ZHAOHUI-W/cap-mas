@@ -122,6 +122,8 @@ class LLMGraphScheduler:
         candidate_evidence_provider: CandidateEvidenceProvider | None = None,
         candidate_normalizer: CandidateNormalizer | None = None,
         candidate_evidence_timeout_ms: float | None = None,
+        condition_enricher: Callable[[SubgraphSpec, SceneSnapshot, str], SubgraphSpec]
+        | None = None,
     ) -> None:
         if max_workers <= 0:
             raise ValueError("max_workers must be positive")
@@ -145,6 +147,7 @@ class LLMGraphScheduler:
         self.candidate_evidence_provider = candidate_evidence_provider
         self.candidate_normalizer = candidate_normalizer
         self.candidate_evidence_timeout_ms = candidate_evidence_timeout_ms
+        self.condition_enricher = condition_enricher
         self._candidate_evidence_timeouts: list[str] = []
 
     def compile(
@@ -673,7 +676,8 @@ class LLMGraphScheduler:
                 subgraph_id, index, agent = future_to_job[future]
                 try:
                     raw_proposal = future.result()
-                    proposal = self._rewrite_candidate(raw_proposal, scene)
+                    strategy = _agent_strategy(agent)
+                    proposal = self._rewrite_candidate(raw_proposal, scene, strategy)
                     topology_subgoal = topology.subgoal(subgraph_id)
                     if proposal.subgraph_id != subgraph_id:
                         raise ValueError(
@@ -690,11 +694,11 @@ class LLMGraphScheduler:
                         parent_scene_version=scene.scene_version,
                         producer_agent=agent.name,
                         confidence=self.candidate_confidence,
-                        strategy=_agent_strategy(agent),
+                        strategy=strategy,
                         raw_subgraph=raw_proposal,
                         rewrite_report=rewrite_report_for(raw_proposal, proposal),
                     )
-                    candidate = self._normalize_candidate(candidate)
+                    candidate = self._normalize_candidate(candidate, scene)
                     candidates[subgraph_id].append(
                         self._attach_candidate_evidence(candidate, scene)
                     )
@@ -777,7 +781,8 @@ class LLMGraphScheduler:
                 index, agent = future_to_agent[future]
                 try:
                     raw_proposal = future.result()
-                    proposal = self._rewrite_candidate(raw_proposal, scene)
+                    strategy = _agent_strategy(agent)
+                    proposal = self._rewrite_candidate(raw_proposal, scene, strategy)
                     if proposal.subgraph_id != expected_subgraph_id:
                         raise ValueError(
                             f"proposal targets {proposal.subgraph_id!r}, "
@@ -797,11 +802,11 @@ class LLMGraphScheduler:
                         parent_scene_version=scene.scene_version,
                         producer_agent=agent.name,
                         confidence=self.candidate_confidence,
-                        strategy=_agent_strategy(agent),
+                        strategy=strategy,
                         raw_subgraph=raw_proposal,
                         rewrite_report=rewrite_report_for(raw_proposal, proposal),
                     )
-                    candidate = self._normalize_candidate(candidate)
+                    candidate = self._normalize_candidate(candidate, scene)
                     candidates.append(self._attach_candidate_evidence(candidate, scene))
                 except Exception as exc:
                     failures.append(
@@ -854,16 +859,23 @@ class LLMGraphScheduler:
             return candidate
         return replace(candidate, evidence=evidence)
 
-    def _normalize_candidate(self, candidate: GraphCandidate) -> GraphCandidate:
+    def _normalize_candidate(
+        self,
+        candidate: GraphCandidate,
+        scene: SceneSnapshot | None = None,
+    ) -> GraphCandidate:
         if self.candidate_normalizer is None:
             return candidate
-        return self.candidate_normalizer.normalize(candidate)
+        return self.candidate_normalizer.normalize(candidate, scene)
 
     def _rewrite_candidate(
         self,
         proposal: SubgraphSpec,
         scene: SceneSnapshot,
+        strategy: str = "balanced",
     ) -> SubgraphSpec:
+        if self.condition_enricher is not None:
+            proposal = self.condition_enricher(proposal, scene, strategy)
         if self.candidate_scene_rewriter is not None:
             return self.candidate_scene_rewriter(proposal, scene)
         if self.candidate_rewriter is not None:

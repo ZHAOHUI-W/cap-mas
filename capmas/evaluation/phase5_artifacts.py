@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 import hashlib
 import json
 from pathlib import Path
@@ -107,6 +107,8 @@ class Phase5RunDirectory:
 
 
 def _redact(value: object, *, key: str | None = None) -> object:
+    if is_dataclass(value) and not isinstance(value, type):
+        return _redact(asdict(value), key=key)
     if key is not None and (
         key.lower() in _SENSITIVE_KEYS
         or key.lower() in {"headers", "provider_headers"}

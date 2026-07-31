@@ -6,6 +6,7 @@ import time
 from uuid import uuid4
 
 from capmas.contracts.agent import AgentContext, CycleHistory
+from capmas.contracts.candidates import subgraph_fingerprint
 from capmas.contracts.failures import FailureArtifact, FailureClass
 from capmas.contracts.action import SkillCall
 from capmas.contracts.graph import (
@@ -315,6 +316,18 @@ class FixedGraphInterpreter:
                         skills=_merge_first_skill_args(contract.skills, resolved_inputs),
                     )
                 cycle = self.scheduler.dispatch(contract, context.scene)
+                cycle = replace(
+                    cycle,
+                    trace=replace(
+                        cycle.trace,
+                        metadata={
+                            **cycle.trace.metadata,
+                            "subgraph_id": subgraph.subgraph_id,
+                            "node_id": current_id,
+                            "candidate_fingerprint": subgraph_fingerprint(subgraph),
+                        },
+                    ),
+                )
                 traces.append(cycle.trace)
                 context = _advance_context(context, subgraph.subgoal_id, cycle)
                 node_outputs[current_id] = _cycle_output(cycle)

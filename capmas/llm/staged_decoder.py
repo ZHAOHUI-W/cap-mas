@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from typing import Callable
 
 from capmas.contracts.scene import SceneSnapshot
 from capmas.contracts.graph import SubgraphSpec
@@ -91,8 +92,14 @@ class MissionTopologyDecoder:
 class LocalSubgraphDecoder:
     """Decode one direct local Policy graph and validate it in isolation."""
 
-    def __init__(self, validator: GraphValidator | None = None) -> None:
+    def __init__(
+        self,
+        validator: GraphValidator | None = None,
+        condition_enricher: Callable[[SubgraphSpec, SceneSnapshot], SubgraphSpec]
+        | None = None,
+    ) -> None:
         self.validator = validator or GraphValidator()
+        self.condition_enricher = condition_enricher
 
     def decode(
         self,
@@ -116,6 +123,18 @@ class LocalSubgraphDecoder:
             return SubgraphDecodeResult(
                 rejections=(StagedDecodeRejection("SUBGRAPH_SCHEMA_INVALID", str(exc)),)
             )
+        if self.condition_enricher is not None:
+            try:
+                subgraph = self.condition_enricher(subgraph, scene)
+            except Exception as exc:
+                return SubgraphDecodeResult(
+                    rejections=(
+                        StagedDecodeRejection(
+                            "SUBGRAPH_CONDITION_ENRICHMENT_FAILED",
+                            str(exc),
+                        ),
+                    )
+                )
         subgraph = _normalize_terminal_edges(subgraph)
         if expected_subgraph_id is not None and subgraph.subgraph_id != expected_subgraph_id:
             rejections.append(

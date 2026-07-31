@@ -6,7 +6,7 @@ import pytest
 
 from capmas.agents.arbiter import CandidateArbiter
 from capmas.contracts.action import SkillCall, SkillOutputRef
-from capmas.contracts.candidates import CandidateEvidence, GraphCandidate
+from capmas.contracts.candidates import CandidateEvidence, GraphCandidate, subgraph_fingerprint
 from capmas.contracts.core import SkillRef
 from capmas.contracts.graph import (
     CheckpointSpec,
@@ -210,6 +210,9 @@ def test_fixed_graph_interpreter_dispatches_action_nodes_in_order() -> None:
     assert result.terminal_subgraph == "place"
     assert scheduler.calls == ["pick", "place"]
     assert result.scene.scene_version == 2
+    assert result.traces[0].metadata["subgraph_id"] == "pick"
+    assert result.traces[0].metadata["node_id"] == "grasp"
+    assert result.traces[0].metadata["candidate_fingerprint"] == subgraph_fingerprint(first)
 
 
 def test_fixed_graph_interpreter_can_stop_after_one_verified_subgraph() -> None:

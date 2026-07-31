@@ -71,11 +71,90 @@ cycle, Recovery, Memory, and later rehearsal/cache consumers. The Arbiter
 rejects typed verifier evidence whose candidate fingerprint or scene version
 does not match the effective candidate/current scene.
 
+The runtime publication boundary is now closed. FixedGraphInterpreter adds the
+effective subgraph fingerprint, subgraph id, and node id to every action trace;
+the B3-LLM runner publishes `scheduler_metrics.verifier_evidence` and
+`evidence/verifier.json`. Phase 5 summary serialization preserves structured
+dataclass traces, and the manifest covers the verifier artifact. Dynamic
+artifacts retain the original trace index, so replay can prove that evidence
+was produced after the corresponding action.
+
 The predicate contract is explicit: object_in_gripper(obj) checks object/EE
 distance and pose only, gripper_closed() checks opening independently, and
 object_held(obj) is the strict composite predicate. The code gate is covered
-by focused tests and the full repository suite; a real CAP-X/LIBERO smoke and
-matched-seed evidence artifact are still required for the empirical gate.
+by focused tests and the full repository suite. The 2026-07-30 CAP-X/LIBERO
+pilot used CUDA_VISIBLE_DEVICES=5, gpt-5.5, and the staged two-policy path:
+one seed-1 smoke plus matched seeds 2--5. All five run directories contain
+the required logs, results, summary, manifest, and verifier artifact; all
+dynamic records pass identity/version validation. Evaluator success was 2/5
+and graph completion was 1/5. Dynamic evidence captured both successful and
+failed postconditions, including a seed where the external evaluator reported
+success while the observable placement predicate failed.
+
+The typed static evidence objects were emitted for all five runs, but all ten
+selected-candidate static collections had zero coverage because the generated
+graphs did not declare a compile-time `track_exists:*` precondition. Therefore
+the runtime publication gate is closed, while the meaningful static-coverage
+empirical gate remains open. Empty coverage is not counted as a successful
+verifier measurement.
+
+### P5.1 typed condition-default closure
+
+The follow-up condition-default slice adds a deterministic
+`SkillConditionEnricher` at both the staged decoder boundary and the scheduler
+candidate boundary. Registered CAP-X skills declare additive defaults:
+`goto_pose`, `sample_grasp_pose`, and `lift_after_grasp` publish
+`scene_fresh(2000)`, `close_gripper` publishes `gripper_closed()`, and
+`open_gripper` publishes `gripper_open()`. Explicit LLM predicates remain
+authoritative, and task predicates such as `object_in_gripper` and
+`object_at_target` are never invented from a generic skill call.
+
+`balanced` and `efficient` profiles require only the current-source freshness
+precondition, while `safety` and `robust` additionally require
+`track_exists:<id>` when an explicit motion-intent or typed object argument
+resolves uniquely to a current scene track. The local response schema permits
+an empty postcondition list so the runtime can fill safe skill defaults before
+GraphValidator runs; the final enriched action contract still requires an
+observable postcondition. LIBERO static verifier selection now includes
+`scene_fresh(...)` alongside `track_exists:*` and `object_visible:*`, while
+future object/gripper state remains dynamic.
+
+This closes the software path for meaningful static evidence when the LLM
+omits generic skill postconditions. The fresh matched LIBERO rerun below
+measures positive static coverage while reporting evaluator success and graph
+completion independently; this mechanism alone makes no downstream success
+rate claim.
+
+### P5.1 empirical condition-default rerun (2026-07-31)
+
+The post-fix matched pilot used the non-privileged CAP-X Spatial-0 config,
+CUDA device 5, gpt-5.5, staged ready-wave scheduling, two Policy strategies
+(`balanced,safety`), fixed-graph execution, and disabled geometry evidence.
+Each invocation created a new run directory under
+`outputs/phase5/P5.1_condition_defaults_20260731/`.
+
+| seed | evaluator success | graph completed | classification |
+| --- | --- | --- | --- |
+| 1 | true | true | normal success |
+| 2 | false | false | task failure after normal execution |
+| 3 | true | false | evaluator success with incomplete graph convergence |
+| 4 | n/a | n/a | both Policy calls exhausted the 60 s upstream LLM read deadline |
+| 5 | false | false | task failure after normal execution |
+
+Across the matched set, evaluator success was `2/5` and graph completion was
+`1/5`. Four normal runs produced eight static evidence records with coverage
+`1.0` for every selected collection and seven dynamic verifier records. The
+static freshness predicate often failed because static evidence is collected
+before the LLM compilation interval; execution then performs the separate
+scene refresh/rebase boundary. This is a measurement-timing limitation, not
+evidence that the typed defaults were absent. The timeout run retained its
+failure artifact, manifest, and full log but correctly has no verifier file
+because arbitration was never reached.
+
+This closes the P5.1 condition-default and evidence-publication experiment
+gate. It does not claim a downstream success-rate improvement, and it leaves
+LLM endpoint availability, latency budgeting, and graph convergence as later
+optimization work.
 
 ## Sequencing
 

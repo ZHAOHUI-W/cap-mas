@@ -273,8 +273,38 @@ candidate/scene freshness gates are implemented. Legacy scalar
 verifier_pass_rate construction remains compatible. object_in_gripper now
 means object inside the gripper region; object_held retains the
 closed-gripper requirement. The software gate is covered by focused
-regression tests; the real LIBERO smoke and matched-seed empirical gate remain
-open until fresh run-scoped artifacts are produced.
+regression tests. The runtime publication boundary is also implemented:
+action traces carry candidate identity and the runner writes structured
+static/dynamic verifier evidence under each run directory. The CUDA-visible
+2026-07-30 pilot produced five valid run-scoped artifacts with evaluator
+success 2/5 and graph completion 1/5. Static evidence objects were present,
+but all had zero coverage because no generated action declared a safe
+compile-time precondition; the meaningful static-coverage empirical gate
+remains open.
+
+P5.1 condition-default update (2026-07-31): registered typed skills now carry
+additive default predicates through `SkillConditionEnricher`. The staged
+decoder and scheduler both enrich action nodes before validation, so an empty
+LLM postcondition list can receive `scene_fresh(2000)` or a gripper-specific
+default without weakening GraphValidator. `balanced`/`efficient` profiles use
+freshness only; `safety`/`robust` add uniquely resolved `track_exists:*`
+preconditions. `scene_fresh(...)` is now compile-time-safe for static evidence.
+The software coverage path is closed. The fresh matched LIBERO rerun below
+confirms positive static coverage, and the result is reported separately from
+downstream success-rate measurement.
+
+Empirical condition-default rerun (2026-07-31): the matched non-privileged
+LIBERO Spatial-0 pilot used CUDA device 5, gpt-5.5, staged ready-wave
+proposal, two Policies (`balanced,safety`), and fixed-graph execution. Seeds
+1--5 reached evaluator success `2/5` and graph completion `1/5`; seed 4 was a
+bounded infrastructure failure because both Policy requests timed out at the
+upstream endpoint. The four normal runs emitted positive static evidence
+coverage and seven dynamic records. Static freshness failures are expected
+in this measurement because evidence is captured before compilation finishes;
+the pre-dispatch scene refresh protects physical execution but does not
+rewrite the earlier static measurement. The condition-default software and
+empirical evidence-publication gates are closed. Downstream success-rate gain,
+LLM transport robustness, and graph-convergence improvement remain open.
 
 Implementation status (2026-07-29): P5.2 contracts, strict response-schema
 support for typed `motion_intent`, grounding-aware intent rebasing,

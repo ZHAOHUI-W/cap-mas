@@ -9,6 +9,7 @@ from capmas.verification.libero import (
     LiberoObservableVerifier,
     compile_time_preconditions,
     ground_libero_grasp_subgraph,
+    pre_dispatch_preconditions,
     repair_libero_grasp_subgraph,
     validate_libero_grasp_subgraph,
     validate_libero_skill_sequence,
@@ -81,6 +82,16 @@ def test_libero_compile_time_preconditions_defer_mutable_robot_state() -> None:
             "object_in_gripper(akita_black_bowl)",
             "gripper_closed()",
             "scene_fresh(1000)",
+        )
+    ) == ("track_exists:plate", "scene_fresh(1000)")
+
+
+def test_libero_pre_dispatch_validation_defers_time_sensitive_freshness() -> None:
+    assert pre_dispatch_preconditions(
+        (
+            "track_exists:plate",
+            "scene_fresh(2000)",
+            "object_in_gripper(akita_black_bowl)",
         )
     ) == ("track_exists:plate",)
 

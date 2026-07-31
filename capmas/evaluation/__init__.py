@@ -47,6 +47,11 @@ from capmas.evaluation.shadow_arbiter import (
     ShadowArbitrationReport,
     run_shadow_arbitration,
 )
+from capmas.evaluation.verifier_artifacts import (
+    DynamicVerifierArtifact,
+    collect_dynamic_verifier_artifacts,
+    static_verifier_artifacts_from_arbitrations,
+)
 
 __all__ = [
     "CandidateIdentity",
@@ -79,4 +84,7 @@ __all__ = [
     "run_with_respawn",
     "ShadowArbitrationReport",
     "run_shadow_arbitration",
+    "DynamicVerifierArtifact",
+    "collect_dynamic_verifier_artifacts",
+    "static_verifier_artifacts_from_arbitrations",
 ]

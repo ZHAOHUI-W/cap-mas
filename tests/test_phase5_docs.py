@@ -22,3 +22,14 @@ def test_phase5_docs_record_p54_cache_boundary():
     assert "P5.4 evidence cache status" in phase5
     assert "process-local LRU" in roadmap
     assert "No experiment artifact has yet enabled the cache" in experiments
+
+
+def test_phase5_docs_record_typed_condition_default_boundary():
+    phase5 = (ROOT / "docs/phase5-evidence-evolution.md").read_text(encoding="utf-8")
+    roadmap = (ROOT / "docs/implementation-roadmap.md").read_text(encoding="utf-8")
+    experiments = (ROOT / "docs/experiments.md").read_text(encoding="utf-8")
+
+    assert "SkillConditionEnricher" in phase5
+    assert "balanced" in phase5 and "safety" in phase5
+    assert "scene_fresh(2000)" in roadmap
+    assert "coverage is reported" in experiments

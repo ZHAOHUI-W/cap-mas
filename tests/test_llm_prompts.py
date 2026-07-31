@@ -60,7 +60,25 @@ def test_local_policy_schema_requires_observable_postconditions() -> None:
         schema["properties"]["subgraph"]["properties"]["nodes"]["items"]
     )
 
-    assert node_schema["properties"]["postconditions"]["minItems"] == 1
+    assert "minItems" not in node_schema["properties"]["postconditions"]
+
+
+def test_staged_policy_prompt_documents_runtime_condition_defaults() -> None:
+    request = build_staged_policy_request(
+        AgentArtifact(
+            "subgoal-1",
+            "topology_subgoal",
+            {"subgraph_id": "grasp", "subgoal_id": "grasp", "task": "grasp bowl"},
+            "manager",
+        ),
+        _scene(),
+        AgentContext("task", "episode", 1, _scene()),
+        agent_name="policy-0",
+        policy_strategy="balanced",
+    )
+
+    prompt = str(request.messages[0]["content"])
+    assert "runtime adds typed-skill default predicates" in prompt
 
 
 def test_local_policy_schema_exposes_strict_typed_motion_intent() -> None:
