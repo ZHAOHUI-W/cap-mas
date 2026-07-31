@@ -27,3 +27,23 @@ def test_cache_evaluation_proves_hits_and_scene_invalidation(tmp_path):
         for entry in report.enabled.trace
     ]
     assert control_trace == enabled_trace
+
+
+def test_cache_evaluation_emits_trace_and_manifests(tmp_path):
+    from scripts.run_p54_evidence_cache import run_cache_evaluation
+
+    report = run_cache_evaluation(output_root=tmp_path, seed=7)
+
+    for result in (report.control, report.enabled):
+        assert result.trace[0].operation == "publish"
+        assert result.trace[-1].candidate_id == "candidate-c"
+        assert result.run_dir.exists()
+        assert (result.run_dir / "run_config.json").exists()
+        assert (result.run_dir / "logs" / "runner.log").exists()
+        assert (result.run_dir / "results" / "cache_trace.json").exists()
+        assert (result.run_dir / "results" / "summary.json").exists()
+        assert (result.run_dir / "summary.md").exists()
+        assert (result.run_dir / "manifest.json").exists()
+        assert (result.run_dir / "results" / "paired_comparison.json").exists()
+
+    assert report.control.run_dir != report.enabled.run_dir
