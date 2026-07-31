@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 
@@ -47,3 +49,68 @@ def test_cache_evaluation_emits_trace_and_manifests(tmp_path):
         assert (result.run_dir / "results" / "paired_comparison.json").exists()
 
     assert report.control.run_dir != report.enabled.run_dir
+
+
+def _test_evidence(scene_version):
+    from capmas.contracts.candidates import CandidateEvidence
+
+    return CandidateEvidence(
+        rehearsal_success_rate=0.5,
+        available_metrics=("rehearsal",),
+        scene_version=scene_version,
+        provider="p5.4-test",
+    )
+
+
+class _FailingProvider:
+    def __init__(self, message="provider failure"):
+        self.calls = 0
+        self.message = message
+
+    def call(self, candidate, scene):
+        self.calls += 1
+        if self.calls == 2:
+            raise RuntimeError(self.message)
+        return _test_evidence(scene.scene_version)
+
+
+def test_cache_mode_retains_partial_failure_artifacts(tmp_path):
+    from scripts.run_p54_evidence_cache import run_cache_mode
+
+    with pytest.raises(RuntimeError, match="provider failure"):
+        run_cache_mode(
+            output_root=tmp_path,
+            mode="cache_enabled",
+            seed=1,
+            provider=_FailingProvider(),
+        )
+
+    run_dirs = list((tmp_path / "P5.4_cache_evaluation").iterdir())
+    assert len(run_dirs) == 1
+    run_dir = run_dirs[0]
+    assert json.loads((run_dir / "run_config.json").read_text())["status"] == "failed"
+    assert (run_dir / "failure.json").exists()
+    assert (run_dir / "results" / "cache_trace.json").exists()
+    assert (run_dir / "logs" / "runner.log").exists()
+    assert (run_dir / "manifest.json").exists()
+
+
+def test_cache_failure_artifacts_redact_provider_secret(tmp_path):
+    from scripts.run_p54_evidence_cache import run_cache_mode
+
+    secret = "sk-test-provider-secret"
+    with pytest.raises(RuntimeError, match="provider failure"):
+        run_cache_mode(
+            output_root=tmp_path,
+            mode="cache_enabled",
+            seed=1,
+            provider=_FailingProvider(f"provider failure {secret}"),
+        )
+
+    run_dir = next((tmp_path / "P5.4_cache_evaluation").iterdir())
+    text = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in run_dir.rglob("*")
+        if path.is_file() and path.name != "manifest.json"
+    )
+    assert secret not in text

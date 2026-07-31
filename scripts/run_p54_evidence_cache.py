@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import asdict, dataclass
+import json
 from pathlib import Path
+import re
 import sys
 from typing import Literal, Mapping, Sequence
 
@@ -30,6 +32,7 @@ from capmas.evaluation.phase5_artifacts import Phase5RunDirectory
 
 CacheMode = Literal["cache_disabled", "cache_enabled"]
 CacheResult = Literal["publish", "hit", "miss", "stale_rejection", "disabled"]
+_SENSITIVE_TOKEN = re.compile(r"sk-[A-Za-z0-9_-]+")
 
 
 @dataclass(frozen=True)
@@ -319,6 +322,13 @@ def _write_failure_artifacts(
     trace: Sequence[CacheTraceEntry],
     error: BaseException,
 ) -> None:
+    run_config_path = run_dir.path / "run_config.json"
+    run_config = {}
+    if run_config_path.exists():
+        run_config = json.loads(run_config_path.read_text(encoding="utf-8"))
+    run_config.update({"status": "failed", "failure_stage": "cache_trace"})
+    run_dir.write_json("run_config.json", run_config)
+    safe_error = _redact_text(str(error))
     run_dir.write_json(
         "failure.json",
         {
@@ -327,7 +337,7 @@ def _write_failure_artifacts(
             "mode": mode,
             "seed": seed,
             "error_type": type(error).__name__,
-            "error": str(error),
+            "error": safe_error,
         },
     )
     run_dir.write_json("results/cache_trace.json", [asdict(entry) for entry in trace])
@@ -340,13 +350,17 @@ def _write_failure_artifacts(
                 f"seed={seed}",
                 "status=failed",
                 f"error_type={type(error).__name__}",
-                f"error={error}",
+                f"error={safe_error}",
                 f"trace_entries={len(trace)}",
                 "",
             ]
         ),
     )
     run_dir.finalize_manifest()
+
+
+def _redact_text(value: str) -> str:
+    return _SENSITIVE_TOKEN.sub("[REDACTED]", value)
 
 
 def run_cache_mode(
