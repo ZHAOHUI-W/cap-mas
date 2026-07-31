@@ -26,6 +26,7 @@ class StrategyProfile:
     ood_weight: float = 0.25
     latency_penalty: float = 0.03
     recovery_penalty: float = 0.02
+    require_grounding_preconditions: bool = False
 
     def __post_init__(self) -> None:
         if self.name not in {"balanced", "safety", "robust", "efficient"}:
@@ -51,6 +52,8 @@ class StrategyProfile:
                 raise ValueError(f"{field_name} must be in [0, 1]")
         if self.latency_penalty < 0 or self.recovery_penalty < 0:
             raise ValueError("strategy penalties must not be negative")
+        if not isinstance(self.require_grounding_preconditions, bool):
+            raise ValueError("require_grounding_preconditions must be boolean")
 
     @classmethod
     def for_name(cls, name: str | None) -> "StrategyProfile":
@@ -74,6 +77,7 @@ class StrategyProfile:
                 geometry_weight=0.50,
                 min_reachability=0.70,
                 max_collision_risk=0.35,
+                require_grounding_preconditions=True,
                 verifier_weight=0.20,
                 rehearsal_weight=0.05,
                 ood_weight=0.10,
@@ -97,6 +101,7 @@ class StrategyProfile:
                 ood_weight=0.30,
                 latency_penalty=0.02,
                 recovery_penalty=0.03,
+                require_grounding_preconditions=True,
             ),
             "efficient": cls(
                 "efficient",

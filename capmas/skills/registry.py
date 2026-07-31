@@ -49,6 +49,18 @@ class SkillRegistry:
     def has(self, reference: SkillRef) -> bool:
         return reference in self._skills
 
+    def default_postconditions(self, reference: SkillRef) -> tuple[str, ...]:
+        """Return optional predicate metadata without breaking custom skills."""
+        declared = getattr(self.get(reference), "default_postconditions", ())
+        if declared is None:
+            return ()
+        if isinstance(declared, str):
+            return (declared,)
+        try:
+            return tuple(str(predicate) for predicate in declared)
+        except TypeError:
+            return ()
+
     def validate_contract(self, contract: ActionContract) -> None:
         if not contract.skills:
             raise ValueError("action contract has no skills")

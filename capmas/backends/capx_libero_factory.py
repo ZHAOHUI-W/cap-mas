@@ -39,6 +39,14 @@ OPTIONAL_LIBERO_SKILLS: dict[str, str] = {
     "goto_home_joint_position": "goto_home_joint_position",
 }
 
+DEFAULT_LIBERO_POSTCONDITIONS: dict[str, tuple[str, ...]] = {
+    "goto_pose": ("scene_fresh(2000)",),
+    "sample_grasp_pose": ("scene_fresh(2000)",),
+    "lift_after_grasp": ("scene_fresh(2000)",),
+    "close_gripper": ("gripper_closed()",),
+    "open_gripper": ("gripper_open()",),
+}
+
 
 @dataclass(frozen=True)
 class CAPXRuntimeBundle:
@@ -348,6 +356,7 @@ def build_capx_runtime_from_yaml(
         primary_api,
         bindings,
         function_overrides=function_overrides,
+        default_postconditions=DEFAULT_LIBERO_POSTCONDITIONS,
     )
     registry = SkillRegistry()
     for reference, skill in typed_skills.items():

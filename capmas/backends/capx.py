@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import inspect
 import time
-from typing import Any, Callable, Mapping, Protocol
+from typing import Any, Callable, Mapping, Protocol, Sequence
 from uuid import uuid4
 
 from capmas.backends.protocol import RobotBackend, SkillExecutionResult
@@ -215,9 +215,11 @@ class CAPXTypedSkill:
         self,
         reference: SkillRef,
         function: Callable[..., object],
+        default_postconditions: Sequence[str] = (),
     ) -> None:
         self.skill_id = reference.skill_id
         self.version = reference.version
+        self.default_postconditions = tuple(default_postconditions)
         self._function = function
         self._signature = inspect.signature(function)
 
@@ -247,6 +249,7 @@ def build_capx_skills(
     allowed_functions: Mapping[str, str],
     version: str = "capx-compat-1",
     function_overrides: Mapping[str, Callable[..., object]] | None = None,
+    default_postconditions: Mapping[str, Sequence[str]] | None = None,
 ) -> dict[SkillRef, CAPXTypedSkill]:
     """Build typed bindings from an existing CAP-X ApiBase allowlist.
 
@@ -262,7 +265,11 @@ def build_capx_skills(
         if function_name not in functions:
             raise ValueError(f"CAP-X API does not expose function: {function_name}")
         reference = SkillRef(skill_id, version)
-        bindings[reference] = CAPXTypedSkill(reference, functions[function_name])
+        bindings[reference] = CAPXTypedSkill(
+            reference,
+            functions[function_name],
+            (default_postconditions or {}).get(skill_id, ()),
+        )
     return bindings
 
 

@@ -10,6 +10,7 @@ from capmas.contracts.core import SkillRef
 class TypedSkill(Protocol):
     skill_id: str
     version: str
+    default_postconditions: tuple[str, ...]
 
     def validate_args(self, args: dict[str, object]) -> None: ...
 

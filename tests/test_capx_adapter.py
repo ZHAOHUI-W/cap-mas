@@ -39,6 +39,19 @@ def test_capx_api_function_becomes_typed_skill() -> None:
     assert api.calls == ["box"]
 
 
+def test_capx_typed_skill_keeps_declared_default_postconditions() -> None:
+    api = FakeAPI()
+    skills = build_capx_skills(
+        api,
+        {"goto_pose": "move"},
+        default_postconditions={"goto_pose": ("scene_fresh(2000)",)},
+    )
+
+    skill = skills[SkillRef("goto_pose", "capx-compat-1")]
+
+    assert skill.default_postconditions == ("scene_fresh(2000)",)
+
+
 def test_skill_registry_exposes_callable_argument_names_for_strict_schemas() -> None:
     api = FakeAPI()
     skills = build_capx_skills(api, {"goto_pose": "move"})
