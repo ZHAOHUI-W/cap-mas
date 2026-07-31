@@ -367,6 +367,28 @@ downstream success-rate gain. Ten-plus seeds, multiple tasks, online physical
 selection, TSDF, real semantic adapters, evidence caching, OOD replay, and
 calibration remain open follow-up work.
 
+P5.3.1 code status (2026-07-31):
+`capmas/evaluation/online_rehearsal.py` adds the batch provider seam and typed
+baseline/evidence-aware/live report. `LLMGraphScheduler` uses it consistently
+for legacy, staged, ready-wave, and rolling-frontier selection. The scheduler
+default remains `disabled`; shadow mode never changes the live arbitration,
+and `online_bounded` is fail-closed with explicit baseline fallback. The
+driver `scripts/run_libero_p53_online.py` reuses the isolated rehearsal worker,
+records identity/version rejections and provider latency, and performs no
+more than one physical execution. The runner also retains failure artifacts
+when live execution raises, gives cap-x's LIBERO robosuite fork priority over
+the generic robosuite checkout, and terminates timed-out rehearsal workers
+before the live executor starts. The first real endpoint-backed
+`online_bounded` smoke completed on LIBERO spatial task 0 with two candidates:
+the baseline `confidence_fallback` winner was policy-0, while rehearsal
+evidence selected policy-1 and the single live execution completed with
+`evaluator_success=true`. The smoke artifact is retained under
+`outputs/phase5/P5.3.1_real_smoke_20260731_cleanfix/`.
+
+This closes the single real smoke gate, but not the matched downstream
+evaluation: ten-plus seeds, multiple tasks, a baseline physical control, and
+a causal success-rate improvement are still open.
+
 P5.4 code status (2026-07-30): `capmas/evaluation/evidence_cache.py` provides
 the versioned, thread-safe process-local LRU specified by the Phase 5 handoff.
 It keys entries by canonical local candidate fingerprint and source scene

@@ -31,6 +31,7 @@ class ExperimentRunConfig:
     geometry_mode: str = "disabled"
     geometry_deadline_ms: int = 50
     geometry_depth_subsample: int = 16
+    rehearsal_mode: str = "disabled"
     preview_backend: str = "none"
     privilege_mode: str = "realistic_sensor"
     artifact_dir: str = ""
@@ -61,6 +62,8 @@ class ExperimentRunConfig:
             raise ValueError("geometry deadline must be positive")
         if self.geometry_depth_subsample <= 0:
             raise ValueError("geometry depth subsample must be positive")
+        if self.rehearsal_mode not in {"disabled", "shadow", "online_bounded"}:
+            raise ValueError("unsupported rehearsal mode")
         if self.privilege_mode not in {"realistic_sensor", "diagnostic_privileged"}:
             raise ValueError("unsupported privilege mode")
         if self.policy_strategies:

@@ -317,6 +317,30 @@ The five-seed, one-task process result is still insufficient for the remaining
 statistical gate: ten-plus seeds, multiple tasks, controlled physical online
 selection, and the P5.4 evidence cache remain open.
 
+P5.3.1 adds the controlled online selection driver at
+`scripts/run_libero_p53_online.py`. It consumes the same graph-scoped
+candidate artifact, runs one matched rehearsal batch, maps each result to the
+local Arbiter identity, and executes only the selected live candidate. Every
+run is stored under a new
+`outputs/phase5/P5.3.1_online_rehearsal_arbiter/<timestamp>_<run_id>/`
+directory with `run_config.json`, `results/rehearsal.json`,
+`results/selection.json`, `logs/runner.log`, `summary.json`, `summary.md`,
+and `manifest.json`. The selection artifact records baseline/evidence-aware/
+live winners, selection bases, accepted evidence IDs, rejected evidence,
+provider latency, fallback reason, and physical execution count.
+
+The driver supports `disabled`, `shadow`, and `online_bounded`. The first two
+are safe controls; `shadow` cannot promote its hypothetical winner. The
+`online_bounded` mode is fail-closed and falls back to baseline when the
+provider fails or the evidence-aware Arbiter has no winner. The focused code
+gate and one endpoint-backed smoke are now closed. The retained smoke under
+`outputs/phase5/P5.3.1_real_smoke_20260731_cleanfix/` used two candidates on
+LIBERO spatial task 0. Rehearsal evidence changed the winner from the
+baseline `confidence_fallback` policy-0 to policy-1 with `evidence_score`; the
+single physical execution completed successfully and passed the CAP-X
+evaluator. Ten-plus seeds, multiple tasks, a matched baseline physical
+control, and downstream causal comparison are still required.
+
 P5.4 now has a process-local versioned cache implementation with exact
 candidate/scene keys and observable hit, miss, stale-rejection, invalidation,
 and eviction counters. No experiment artifact has yet enabled the cache or

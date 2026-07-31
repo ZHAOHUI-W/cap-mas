@@ -47,6 +47,12 @@ from capmas.evaluation.shadow_arbiter import (
     ShadowArbitrationReport,
     run_shadow_arbitration,
 )
+from capmas.evaluation.online_rehearsal import (
+    RehearsalArbitrationReport,
+    RehearsalEvidenceProvider,
+    RehearsalMode,
+    select_with_rehearsal,
+)
 from capmas.evaluation.verifier_artifacts import (
     DynamicVerifierArtifact,
     collect_dynamic_verifier_artifacts,
@@ -84,6 +90,10 @@ __all__ = [
     "run_with_respawn",
     "ShadowArbitrationReport",
     "run_shadow_arbitration",
+    "RehearsalArbitrationReport",
+    "RehearsalEvidenceProvider",
+    "RehearsalMode",
+    "select_with_rehearsal",
     "DynamicVerifierArtifact",
     "collect_dynamic_verifier_artifacts",
     "static_verifier_artifacts_from_arbitrations",

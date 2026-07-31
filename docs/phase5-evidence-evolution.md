@@ -382,6 +382,43 @@ measure downstream success. Ten-plus seeds, multiple tasks, physical online
 promotion, and the P5.4 versioned evidence cache are not closed by this
 increment.
 
+### P5.3.1 online rehearsal-Arbiter status (2026-07-31)
+
+The online selection seam is implemented in
+`capmas/evaluation/online_rehearsal.py`. `disabled` never calls a provider;
+`shadow` records a hypothetical evidence-aware result while keeping the
+baseline result live; `online_bounded` promotes the evidence-aware result only
+when it contains a selected candidate and otherwise records an explicit
+fallback. The provider is batch-scoped and has no `ActionLease` or physical
+executor access. Every attached result passes the existing candidate
+fingerprint, graph-to-subgraph mapping, and scene-version checks. Missing,
+stale, and mismatched evidence remains unavailable rather than becoming a
+zero score.
+
+`LLMGraphScheduler` routes legacy, staged serial, ready-wave, and rolling
+frontier candidate selection through this one seam. Each
+`LLMGraphCompileResult` exposes `rehearsal_reports`; the existing
+`arbitrations` field remains the only live result consumed by execution.
+`scripts/run_libero_p53_online.py` reuses the isolated CAP-X/LIBERO rehearsal
+worker, writes a new run-scoped directory with rehearsal and selection
+artifacts, and invokes the physical executor at most once.
+
+The code gate is closed by focused tests for disabled/shadow/online behavior,
+provider failure fallback, identity rejection, report serialization, the
+single-execution driver, and timed-out worker termination. A real
+endpoint-backed `online_bounded` smoke also completed on LIBERO spatial task 0
+with `CUDA_VISIBLE_DEVICES=5`: policy-0 failed rehearsal, policy-1 passed
+rehearsal, the baseline winner was policy-0, and the evidence-aware/live winner
+was policy-1. The live executor ran exactly once and reported
+`completed=true`, `evaluator_success=true`, and `success=true`. The retained
+artifact is under
+`outputs/phase5/P5.3.1_real_smoke_20260731_cleanfix/`.
+
+This is one endpoint-backed smoke, not a success-rate claim. The matched
+baseline physical control, ten-plus seeds, multiple tasks, and downstream
+causal gate remain open. `TSDF`, semantic adapters, persistent evidence cache,
+OOD replay, calibration, and adaptive topology remain outside this increment.
+
 TSDF, real semantic adapters, OOD replay, and calibration remain outside this
 implementation increment.
 

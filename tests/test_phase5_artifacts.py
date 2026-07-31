@@ -5,6 +5,8 @@ import hashlib
 import json
 
 from capmas.evaluation.phase5_artifacts import Phase5RunDirectory
+from capmas.contracts.candidates import ArbitrationResult
+from capmas.evaluation.online_rehearsal import RehearsalArbitrationReport
 
 
 @dataclass(frozen=True)
@@ -60,3 +62,32 @@ def test_phase5_json_writer_preserves_structured_dataclass_payloads(tmp_path) ->
 
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["result"] == {"completed": True, "traces": ["trace-1"]}
+
+
+def test_phase5_writer_serializes_online_rehearsal_report(tmp_path) -> None:
+    run = Phase5RunDirectory.create(tmp_path, "experiment", "run-rehearsal")
+    report = RehearsalArbitrationReport(
+        mode="online_bounded",
+        baseline=ArbitrationResult(None),
+        evidence_aware=ArbitrationResult(None),
+        live=ArbitrationResult(None),
+        attached_candidate_ids=("candidate-a",),
+        evidence_rejections=("candidate-b: stale",),
+        provider_latency_ms=12.5,
+        fallback_reason="provider_timeout",
+    )
+
+    output = run.write_json(
+        "summary.json",
+        {
+            "run_config": {"rehearsal_mode": "online_bounded"},
+            "scheduler_metrics": {"rehearsal_reports": {"first": report}},
+        },
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    serialized = payload["scheduler_metrics"]["rehearsal_reports"]["first"]
+    assert payload["run_config"]["rehearsal_mode"] == "online_bounded"
+    assert serialized["mode"] == "online_bounded"
+    assert serialized["attached_candidate_ids"] == ["candidate-a"]
+    assert serialized["provider_latency_ms"] == 12.5

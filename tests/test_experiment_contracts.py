@@ -22,6 +22,7 @@ def test_experiment_run_config_is_json_safe_and_records_non_secret_controls() ->
         llm_proposal_retries=0,
         schema_mode="strict_provider_schema",
         policy_strategies=("balanced", "safety"),
+        rehearsal_mode="shadow",
     )
 
     payload = config.to_dict()
@@ -30,6 +31,7 @@ def test_experiment_run_config_is_json_safe_and_records_non_secret_controls() ->
     assert payload["policy_agents"] == 2
     assert payload["schema_mode"] == "strict_provider_schema"
     assert payload["policy_strategies"] == ("balanced", "safety")
+    assert payload["rehearsal_mode"] == "shadow"
     assert "api_key" not in payload
     assert "api-key" not in payload
 

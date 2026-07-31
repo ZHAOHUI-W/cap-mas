@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+import time
+
+import pytest
+
 from capmas.evaluation.rehearsal import (
     ProcessRehearsalPool,
     RehearsalFailureClass,
     RehearsalJob,
     RehearsalResult,
+    RehearsalTimeout,
 )
 
 
@@ -17,6 +24,17 @@ def _worker(job: RehearsalJob):
         success=job.candidate_id != "bad",
         latency_ms=1.0,
         failure_class=None if job.candidate_id != "bad" else "sim_failure",
+    )
+
+
+def _blocking_worker(job: RehearsalJob):
+    Path(job.payload["pid_path"]).write_text(str(os.getpid()), encoding="utf-8")
+    time.sleep(5.0)
+    return RehearsalResult(
+        candidate_id=job.candidate_id,
+        seed=job.seed,
+        success=True,
+        latency_ms=5000.0,
     )
 
 
@@ -41,6 +59,28 @@ def test_process_rehearsal_pool_rejects_invalid_limits() -> None:
         assert "max_workers" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("expected max_workers validation")
+
+
+def test_process_rehearsal_pool_terminates_worker_after_timeout(tmp_path) -> None:
+    pid_path = tmp_path / "worker.pid"
+    jobs = (RehearsalJob("slow", 1, {"pid_path": str(pid_path)}),)
+
+    with pytest.raises(RehearsalTimeout):
+        ProcessRehearsalPool(max_workers=1, timeout_s=2.0).run(jobs, _blocking_worker)
+
+    deadline = time.monotonic() + 3.0
+    while time.monotonic() < deadline and not pid_path.exists():
+        time.sleep(0.01)
+    assert pid_path.exists()
+    pid = int(pid_path.read_text(encoding="utf-8"))
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.01)
+    else:
+        raise AssertionError(f"timed-out rehearsal worker {pid} is still alive")
 
 
 def test_rehearsal_job_carries_scene_and_candidate_identity():

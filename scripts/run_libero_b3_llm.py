@@ -136,6 +136,12 @@ def parse_args() -> argparse.Namespace:
         choices=("disabled", "shadow", "online_bounded"),
         default="disabled",
     )
+    parser.add_argument(
+        "--rehearsal-mode",
+        choices=("disabled", "shadow", "online_bounded"),
+        default="disabled",
+        help="online rehearsal requires the dedicated P5.3 driver/provider",
+    )
     parser.add_argument("--geometry-deadline-ms", type=int, default=50)
     parser.add_argument(
         "--geometry-depth-subsample",
@@ -267,6 +273,11 @@ def _verifier_evidence_payload(
 
 def main() -> None:
     args = parse_args()
+    if args.rehearsal_mode != "disabled":
+        raise SystemExit(
+            "--rehearsal-mode requires scripts/run_libero_p53_online.py, "
+            "which owns the isolated rehearsal provider"
+        )
     if not args.api_base:
         raise SystemExit("--api-base or CAPMAS_LLM_API_BASE is required")
     if (
@@ -460,6 +471,7 @@ def main() -> None:
             geometry_mode=args.geometry_mode,
             geometry_deadline_ms=args.geometry_deadline_ms,
             geometry_depth_subsample=args.geometry_depth_subsample,
+            rehearsal_mode=args.rehearsal_mode,
             preview_backend=args.preview_backend,
             privilege_mode=args.privilege_mode,
             artifact_dir=str(phase5_run.path) if phase5_run is not None else "",
@@ -656,6 +668,7 @@ def main() -> None:
                 if args.geometry_mode != "disabled"
                 else None
             ),
+            rehearsal_mode=args.rehearsal_mode,
             candidate_scene_rewriter=lambda subgraph, current_scene: ground_libero_grasp_subgraph(
                 repair_libero_grasp_subgraph(subgraph), current_scene
             ),
@@ -728,6 +741,11 @@ def main() -> None:
                     for compile_result in result.compilations
                 ),
                 "geometry_evidence": tuple(geometry_records),
+                "rehearsal_mode": args.rehearsal_mode,
+                "rehearsal_reports": tuple(
+                    compile_result.rehearsal_reports
+                    for compile_result in result.compilations
+                ),
                 "world_model": _world_model_metrics(
                     world_model_enricher,
                     geometry_local_map,
@@ -773,6 +791,8 @@ def main() -> None:
                 "compile_latency_ms": result.compile_result.compile_latency_ms,
                 "manager_topology_calls": result.compile_result.manager_topology_calls,
                 "geometry_evidence": tuple(geometry_records),
+                "rehearsal_mode": args.rehearsal_mode,
+                "rehearsal_reports": result.compile_result.rehearsal_reports,
                 "world_model": _world_model_metrics(
                     world_model_enricher,
                     geometry_local_map,

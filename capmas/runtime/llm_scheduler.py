@@ -42,6 +42,12 @@ from capmas.graph.staged import TopologyValidator
 from capmas.graph.normalizer import CandidateNormalizer
 from capmas.graph.validator import GraphValidator, scene_initial_facts
 from capmas.runtime.graph_interpreter import FixedGraphInterpreter, GraphExecutionResult
+from capmas.evaluation.online_rehearsal import (
+    RehearsalArbitrationReport,
+    RehearsalEvidenceProvider,
+    RehearsalMode,
+    select_with_rehearsal,
+)
 
 
 class LLMGraphScheduleError(RuntimeError):
@@ -83,6 +89,7 @@ class LLMGraphCompileResult:
     planning_scope: str = "full_graph"
     manager_topology_calls: int = 0
     candidate_evidence_timeouts: tuple[str, ...] = ()
+    rehearsal_reports: Mapping[str, RehearsalArbitrationReport] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -124,6 +131,8 @@ class LLMGraphScheduler:
         candidate_evidence_timeout_ms: float | None = None,
         condition_enricher: Callable[[SubgraphSpec, SceneSnapshot, str], SubgraphSpec]
         | None = None,
+        rehearsal_mode: RehearsalMode = "disabled",
+        rehearsal_evidence_provider: RehearsalEvidenceProvider | None = None,
     ) -> None:
         if max_workers <= 0:
             raise ValueError("max_workers must be positive")
@@ -133,6 +142,10 @@ class LLMGraphScheduler:
             raise ValueError("proposal_mode must be subgoal_serial or ready_wave")
         if candidate_evidence_timeout_ms is not None and candidate_evidence_timeout_ms <= 0:
             raise ValueError("candidate evidence timeout must be positive")
+        if rehearsal_mode not in {"disabled", "shadow", "online_bounded"}:
+            raise ValueError(
+                "rehearsal mode must be disabled, shadow, or online_bounded"
+            )
         self.manager = manager
         self.policy_agents = {key: tuple(value) for key, value in policy_agents.items()}
         self.validator = validator or GraphValidator()
@@ -148,6 +161,8 @@ class LLMGraphScheduler:
         self.candidate_normalizer = candidate_normalizer
         self.candidate_evidence_timeout_ms = candidate_evidence_timeout_ms
         self.condition_enricher = condition_enricher
+        self.rehearsal_mode = rehearsal_mode
+        self.rehearsal_evidence_provider = rehearsal_evidence_provider
         self._candidate_evidence_timeouts: list[str] = []
 
     def compile(
@@ -174,6 +189,7 @@ class LLMGraphScheduler:
         )
         selected: list[SubgraphSpec] = []
         arbitrations: dict[str, ArbitrationResult] = {}
+        rehearsal_reports: dict[str, RehearsalArbitrationReport] = {}
         failures: list[PolicyProposalFailure] = []
 
         for subgraph in graph.subgraphs:
@@ -205,12 +221,13 @@ class LLMGraphScheduler:
                 context=context,
             )
             failures.extend(skill_failures)
-            arbitration = self.arbiter.select(
+            arbitration, rehearsal_report = self._select_candidates_with_rehearsal(
                 candidates,
                 scene,
                 expected_subgoal=subgraph.subgoal_id,
             )
             arbitrations[subgraph.subgraph_id] = arbitration
+            rehearsal_reports[subgraph.subgraph_id] = rehearsal_report
             if arbitration.selected is None:
                 details = "; ".join(
                     f"{failure.agent_name}: {failure.message}"
@@ -235,6 +252,7 @@ class LLMGraphScheduler:
             proposal_waves=tuple((item.subgraph_id,) for item in graph.subgraphs),
             compile_latency_ms=(time.monotonic() - started) * 1000.0,
             candidate_evidence_timeouts=tuple(self._candidate_evidence_timeouts),
+            rehearsal_reports=rehearsal_reports,
         )
 
     def run(
@@ -328,6 +346,7 @@ class LLMGraphScheduler:
             )
         selected: list[SubgraphSpec] = []
         arbitrations: dict[str, ArbitrationResult] = {}
+        rehearsal_reports: dict[str, RehearsalArbitrationReport] = {}
         failures: list[PolicyProposalFailure] = []
         for topology_subgoal in topology.subgoals:
             if topology_subgoal.execution_kind == "checkpoint_only":
@@ -371,12 +390,13 @@ class LLMGraphScheduler:
                     candidate.subgraph,
                 )
             )
-            arbitration = self.arbiter.select(
+            arbitration, rehearsal_report = self._select_candidates_with_rehearsal(
                 eligible_candidates,
                 scene,
                 expected_subgoal=topology_subgoal.subgoal_id,
             )
             arbitrations[topology_subgoal.subgraph_id] = arbitration
+            rehearsal_reports[topology_subgoal.subgraph_id] = rehearsal_report
             if arbitration.selected is None:
                 details = "; ".join(
                     f"{failure.agent_name}: {failure.message}"
@@ -408,6 +428,7 @@ class LLMGraphScheduler:
             topology=topology,
             manager_topology_calls=1,
             candidate_evidence_timeouts=tuple(self._candidate_evidence_timeouts),
+            rehearsal_reports=rehearsal_reports,
         )
 
     def compile_ready_frontier(
@@ -480,6 +501,7 @@ class LLMGraphScheduler:
             )
 
         failures: tuple[PolicyProposalFailure, ...] = ()
+        rehearsal_reports: dict[str, RehearsalArbitrationReport] = {}
         if topology_subgoal.execution_kind == "checkpoint_only":
             selected, arbitration = _deterministic_checkpoint_candidate(
                 topology_subgoal,
@@ -504,7 +526,7 @@ class LLMGraphScheduler:
                 scene=scene,
                 context=context,
             )
-            selected, arbitration, skill_failures = self._select_staged_candidate(
+            selected, arbitration, skill_failures, rehearsal_report = self._select_staged_candidate(
                 topology_subgoal,
                 candidates,
                 failures=proposal_failures,
@@ -513,6 +535,7 @@ class LLMGraphScheduler:
                 context=context,
             )
             failures = (*proposal_failures, *skill_failures)
+            rehearsal_reports[subgraph_id] = rehearsal_report
 
         graph = MissionGraph(
             mission_id=topology.mission_id,
@@ -540,6 +563,7 @@ class LLMGraphScheduler:
             planning_scope="ready_frontier",
             manager_topology_calls=1 if manager_called else 0,
             candidate_evidence_timeouts=tuple(self._candidate_evidence_timeouts),
+            rehearsal_reports=rehearsal_reports,
         )
 
     def _compile_staged_ready_waves(
@@ -560,6 +584,7 @@ class LLMGraphScheduler:
         planned: set[str] = set()
         selected_by_id: dict[str, SubgraphSpec] = {}
         arbitrations: dict[str, ArbitrationResult] = {}
+        rehearsal_reports: dict[str, RehearsalArbitrationReport] = {}
         failures: list[PolicyProposalFailure] = []
         waves: list[tuple[str, ...]] = []
 
@@ -590,7 +615,7 @@ class LLMGraphScheduler:
                     selected_by_id[subgraph_id] = selected
                     arbitrations[subgraph_id] = arbitration
                     continue
-                selected, arbitration, subgoal_failures = self._select_staged_candidate(
+                selected, arbitration, subgoal_failures, rehearsal_report = self._select_staged_candidate(
                     topology_subgoal,
                     proposals_by_id.get(subgraph_id, ()),
                     failures=tuple(
@@ -605,6 +630,7 @@ class LLMGraphScheduler:
                 failures.extend(subgoal_failures)
                 selected_by_id[subgraph_id] = selected
                 arbitrations[subgraph_id] = arbitration
+                rehearsal_reports[subgraph_id] = rehearsal_report
 
             pending.difference_update(ready)
             planned.update(ready)
@@ -625,7 +651,27 @@ class LLMGraphScheduler:
             topology=topology,
             manager_topology_calls=1,
             candidate_evidence_timeouts=tuple(self._candidate_evidence_timeouts),
+            rehearsal_reports=rehearsal_reports,
         )
+
+    def _select_candidates_with_rehearsal(
+        self,
+        candidates: Sequence[GraphCandidate],
+        scene: SceneSnapshot,
+        *,
+        expected_subgoal: str | None = None,
+    ) -> tuple[ArbitrationResult, RehearsalArbitrationReport]:
+        """Use one bounded evidence seam for every scheduler protocol."""
+
+        report = select_with_rehearsal(
+            candidates,
+            scene,
+            self.arbiter,
+            mode=self.rehearsal_mode,
+            provider=self.rehearsal_evidence_provider,
+            expected_subgoal=expected_subgoal,
+        )
+        return report.live, report
 
     def _propose_candidate_wave(
         self,
@@ -727,7 +773,12 @@ class LLMGraphScheduler:
         task: str,
         scene: SceneSnapshot,
         context: AgentContext,
-    ) -> tuple[SubgraphSpec, ArbitrationResult, tuple[PolicyProposalFailure, ...]]:
+    ) -> tuple[
+        SubgraphSpec,
+        ArbitrationResult,
+        tuple[PolicyProposalFailure, ...],
+        RehearsalArbitrationReport,
+    ]:
         candidates, skill_failures = self._filter_skill_candidates(
             candidates,
             task=task,
@@ -738,7 +789,7 @@ class LLMGraphScheduler:
             for candidate in candidates
             if self._has_topology_postconditions(topology_subgoal, candidate.subgraph)
         )
-        arbitration = self.arbiter.select(
+        arbitration, rehearsal_report = self._select_candidates_with_rehearsal(
             eligible_candidates,
             scene,
             expected_subgoal=topology_subgoal.subgoal_id,
@@ -757,7 +808,12 @@ class LLMGraphScheduler:
                 proposal_failures=(*failures, *skill_failures),
             )
         self._require_topology_postconditions(topology_subgoal, arbitration.selected.subgraph)
-        return arbitration.selected.subgraph, arbitration, tuple(skill_failures)
+        return (
+            arbitration.selected.subgraph,
+            arbitration,
+            tuple(skill_failures),
+            rehearsal_report,
+        )
 
     def _propose_candidates(
         self,

@@ -153,5 +153,27 @@ class ProcessRehearsalPool:
                 f"rehearsal exceeded timeout_s={self.timeout_s}"
             ) from exc
         finally:
-            pool.shutdown(wait=not timed_out, cancel_futures=True)
+            if timed_out:
+                _terminate_pool_workers(pool)
+            pool.shutdown(wait=True, cancel_futures=True)
         return tuple(sorted(results, key=lambda item: (item.candidate_id, item.seed)))
+
+
+def _terminate_pool_workers(pool: ProcessPoolExecutor) -> None:
+    """Stop spawned workers before releasing a timed-out process pool.
+
+    ``ProcessPoolExecutor.shutdown(wait=False)`` does not terminate a worker
+    already executing a user callable. Rehearsal workers can own MuJoCo/EGL
+    contexts and GPU models, so leaving them alive would violate the isolation
+    boundary for the next rehearsal or live executor.
+    """
+
+    processes = tuple(getattr(pool, "_processes", {}).values())
+    for process in processes:
+        if process.is_alive():
+            process.terminate()
+    for process in processes:
+        process.join(timeout=1.0)
+        if process.is_alive():
+            process.kill()
+            process.join(timeout=1.0)

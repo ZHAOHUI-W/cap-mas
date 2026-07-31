@@ -7,7 +7,7 @@ import pytest
 from capmas.agents.policy import CallableGraphPolicyAgent
 from capmas.contracts.action import SkillCall
 from capmas.contracts.agent import AgentArtifact, AgentContext
-from capmas.contracts.candidates import CandidateEvidence
+from capmas.contracts.candidates import CandidateEvidence, subgraph_fingerprint
 from capmas.contracts.core import SkillRef
 from capmas.contracts.graph import (
     CheckpointSpec,
@@ -19,6 +19,7 @@ from capmas.contracts.graph import (
 from capmas.contracts.scene import SceneSnapshot
 from capmas.backends.capx import CAPXTypedSkill
 from capmas.runtime.llm_scheduler import LLMGraphScheduler, LLMGraphScheduleError
+from capmas.evaluation.rehearsal_evidence import RehearsalEvidence
 from capmas.skills.registry import SkillRegistry
 
 
@@ -123,6 +124,97 @@ def test_llm_scheduler_can_attach_evidence_before_arbitration() -> None:
     assert arbitration.selected.subgraph.description == "preferred"
     assert arbitration.selection_basis == "evidence_score"
     assert all(candidate.evidence is not None for candidate in arbitration.considered)
+
+
+def _rehearsal_evidence(candidate, scene, score: float) -> RehearsalEvidence:
+    return RehearsalEvidence(
+        candidate_id=candidate.candidate_id,
+        candidate_fingerprint=subgraph_fingerprint(candidate.subgraph),
+        seed=1,
+        scene_version=scene.scene_version,
+        success=score > 0.5,
+        score=score,
+        latency_ms=2.0,
+    )
+
+
+def test_llm_scheduler_online_rehearsal_can_change_live_selection() -> None:
+    def rehearsal(items, scene):
+        return {
+            candidate.candidate_id: _rehearsal_evidence(
+                candidate,
+                scene,
+                1.0 if candidate.subgraph.description == "short" else 0.0,
+            )
+            for candidate in items
+        }
+
+    scheduler = LLMGraphScheduler(
+        _Manager(),
+        {"first": (_agent("policy-a", "short"), _agent("policy-b", "preferred"))},
+        require_policy_proposals=False,
+        max_workers=2,
+        rehearsal_mode="online_bounded",
+        rehearsal_evidence_provider=rehearsal,
+    )
+
+    compiled = scheduler.compile("test task", _scene())
+
+    assert compiled.graph.subgraph("first").description == "short"
+    report = compiled.rehearsal_reports["first"]
+    assert report.live == compiled.arbitrations["first"]
+    assert report.baseline.selected is not None
+    assert report.baseline.selected.subgraph.description == "preferred"
+    assert report.would_change_selection is True
+
+
+def test_llm_scheduler_shadow_rehearsal_keeps_live_selection() -> None:
+    def rehearsal(items, scene):
+        return {
+            candidate.candidate_id: _rehearsal_evidence(
+                candidate,
+                scene,
+                1.0 if candidate.subgraph.description == "short" else 0.0,
+            )
+            for candidate in items
+        }
+
+    scheduler = LLMGraphScheduler(
+        _Manager(),
+        {"first": (_agent("policy-a", "short"), _agent("policy-b", "preferred"))},
+        require_policy_proposals=False,
+        max_workers=2,
+        rehearsal_mode="shadow",
+        rehearsal_evidence_provider=rehearsal,
+    )
+
+    compiled = scheduler.compile("test task", _scene())
+
+    assert compiled.graph.subgraph("first").description == "preferred"
+    report = compiled.rehearsal_reports["first"]
+    assert report.live == report.baseline
+    assert report.evidence_aware is not None
+    assert report.evidence_aware.selected is not None
+    assert report.evidence_aware.selected.subgraph.description == "short"
+
+
+def test_llm_scheduler_rehearsal_provider_failure_keeps_baseline() -> None:
+    def rehearsal(_items, _scene):
+        raise RuntimeError("worker unavailable")
+
+    scheduler = LLMGraphScheduler(
+        _Manager(),
+        {"first": (_agent("policy-a", "short"),)},
+        require_policy_proposals=False,
+        rehearsal_mode="online_bounded",
+        rehearsal_evidence_provider=rehearsal,
+    )
+
+    compiled = scheduler.compile("test task", _scene())
+
+    report = compiled.rehearsal_reports["first"]
+    assert compiled.arbitrations["first"] == report.baseline
+    assert report.fallback_reason == "provider_error: RuntimeError: worker unavailable"
 
 
 def test_llm_scheduler_scene_aware_rewriter_receives_current_scene() -> None:
