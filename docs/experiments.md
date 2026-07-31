@@ -393,5 +393,12 @@ artifacts. Failure runs retain partial trace and redacted error artifacts.
 The isolated evaluation is designed to measure exact hits, scene-version
 invalidation, stale rejection, and provider-call reduction. It does not start
 CAP-X, call an LLM, execute LIBERO, or establish a downstream robot success
-improvement. The formal run result and artifact paths will be appended after
-the local experiment completes.
+improvement. The seed-1 run completed at
+`outputs/phase5/P5.4_cache_evaluation/20260731_112755_cache_disabled_seed1/`
+and
+`outputs/phase5/P5.4_cache_evaluation/20260731_112755_cache_enabled_seed1/`.
+The disabled lane made 9 provider calls; the enabled lane made 5, a 44.44%
+reduction, with 3 exact hits, 5 stores, 2 invalidations, 1 stale rejection,
+and 0 stale attachments. The enabled cache ended at scene version 2 with
+three current entries. Both manifests passed SHA-256 verification. This is an
+isolated cache-contract result and does not establish downstream task success.

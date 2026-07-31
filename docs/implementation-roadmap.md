@@ -407,7 +407,14 @@ failure artifacts, and per-lane manifests under
 `outputs/phase5/P5.4_cache_evaluation/`. This is an isolated local cache
 evaluation; it does not call an LLM, start CAP-X/LIBERO, execute a robot, or
 establish a downstream success-rate improvement. The formal run artifact and
-observed metrics remain to be recorded after execution.
+observed metrics are recorded at
+`outputs/phase5/P5.4_cache_evaluation/20260731_112755_cache_disabled_seed1/`
+and
+`outputs/phase5/P5.4_cache_evaluation/20260731_112755_cache_enabled_seed1/`.
+The control made 9 provider calls and the enabled lane made 5, with 3 exact
+hits, 5 stores, 2 invalidations, 1 stale rejection, final scene version 2,
+and zero stale attachments. Both manifests passed SHA-256 verification. This
+isolated result does not establish downstream success-rate improvement.
 
 ## Phase 6 — Memory Controller learning
 

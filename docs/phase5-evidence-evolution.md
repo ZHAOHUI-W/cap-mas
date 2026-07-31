@@ -452,4 +452,13 @@ partial artifacts and redact `sk-*` tokens from failure output.
 This evaluation is intentionally process-local and has no LLM, CAP-X, LIBERO,
 or physical execution path. Its result can close the isolated cache hit-rate
 contract only; it does not establish a downstream success-rate improvement or
-replace the later online and multi-task evaluation.
+replace the later online and multi-task evaluation. The seed-1 run was stored
+under
+`outputs/phase5/P5.4_cache_evaluation/20260731_112755_cache_disabled_seed1/`
+and
+`outputs/phase5/P5.4_cache_evaluation/20260731_112755_cache_enabled_seed1/`.
+The control used 9 provider calls; the enabled lane used 5 and recorded 3
+hits, 2 invalidations, 1 stale rejection, 5 stores, and no stale attachment.
+Its final scene version was 2 with 3 entries, and both manifests passed
+SHA-256 verification. These are isolated cache metrics, not a downstream
+success-rate claim.

@@ -517,21 +517,15 @@ def _write_pair_comparison(
     provider_call_reduction: float,
     same_trace: bool,
 ) -> None:
-    result.run_dir.joinpath("results", "paired_comparison.json").write_text(
-        __import__("json").dumps(
-            {
-                "same_trace": same_trace,
-                "provider_call_reduction": provider_call_reduction,
-                "control_provider_calls": control.metrics.provider_calls,
-                "enabled_provider_calls": enabled.metrics.provider_calls,
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
+    Phase5RunDirectory(result.run_dir).write_json(
+        "results/paired_comparison.json",
+        {
+            "same_trace": same_trace,
+            "provider_call_reduction": provider_call_reduction,
+            "control_provider_calls": control.metrics.provider_calls,
+            "enabled_provider_calls": enabled.metrics.provider_calls,
+        },
     )
-    result.run_dir.joinpath("manifest.json").unlink(missing_ok=True)
     Phase5RunDirectory(result.run_dir).finalize_manifest()
 
 
