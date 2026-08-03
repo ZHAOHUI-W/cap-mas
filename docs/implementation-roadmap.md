@@ -385,9 +385,19 @@ evidence selected policy-1 and the single live execution completed with
 `evaluator_success=true`. The smoke artifact is retained under
 `outputs/phase5/P5.3.1_real_smoke_20260731_cleanfix/`.
 
-This closes the single real smoke gate, but not the matched downstream
-evaluation: ten-plus seeds, multiple tasks, a baseline physical control, and
-a causal success-rate improvement are still open.
+The matched downstream evaluation is now complete in two independent suites:
+`outputs/phase5/P5.3.1_matched_spatial0_20260731/` for seeds 1--5 and
+`outputs/phase5/P5.3.1_matched_spatial0_seeds6_10_20260731/` for seeds 6--10.
+Using the same two candidates and reset seeds 1--10 for both modes, with
+`CUDA_VISIBLE_DEVICES=5`, `max_workers=1`, and `timeout_s=360`, all ten pairs
+completed. The disabled baseline was `0/10`; `online_bounded` was `2/10`, a
+matched delta of `+2/10`. Both candidates' rehearsal evidence attached in all
+ten online decisions with zero identity/version rejections. Seeds 1 and 5
+changed the live winner from policy-0 to policy-1 and both passed the CAP-X
+evaluator; seeds 2--4 and 6--10 retained policy-0 through
+`evidence_tie_break` and failed. This closes the single-task matched gate and confirms that the baseline
+physical control is present. Multiple tasks, larger seed sets, and confidence
+intervals are still required before a general causal claim.
 
 P5.4 code status (2026-07-30): `capmas/evaluation/evidence_cache.py` provides
 the versioned, thread-safe process-local LRU specified by the Phase 5 handoff.
@@ -415,6 +425,50 @@ The control made 9 provider calls and the enabled lane made 5, with 3 exact
 hits, 5 stores, 2 invalidations, 1 stale rejection, final scene version 2,
 and zero stale attachments. Both manifests passed SHA-256 verification. This
 isolated result does not establish downstream success-rate improvement.
+
+P5.4 online cache seam status (2026-08-03): `select_with_rehearsal` and
+`LLMGraphScheduler` now accept an opt-in process-local `VersionedEvidenceCache`.
+The cache is keyed by effective local candidate fingerprint and current scene
+version, rejects stale or mismatched rehearsal evidence, and forwards only
+uncached candidates to the provider. The LIBERO online runner exposes
+`--cache-mode disabled|enabled` and `--selection-repeats N`, and persists cache
+events and statistics. Repeated requests in one episode reuse the cache while
+the physical executor remains single-owner and executes once. This closes the
+online integration/code gate while the empirical repeated-rolling hit-rate/
+latency gate remains open; the historical one-decision episodes can only
+produce stores, not hits.
+
+Real P5.4 repeated-selection smoke (2026-08-03): using the CAP-X
+`.venv-libero` environment on CUDA device 5, Spatial-0 seed 1, and the same
+two candidates, `selection_repeats=2` reduced rehearsal records from 4 to 2,
+provider calls from 2 to 1, recorded two cache hits, reduced total selection
+latency from approximately 683.8 s to 341.4 s, and kept physical execution at
+exactly one in both modes. The run-scoped configuration, selection result,
+summary, history, and runner log all expose the cumulative provider call
+count. Both evaluator results were false, so this closes only the real
+single-episode cache/latency smoke gate; multi-task, multi-seed, and
+downstream-success evaluation remain open.
+
+The next matched evaluation is implemented by
+`scripts/run_libero_p54_matched.py`. It runs cache-disabled and cache-enabled
+`online_bounded` lanes independently for every task/seed pair, with
+`selection_repeats >= 2`, fresh process-local caches, separate child artifact
+directories, and one physical execution maximum per lane. Its suite aggregate
+separates provider-call reduction, cache hits, selection latency, physical
+execution, and evaluator success. The multi-seed/multi-task empirical gate is
+still open until this driver is run on the locked task suite; cache efficiency
+alone is not a downstream success-rate claim.
+
+The first real matched cache run completed on 2026-08-03 at
+`outputs/phase5/P5.4_matched_online_cache_20260803/P5.4_matched_online_cache/20260803_054828_suite_d64ab784/`.
+For LIBERO Spatial-0 seeds 1--5, all five pairs completed and all manifests
+passed SHA-256/size verification. The disabled lane made 10 provider calls
+and the enabled lane made 5, with 10 exact cache hits in the enabled lane;
+total selection latency was 1792.70 s versus 899.77 s. Both lanes executed
+once per seed and both achieved evaluator success on seeds 1 and 5 only,
+giving `2/5` in each condition. The same candidate was selected in every pair,
+so this closes the single-task five-seed cache-efficiency gate but not a
+downstream success-rate or multi-task generalization gate.
 
 ## Phase 6 — Memory Controller learning
 

@@ -48,6 +48,7 @@ from capmas.evaluation.online_rehearsal import (
     RehearsalMode,
     select_with_rehearsal,
 )
+from capmas.evaluation.evidence_cache import VersionedEvidenceCache
 
 
 class LLMGraphScheduleError(RuntimeError):
@@ -133,6 +134,7 @@ class LLMGraphScheduler:
         | None = None,
         rehearsal_mode: RehearsalMode = "disabled",
         rehearsal_evidence_provider: RehearsalEvidenceProvider | None = None,
+        rehearsal_evidence_cache: VersionedEvidenceCache | None = None,
     ) -> None:
         if max_workers <= 0:
             raise ValueError("max_workers must be positive")
@@ -163,6 +165,7 @@ class LLMGraphScheduler:
         self.condition_enricher = condition_enricher
         self.rehearsal_mode = rehearsal_mode
         self.rehearsal_evidence_provider = rehearsal_evidence_provider
+        self.rehearsal_evidence_cache = rehearsal_evidence_cache
         self._candidate_evidence_timeouts: list[str] = []
 
     def compile(
@@ -670,6 +673,7 @@ class LLMGraphScheduler:
             mode=self.rehearsal_mode,
             provider=self.rehearsal_evidence_provider,
             expected_subgoal=expected_subgoal,
+            evidence_cache=self.rehearsal_evidence_cache,
         )
         return report.live, report
 

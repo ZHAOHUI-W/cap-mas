@@ -20,6 +20,7 @@ from capmas.contracts.scene import SceneSnapshot
 from capmas.backends.capx import CAPXTypedSkill
 from capmas.runtime.llm_scheduler import LLMGraphScheduler, LLMGraphScheduleError
 from capmas.evaluation.rehearsal_evidence import RehearsalEvidence
+from capmas.evaluation.evidence_cache import VersionedEvidenceCache
 from capmas.skills.registry import SkillRegistry
 
 
@@ -166,6 +167,35 @@ def test_llm_scheduler_online_rehearsal_can_change_live_selection() -> None:
     assert report.baseline.selected is not None
     assert report.baseline.selected.subgraph.description == "preferred"
     assert report.would_change_selection is True
+
+
+def test_llm_scheduler_forwards_long_lived_rehearsal_cache() -> None:
+    calls = 0
+
+    def rehearsal(items, scene):
+        nonlocal calls
+        calls += 1
+        return {
+            candidate.candidate_id: _rehearsal_evidence(candidate, scene, 1.0)
+            for candidate in items
+        }
+
+    scheduler = LLMGraphScheduler(
+        _Manager(),
+        {"first": (_agent("policy-a", "cached"),)},
+        require_policy_proposals=False,
+        rehearsal_mode="online_bounded",
+        rehearsal_evidence_provider=rehearsal,
+        rehearsal_evidence_cache=VersionedEvidenceCache(),
+    )
+
+    first = scheduler.compile("test task", _scene())
+    second = scheduler.compile("test task", _scene())
+
+    assert calls == 1
+    assert first.rehearsal_reports["first"].cache_stats is not None
+    assert second.rehearsal_reports["first"].cache_stats is not None
+    assert second.rehearsal_reports["first"].cache_stats.hits == 1
 
 
 def test_llm_scheduler_shadow_rehearsal_keeps_live_selection() -> None:

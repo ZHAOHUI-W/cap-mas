@@ -405,19 +405,28 @@ artifacts, and invokes the physical executor at most once.
 
 The code gate is closed by focused tests for disabled/shadow/online behavior,
 provider failure fallback, identity rejection, report serialization, the
-single-execution driver, and timed-out worker termination. A real
-endpoint-backed `online_bounded` smoke also completed on LIBERO spatial task 0
-with `CUDA_VISIBLE_DEVICES=5`: policy-0 failed rehearsal, policy-1 passed
-rehearsal, the baseline winner was policy-0, and the evidence-aware/live winner
-was policy-1. The live executor ran exactly once and reported
-`completed=true`, `evaluator_success=true`, and `success=true`. The retained
-artifact is under
-`outputs/phase5/P5.3.1_real_smoke_20260731_cleanfix/`.
+single-execution driver, and timed-out worker termination. The matched
+endpoint-backed evaluation is also complete in two suites:
+`outputs/phase5/P5.3.1_matched_spatial0_20260731/` for seeds 1--5 and
+`outputs/phase5/P5.3.1_matched_spatial0_seeds6_10_20260731/` for seeds 6--10.
+It used the same two candidates, CAP-X config, scene version, object/target
+names, and reset seeds 1--10 for `disabled` and `online_bounded`, with one
+rehearsal worker to avoid invalid depth frames from same-GPU process
+contention.
 
-This is one endpoint-backed smoke, not a success-rate claim. The matched
-baseline physical control, ten-plus seeds, multiple tasks, and downstream
-causal gate remain open. `TSDF`, semantic adapters, persistent evidence cache,
-OOD replay, calibration, and adaptive topology remain outside this increment.
+All ten pairs completed and each mode performed exactly one physical execution
+per seed. The baseline achieved `0/10`; online achieved `2/10`, for a matched
+delta of `+2/10`. Rehearsal evidence for both candidates attached in all ten
+online runs with zero fingerprint, graph-to-subgraph, or scene-version
+rejections. Seeds 1 and 5 changed the winner from baseline policy-0 to
+policy-1 and both online episodes passed the CAP-X evaluator. Seeds 2--4 and
+6--10 retained the baseline winner via `evidence_tie_break` and failed
+downstream.
+This closes the matched single-task gate and establishes the physical baseline
+control, but it is not yet a multi-task or statistically powered causal claim.
+Multiple tasks, larger seed sets, and confidence intervals remain open.
+`TSDF`, semantic adapters, persistent evidence cache, OOD replay,
+calibration, and adaptive topology remain outside this increment.
 
 TSDF, real semantic adapters, OOD replay, and calibration remain outside this
 implementation increment.
@@ -462,3 +471,113 @@ hits, 2 invalidations, 1 stale rejection, 5 stores, and no stale attachment.
 Its final scene version was 2 with 3 entries, and both manifests passed
 SHA-256 verification. These are isolated cache metrics, not a downstream
 success-rate claim.
+
+### P5.4 online cache seam implementation (2026-08-03)
+
+The cache is now available at the online arbitration seam. `select_with_rehearsal`
+accepts an optional `VersionedEvidenceCache`; `LLMGraphScheduler` forwards its
+long-lived cache to every legacy, staged, ready-wave, and rolling selection.
+The provider wrapper first advances the current scene version, reuses only an
+identity-checked `RehearsalEvidence` for the exact local candidate fingerprint
+and scene version, and sends only misses to the rehearsal provider. A refresh
+invalidates older entries before arbitration. Missing, stale, or mismatched
+evidence remains unavailable and is still handled by the existing Arbiter
+fallback rules.
+
+`scripts/run_libero_p53_online.py` exposes `--cache-mode disabled|enabled` and
+`--selection-repeats N`; it writes `results/cache_events.json` plus cache
+statistics into `results/selection.json`. The default is disabled, preserving
+the P5.3.1 control. With repeated selection in one episode, the provider is
+called only for the first request, cache hits serve later requests, and the
+physical executor remains single-owner and is called once. Focused tests cover
+repeated same-scene requests, refresh invalidation, scheduler forwarding, and
+run-scoped artifact publication.
+
+This closes the P5.4 online integration/code gate, not the multi-seed empirical
+gate. A single P5.3.1 decision has no repeated request and therefore cannot
+produce a cache hit; the real repeated-selection smoke below supplies the
+single-episode comparison. Cache state must not be shared across different
+reset seeds unless the provider evidence contract is explicitly seed-
+independent.
+
+### P5.4 real CAP-X repeated-selection smoke (2026-08-03)
+
+The first real runner-level paired smoke used the CAP-X `.venv-libero`
+interpreter, CUDA device 5, Spatial-0, reset seed 1, the same two graph
+candidates, and `selection_repeats=2`. The cache-enabled run is retained at
+`outputs/phase5/P5.4_online_cache_smoke_20260803_venv/`; the matched disabled
+run is at
+`outputs/phase5/P5.4_online_cache_smoke_20260803_disabled_venv/`. Both runs
+performed exactly one physical execution and both manifests passed SHA-256
+verification.
+
+| mode | rehearsal records | provider calls | cache hits | total selection latency | physical executions | evaluator success |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `cache_enabled` | 2 | 1 | 2 | 341.4 s | 1 | false |
+| `cache_disabled` | 4 | 2 | 0 | 683.8 s | 1 | false |
+
+This closes the single-episode real cache/latency smoke gate: repeated
+same-scene arbitration reuses candidate evidence and does not duplicate
+physical execution. It does not close the multi-seed/multi-task cache gate or
+claim downstream task improvement; the task itself failed in both matched
+runs. The run-scoped `run_config.json`, `results/selection.json`,
+`summary.json`, and `logs/runner.log` now expose the same cumulative
+`provider_call_count` (enabled `1`, disabled `2`) for auditability. The failed
+system-Python attempt is retained separately with a bounded failure artifact
+and was caused by the incompatible interpreter-level LIBERO
+import, not by the cache seam.
+
+### P5.4 matched multi-seed evaluation implementation
+
+The multi-seed driver is `scripts/run_libero_p54_matched.py`. For every task
+and reset seed it runs two independent `online_bounded` lanes with identical
+candidate and scene inputs: `cache_disabled` and `cache_enabled`. Each lane
+gets a separate child artifact directory and a fresh process-local cache;
+cache state is never shared across seeds or between the control and enabled
+lane. The physical executor remains single-owner and is invoked at most once
+per lane.
+
+The suite emits one pair directory per task/seed under
+`outputs/phase5/P5.4_matched_online_cache/<suite>/pairs/`, retaining child run
+references, pair-level logs, failure artifacts, and manifests. The aggregate
+reports provider calls, exact cache hits, selection latency, physical
+execution counts, evaluator success, and paired downstream outcomes. A
+positive cache-call reduction or latency reduction is reported separately from
+task success and is not sufficient to claim a downstream improvement.
+
+The matched gate requires all of the following: identical candidate artifact
+hashes within each pair, no cross-seed cache reuse, complete control/enabled
+trace pairs, enabled cache hits or fewer provider calls, no duplicate physical
+execution, and independent success reporting for both lanes. Multi-task
+coverage and statistical confidence intervals remain open until the driver is
+run on the locked task suite.
+
+### P5.4 matched online cache result (2026-08-03)
+
+The first real matched run completed with the CAP-X `.venv-libero` interpreter
+on `CUDA_VISIBLE_DEVICES=5`, LIBERO Spatial-0, seeds 1--5,
+`selection_repeats=2`, `max_workers=1`, and `timeout_s=360`. It is retained at
+`outputs/phase5/P5.4_matched_online_cache_20260803/P5.4_matched_online_cache/20260803_054828_suite_d64ab784/`.
+All five pairs completed and all five used the same candidate artifact,
+scene version, and physical-execution budget in the two lanes:
+
+| lane | provider calls | rehearsal records | cache hits | physical executions | evaluator successes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `cache_disabled` | 10 | 20 | n/a | 5 | 2/5 |
+| `cache_enabled` | 5 | 10 | 10 | 5 | 2/5 |
+
+Enabled mode reduced provider calls by 50% and total measured selection
+latency from 1792.70 s to 899.77 s (49.77%), while preserving one physical
+execution per lane and producing two exact hits per pair. The same winner was
+used by both lanes for every seed. Seeds 1 and 5 selected
+`policy-1:safety:1` through `evidence_score` and succeeded; seeds 2--4
+selected `policy-0:0` through `evidence_tie_break` and failed. The paired
+success result is `2/5` versus `2/5`, so this run demonstrates cache reuse and
+latency reduction only; it does not demonstrate a downstream success-rate
+improvement or a causal change in Arbiter selection.
+
+The suite manifest contains 89 entries, and all suite, pair, and lane
+manifests passed SHA-256 and size verification. The single-task five-seed
+cache-efficiency gate is closed. Multi-task coverage, larger statistical
+power, persistent/cross-process cache evaluation, and downstream success
+claims remain open.

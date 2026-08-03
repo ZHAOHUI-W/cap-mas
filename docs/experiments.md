@@ -333,20 +333,73 @@ The driver supports `disabled`, `shadow`, and `online_bounded`. The first two
 are safe controls; `shadow` cannot promote its hypothetical winner. The
 `online_bounded` mode is fail-closed and falls back to baseline when the
 provider fails or the evidence-aware Arbiter has no winner. The focused code
-gate and one endpoint-backed smoke are now closed. The retained smoke under
-`outputs/phase5/P5.3.1_real_smoke_20260731_cleanfix/` used two candidates on
-LIBERO spatial task 0. Rehearsal evidence changed the winner from the
-baseline `confidence_fallback` policy-0 to policy-1 with `evidence_score`; the
-single physical execution completed successfully and passed the CAP-X
-evaluator. Ten-plus seeds, multiple tasks, a matched baseline physical
-control, and downstream causal comparison are still required.
+gate and the matched one-task evaluation are now closed. The first five pairs
+are at `outputs/phase5/P5.3.1_matched_spatial0_20260731/` and
+`outputs/phase5/P5.3.1_matched_spatial0_seeds6_10_20260731/` retain seeds 1--10
+with the same two graph candidates, config, object/target names, and reset
+seeds for both modes on LIBERO spatial task 0. Both suites used
+`max_workers=1`, `timeout_s=360`, and `CUDA_VISIBLE_DEVICES=5`:
+
+| mode | evaluator successes | physical executions |
+| --- | ---: | ---: |
+| `disabled` baseline | 0/10 | 10/10 |
+| `online_bounded` | 2/10 | 10/10 |
+
+The matched delta is `+2/10` episodes. Both online successes (seeds 1 and 5)
+used the evidence-aware `policy-1:safety:1` winner; the baseline selected
+`policy-0:0` on all ten seeds. Evidence attached for both candidates in all
+ten online runs, with zero identity/version rejections. The other eight online
+decisions were `evidence_tie_break` and kept the baseline winner. This is a
+controlled single-task evaluation showing that online evidence can alter the
+physical choice and downstream outcome, not a statistically significant or
+multi-task success-rate claim. Multiple tasks, larger seed sets, and
+confidence intervals remain required.
 
 P5.4 now has a process-local versioned cache implementation with exact
 candidate/scene keys and observable hit, miss, stale-rejection, invalidation,
-and eviction counters. No experiment artifact has yet enabled the cache or
-reported a hit-rate/downstream comparison; such a result must use a new
-run-scoped directory and must compare cache-disabled, cache-shadow, and any
-later explicitly enabled online mode under matched seeds.
+and eviction counters. The online seam is opt-in through
+`select_with_rehearsal(..., evidence_cache=...)`, scheduler forwarding, and
+`scripts/run_libero_p53_online.py --cache-mode enabled`; enabled runs persist
+cache events and selection statistics. `--selection-repeats N` exercises
+repeated same-scene arbitration while preserving one physical execution. The
+focused runner test proves provider-call reduction and cache hits, but no real
+CAP-X multi-seed artifact has yet established a multi-seed downstream or
+latency claim. The single-episode smoke below covers the first repeated
+selection comparison; a multi-seed extension remains open.
+
+The first real runner-level smoke is retained under
+`outputs/phase5/P5.4_online_cache_smoke_20260803_venv/` and its matched control
+under `outputs/phase5/P5.4_online_cache_smoke_20260803_disabled_venv/`. On
+Spatial-0 seed 1 with two repeated selections, enabled mode produced 2
+rehearsal records, 1 provider call, and 2 cache hits, while disabled mode
+produced 4 rehearsal records and 2 provider calls. Total selection latency was
+approximately 341.4 s versus 683.8 s; both modes executed the physical
+candidate once and both had evaluator success `false`. The provider call count
+is repeated in `run_config.json`, `results/selection.json`, `summary.json`,
+each `selection_history` entry, and `logs/runner.log`. This is a real
+cache/latency smoke, not a downstream success claim.
+
+The matched multi-seed extension is
+`scripts/run_libero_p54_matched.py`. It creates
+`outputs/phase5/P5.4_matched_online_cache/<suite>/pairs/<task>_seed<seed>/`
+with independent `cache_disabled` and `cache_enabled` child runs. The two
+lanes use the same candidate artifact hash, scene version, reset seed, and
+`selection_repeats`, but never share a cache. The suite aggregate reports
+provider-call reduction, cache hits, selection latency, physical execution
+count, evaluator success, and pair status. It must be run on multiple seeds
+and the locked task set before treating P5.4 as a multi-task empirical gate.
+
+The first real matched run completed at
+`outputs/phase5/P5.4_matched_online_cache_20260803/P5.4_matched_online_cache/20260803_054828_suite_d64ab784/`
+using the CAP-X `.venv-libero` environment, CUDA device 5, LIBERO Spatial-0,
+seeds 1--5, and two repeated selections per lane. All five pairs completed;
+the control made 10 provider calls and the enabled lane made 5 with 10 cache
+hits. Aggregate selection latency was 1792.70 s for the control and 899.77 s
+with caching. Both lanes executed one physical candidate per seed and both
+had evaluator success `2/5`. The selected candidate was identical within
+every pair. This closes the single-task five-seed cache-efficiency check, but
+does not establish a downstream success-rate improvement; multi-task and
+larger-seed evaluation remain open.
 
 Current evidence status: the P3.1b `max_workers=2` ready-wave path has a
 successful endpoint-backed LIBERO run, but the matched `max_workers=1`

@@ -21,7 +21,11 @@ def test_phase5_docs_record_p54_cache_boundary():
 
     assert "P5.4 evidence cache status" in phase5
     assert "process-local LRU" in roadmap
-    assert "No experiment artifact has yet enabled the cache" in experiments
+    assert "--selection-repeats" in experiments
+    assert "no real\nCAP-X multi-seed artifact" in experiments
+    assert "does not establish a downstream" in experiments
+    assert "run_libero_p54_matched.py" in phase5
+    assert "never share a cache" in experiments
 
 
 def test_phase5_docs_record_typed_condition_default_boundary():

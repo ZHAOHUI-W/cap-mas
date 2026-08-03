@@ -7,6 +7,7 @@ from capmas.contracts.graph import CheckpointSpec, SubgraphNodeSpec, SubgraphSpe
 from capmas.contracts.scene import SceneSnapshot
 from capmas.contracts.candidates import GraphCandidate, subgraph_fingerprint
 from capmas.evaluation.rehearsal_evidence import RehearsalEvidence
+from capmas.evaluation.evidence_cache import VersionedEvidenceCache
 from capmas.evaluation.online_rehearsal import select_with_rehearsal
 
 
@@ -128,6 +129,93 @@ def test_online_mode_uses_evidence_aware_winner_once() -> None:
     assert report.would_change_selection is True
 
 
+def test_online_mode_reuses_versioned_rehearsal_evidence_from_cache() -> None:
+    candidates = (_candidate("candidate-a", "a"), _candidate("candidate-b", "b"))
+    cache = VersionedEvidenceCache()
+    calls = 0
+
+    def provider(items, _scene):
+        nonlocal calls
+        calls += 1
+        return {candidate.candidate_id: _evidence(candidate, 1.0) for candidate in items}
+
+    first = select_with_rehearsal(
+        candidates,
+        _scene(),
+        CandidateArbiter(),
+        mode="online_bounded",
+        provider=provider,
+        evidence_cache=cache,
+    )
+    second = select_with_rehearsal(
+        candidates,
+        _scene(),
+        CandidateArbiter(),
+        mode="online_bounded",
+        provider=provider,
+        evidence_cache=cache,
+    )
+
+    assert first.attached_candidate_ids == ("candidate-a", "candidate-b")
+    assert second.attached_candidate_ids == first.attached_candidate_ids
+    assert calls == 1
+    assert second.cache_stats is not None
+    assert second.cache_stats.hits == 2
+    assert second.cache_stats.misses == 2
+
+
+def test_online_mode_invalidates_cached_rehearsal_evidence_after_scene_refresh() -> None:
+    candidate_v4 = _candidate("candidate-a", "a")
+    candidate_v5 = _candidate("candidate-a", "a")
+    candidate_v5 = GraphCandidate(
+        candidate_v5.candidate_id,
+        candidate_v5.subgraph,
+        5,
+        candidate_v5.producer_agent,
+    )
+    cache = VersionedEvidenceCache()
+    calls = 0
+
+    def provider(items, scene):
+        nonlocal calls
+        calls += 1
+        return {
+            candidate.candidate_id: RehearsalEvidence(
+                candidate_id=candidate.candidate_id,
+                candidate_fingerprint=subgraph_fingerprint(candidate.subgraph),
+                seed=1,
+                scene_version=scene.scene_version,
+                success=True,
+                score=1.0,
+                latency_ms=1.0,
+            )
+            for candidate in items
+        }
+
+    select_with_rehearsal(
+        (candidate_v4,),
+        _scene(),
+        CandidateArbiter(),
+        mode="online_bounded",
+        provider=provider,
+        evidence_cache=cache,
+    )
+    refreshed_scene = SceneSnapshot("episode", 1, 5, 1, 1, {})
+    report = select_with_rehearsal(
+        (candidate_v5,),
+        refreshed_scene,
+        CandidateArbiter(),
+        mode="online_bounded",
+        provider=provider,
+        evidence_cache=cache,
+    )
+
+    assert calls == 2
+    assert report.cache_stats is not None
+    assert report.cache_stats.invalidations == 1
+    assert report.cache_stats.stale_rejections == 0
+
+
 def test_invalid_evidence_is_rejected_and_online_falls_back() -> None:
     candidate = _candidate("candidate-a", "a")
 
@@ -172,4 +260,3 @@ def test_provider_failure_falls_back_without_aborting() -> None:
     assert report.live == report.baseline
     assert report.evidence_aware is None
     assert report.fallback_reason == "provider_error: RuntimeError: rehearsal unavailable"
-

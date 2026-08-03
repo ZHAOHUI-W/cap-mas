@@ -100,6 +100,29 @@
 - [x] **Step 3: Run** `git diff --check` and scan the new output root for provider secrets.
 - [x] **Step 4: Record** exact smoke outcome, including evaluator success, graph completion, baseline/live winner, selection basis, rehearsal latency, and any fallback.
 
+### Task 6: Run matched baseline versus online evaluation
+
+**Files:**
+- Create: `scripts/run_libero_p531_matched.py`
+- Test: `tests/test_libero_p531_matched.py`
+- Modify: `docs/experiments.md`
+- Modify: `docs/phase5-evidence-evolution.md`
+- Modify: `docs/implementation-roadmap.md`
+
+- [x] **Step 1:** Add a batch driver that executes `disabled` and
+  `online_bounded` under the same candidate artifact, config, seed, and
+  physical-execution budget, while retaining independent pair/mode artifacts.
+- [x] **Step 2:** Add tests for pair ordering, failed-pair retention, task
+  manifest parsing, aggregate metrics, and candidate-artifact identity.
+- [x] **Step 3:** Run the ten-seed LIBERO Spatial-0 evaluation with one
+  rehearsal worker on `CUDA_VISIBLE_DEVICES=5` to avoid same-GPU worker
+  contention. The ten pairs are retained in two independent suite roots.
+- [x] **Step 4:** Verify all ten pairs completed, both modes executed once per
+  seed, evidence attachment had no identity/version rejection, and all logs
+  and manifests were retained.
+- [x] **Step 5:** Record the evaluation as a single-task matched result. Keep
+  multiple tasks, larger seed sets, and confidence-interval analysis open.
+
 ### Verification record (2026-07-31)
 
 - Environment: cap-x `.venv-libero`, `CUDA_VISIBLE_DEVICES=5`, `MUJOCO_GL=egl`.
@@ -109,4 +132,4 @@
 - Arbitration: baseline `confidence_fallback` selected policy-0; evidence-aware/live `evidence_score` selected policy-1; provider latency was 179.506 s.
 - Physical execution: exactly one call for policy-1; `completed=true`, `evaluator_success=true`, `success=true`, `trace_count=2`.
 - The first failed smoke attempts are retained under separate run roots and diagnosed as missing LIBERO dependencies/path precedence and un-terminated timed-out rehearsal workers. The runner now prefers cap-x's LIBERO robosuite fork and terminates timed-out workers before live execution.
-- This closes the single endpoint-backed smoke gate only. Ten-plus seeds, multiple tasks, matched baseline physical execution, and downstream causal improvement remain open.
+- The matched ten-seed evaluation is retained under `outputs/phase5/P5.3.1_matched_spatial0_20260731/` and `outputs/phase5/P5.3.1_matched_spatial0_seeds6_10_20260731/`; baseline was `0/10`, online was `2/10`, and the matched delta was `+2/10`. Both candidates attached in every online pair with zero evidence rejection; seeds 1 and 5 changed the winner and passed the evaluator. This closes the single-task matched gate only. Multiple tasks, larger seed sets, and confidence intervals remain open.

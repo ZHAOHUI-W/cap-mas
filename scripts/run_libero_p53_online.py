@@ -7,7 +7,9 @@ from dataclasses import asdict, dataclass, replace
 import os
 from pathlib import Path
 import sys
+import time
 from collections.abc import Callable, Mapping, Sequence
+from typing import Literal
 from uuid import uuid4
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +24,7 @@ from capmas.evaluation.candidate_identity import (
     candidate_identity_from_raw_graph,
     raw_graph_fingerprint,
 )
+from capmas.evaluation.evidence_cache import VersionedEvidenceCache
 from capmas.evaluation.evidence_contracts import EvidenceRequestContext
 from capmas.evaluation.libero_rehearsal import LiberoRehearsalConfig, LiberoRehearsalWorker
 from capmas.evaluation.online_rehearsal import (
@@ -56,6 +59,8 @@ class OnlineSelectionOutcome:
     rehearsal_results: tuple[RehearsalResult, ...]
     physical_candidate_id: str | None
     physical_result: object | None
+    provider_call_count: int
+    selection_latency_ms: float
 
 
 @dataclass(frozen=True)
@@ -107,6 +112,8 @@ def run_online_experiment(
     seed: int,
     scene_version: int,
     mode: RehearsalMode,
+    cache_mode: Literal["disabled", "enabled"] = "disabled",
+    selection_repeats: int = 1,
     output_root: str | Path,
     pool_config: RehearsalPoolConfig,
     max_steps: int = 32,
@@ -126,6 +133,10 @@ def run_online_experiment(
         raise ValueError("online seed must not be negative")
     if max_steps <= 0:
         raise ValueError("online max steps must be positive")
+    if cache_mode not in {"disabled", "enabled"}:
+        raise ValueError("cache mode must be disabled or enabled")
+    if selection_repeats <= 0:
+        raise ValueError("selection repeats must be positive")
 
     run_dir = Phase5RunDirectory.create(
         output_root,
@@ -139,15 +150,25 @@ def run_online_experiment(
         "scene_version": scene_version,
         "seed": seed,
         "mode": mode,
+        "cache_mode": cache_mode,
+        "selection_repeats": selection_repeats,
         "max_workers": pool_config.max_workers,
         "timeout_s": pool_config.timeout_s,
         "max_restarts": pool_config.max_restarts,
         "max_steps": max_steps,
         "gpu": gpu,
         "artifact_dir": str(run_dir.path),
+        "provider_call_count": 0,
     }
     run_dir.write_json("run_config.json", {**run_config, "status": "running"})
     rehearsal_results: list[RehearsalResult] = []
+    provider_call_count = 0
+    selection_latency_ms = 0.0
+    evidence_cache = (
+        VersionedEvidenceCache()
+        if cache_mode == "enabled"
+        else None
+    )
     stage = "candidate_validation"
 
     typed = _typed_candidates(candidates, scene_version)
@@ -170,6 +191,8 @@ def run_online_experiment(
         live_candidates: Sequence[GraphCandidate],
         current_scene: SceneSnapshot,
     ) -> Mapping[str, object]:
+        nonlocal provider_call_count
+        provider_call_count += 1
         jobs = build_rehearsal_jobs(
             tuple(typed.specs[candidate.candidate_id] for candidate in live_candidates),
             seed=seed,
@@ -197,13 +220,28 @@ def run_online_experiment(
         return evidence
 
     provider_fn: RehearsalEvidenceProvider | None = provider if mode != "disabled" else None
-    report = select_with_rehearsal(
-        typed.candidates,
-        scene,
-        CandidateArbiter(),
-        mode=mode,
-        provider=provider_fn,
-    )
+    report: RehearsalArbitrationReport | None = None
+    selection_history: list[dict[str, object]] = []
+    for request_index in range(selection_repeats):
+        selection_started = time.perf_counter()
+        report = select_with_rehearsal(
+            typed.candidates,
+            scene,
+            CandidateArbiter(),
+            mode=mode,
+            provider=provider_fn,
+            evidence_cache=evidence_cache,
+        )
+        selection_latency_ms += (time.perf_counter() - selection_started) * 1000.0
+        selection_history.append(
+            {
+                "request_index": request_index,
+                "provider_call_count": provider_call_count,
+                **_selection_payload(report, None),
+            }
+        )
+    assert report is not None
+    run_config["provider_call_count"] = provider_call_count
 
     physical_candidate_id = (
         report.live.selected.candidate_id if report.live.selected is not None else None
@@ -222,6 +260,7 @@ def run_online_experiment(
             stage=stage,
             error=exc,
             rehearsal_results=rehearsal_results,
+            evidence_cache=evidence_cache,
         )
         raise
 
@@ -234,6 +273,8 @@ def run_online_experiment(
             "scene_version": scene_version,
             "seed": seed,
             "mode": mode,
+            "cache_mode": cache_mode,
+            "selection_repeats": selection_repeats,
             "max_workers": pool_config.max_workers,
             "timeout_s": pool_config.timeout_s,
             "max_restarts": pool_config.max_restarts,
@@ -241,24 +282,40 @@ def run_online_experiment(
             "gpu": gpu,
             "physical_execution_count": int(physical_candidate_id is not None),
             "artifact_dir": str(run_dir.path),
+            "provider_call_count": provider_call_count,
+            "selection_latency_ms": selection_latency_ms,
         },
     )
     run_dir.write_json("results/rehearsal.json", [asdict(item) for item in rehearsal_results])
+    if evidence_cache is not None:
+        run_dir.write_json(
+            "results/cache_events.json",
+            [asdict(event) for event in evidence_cache.events()],
+        )
+    selection_payload = _selection_payload(report, physical_candidate_id)
+    selection_payload["provider_call_count"] = provider_call_count
+    selection_payload["selection_latency_ms"] = selection_latency_ms
+    selection_payload["selection_history"] = selection_history
     run_dir.write_json(
         "results/selection.json",
-        _selection_payload(report, physical_candidate_id),
+        selection_payload,
     )
     run_dir.write_text(
         "logs/runner.log",
         "\n".join(
             [
                 f"experiment=P5.3.1_online_rehearsal_arbiter seed={seed} mode={mode}",
+                f"cache_mode={cache_mode} selection_repeats={selection_repeats}",
                 f"rehearsal_results={len(rehearsal_results)}",
                 f"baseline_winner={_winner_id(report.baseline)}",
                 f"evidence_aware_winner={_winner_id(report.evidence_aware)}",
                 f"live_winner={physical_candidate_id}",
                 f"physical_execution_count={int(physical_candidate_id is not None)}",
+                f"provider_call_count={provider_call_count}",
+                f"selection_latency_ms={selection_latency_ms:.3f}",
                 f"provider_latency_ms={report.provider_latency_ms:.3f}",
+                f"cache_hits={report.cache_stats.hits if report.cache_stats else 0}",
+                f"cache_stores={report.cache_stats.stores if report.cache_stats else 0}",
                 "",
             ]
         ),
@@ -267,22 +324,31 @@ def run_online_experiment(
         "summary.json",
         {
             "mode": mode,
+            "cache_mode": cache_mode,
             "seed": seed,
             "baseline_winner": _winner_id(report.baseline),
             "live_winner": physical_candidate_id,
             "would_change_selection": report.would_change_selection,
             "physical_execution_count": int(physical_candidate_id is not None),
+            "provider_call_count": provider_call_count,
+            "selection_latency_ms": selection_latency_ms,
             "physical_result": physical_result,
-            "selection": _selection_payload(report, physical_candidate_id),
+            "selection": selection_payload,
         },
     )
     run_dir.write_text(
         "summary.md",
         "# CAP-MAS P5.3.1 online rehearsal Arbiter\n\n"
         f"- mode: {mode}\n"
+        f"- cache_mode: {cache_mode}\n"
+        f"- selection_repeats: {selection_repeats}\n"
         f"- seed: {seed}\n"
         f"- baseline_winner: {_winner_id(report.baseline)}\n"
         f"- live_winner: {physical_candidate_id}\n"
+        f"- provider_call_count: {provider_call_count}\n"
+        f"- selection_latency_ms: {selection_latency_ms:.3f}\n"
+        f"- cache_hits: {report.cache_stats.hits if report.cache_stats else 0}\n"
+        f"- cache_stores: {report.cache_stats.stores if report.cache_stats else 0}\n"
         f"- physical_execution_count: {int(physical_candidate_id is not None)}\n",
     )
     run_dir.finalize_manifest()
@@ -292,6 +358,8 @@ def run_online_experiment(
         rehearsal_results=tuple(rehearsal_results),
         physical_candidate_id=physical_candidate_id,
         physical_result=physical_result,
+        provider_call_count=provider_call_count,
+        selection_latency_ms=selection_latency_ms,
     )
 
 
@@ -302,6 +370,7 @@ def _write_failure_artifacts(
     stage: str,
     error: Exception,
     rehearsal_results: Sequence[RehearsalResult],
+    evidence_cache: VersionedEvidenceCache | None = None,
 ) -> None:
     """Persist failure context without masking the original exception."""
 
@@ -321,6 +390,11 @@ def _write_failure_artifacts(
         run_dir.write_json(
             "results/rehearsal.json", [asdict(item) for item in rehearsal_results]
         )
+        if evidence_cache is not None:
+            run_dir.write_json(
+                "results/cache_events.json",
+                [asdict(event) for event in evidence_cache.events()],
+            )
         run_dir.write_text(
             "logs/runner.log",
             "\n".join(
@@ -406,6 +480,10 @@ def _selection_payload(
         "evidence_rejections": report.evidence_rejections,
         "provider_latency_ms": report.provider_latency_ms,
         "fallback_reason": report.fallback_reason,
+        "cache_enabled": report.cache_stats is not None,
+        "cache_stats": (
+            asdict(report.cache_stats) if report.cache_stats is not None else None
+        ),
     }
 
 
@@ -501,6 +579,12 @@ def parse_args() -> argparse.Namespace:
         choices=("disabled", "shadow", "online_bounded"),
         default="online_bounded",
     )
+    parser.add_argument(
+        "--cache-mode",
+        choices=("disabled", "enabled"),
+        default="disabled",
+    )
+    parser.add_argument("--selection-repeats", type=int, default=1)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--max-workers", type=int, default=1)
     parser.add_argument("--timeout-s", type=float, default=120.0)
@@ -533,6 +617,8 @@ def main() -> None:
             seed=args.seed,
             scene_version=candidates[0].scene_version,
             mode=args.mode,
+            cache_mode=args.cache_mode,
+            selection_repeats=args.selection_repeats,
             output_root=args.output_root,
             pool_config=RehearsalPoolConfig(
                 max_workers=args.max_workers,

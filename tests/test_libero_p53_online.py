@@ -10,6 +10,7 @@ from capmas.contracts.core import SkillRef
 from capmas.contracts.graph import CheckpointSpec, MissionGraph, SubgraphNodeSpec, SubgraphSpec
 from capmas.evaluation.rehearsal import RehearsalResult
 from capmas.evaluation.rehearsal_evidence import RehearsalPoolConfig
+from capmas.evaluation.evidence_cache import VersionedEvidenceCache
 from capmas.graph.serialization import mission_graph_to_dict
 from scripts.run_libero_p53_online import (
     _setup_capx_paths,
@@ -135,6 +136,75 @@ def test_online_driver_rehearses_candidates_then_executes_one_winner(tmp_path) -
     assert (outcome.run_dir.path / "summary.json").exists()
     assert (outcome.run_dir.path / "logs" / "runner.log").exists()
     assert (outcome.run_dir.path / "manifest.json").exists()
+
+
+def test_online_driver_publishes_enabled_cache_artifacts(tmp_path) -> None:
+    candidates = load_online_candidates(_artifact(tmp_path))
+    provider_calls = 0
+    physical_calls = []
+
+    def fake_run(jobs, worker_factory, pool_config):
+        nonlocal provider_calls
+        provider_calls += 1
+        del worker_factory, pool_config
+        return tuple(
+            RehearsalResult(
+                candidate_id=job.candidate_id,
+                seed=job.seed,
+                success=True,
+                latency_ms=1.0,
+                scene_version=job.scene_version,
+                candidate_fingerprint=job.candidate_fingerprint,
+                fingerprint_scope=job.fingerprint_scope,
+                arbiter_subgraph_id=job.arbiter_subgraph_id,
+                arbiter_fingerprint=job.arbiter_fingerprint,
+            )
+            for job in jobs
+        )
+
+    outcome = run_online_experiment(
+        config_path="libero.yaml",
+        candidates=candidates,
+        seed=1,
+        scene_version=4,
+        mode="online_bounded",
+        cache_mode="enabled",
+        selection_repeats=2,
+        output_root=tmp_path / "runs",
+        pool_config=RehearsalPoolConfig(max_workers=1, timeout_s=1.0),
+        run_fn=fake_run,
+        physical_executor=lambda candidate, _graph: physical_calls.append(candidate.candidate_id),
+    )
+
+    assert outcome.report.cache_stats is not None
+    assert outcome.report.cache_stats.stores == 2
+    assert outcome.report.cache_stats.hits == 2
+    assert provider_calls == 1
+    assert outcome.provider_call_count == 1
+    assert outcome.selection_latency_ms >= 0.0
+    assert len(physical_calls) == 1
+    selection = json.loads(
+        (outcome.run_dir.path / "results" / "selection.json").read_text()
+    )
+    assert selection["cache_enabled"] is True
+    assert selection["cache_stats"]["stores"] == 2
+    assert selection["provider_call_count"] == 1
+    assert selection["selection_latency_ms"] >= 0.0
+    assert len(selection["selection_history"]) == 2
+    assert selection["selection_history"][0]["provider_call_count"] == 1
+    assert selection["selection_history"][1]["provider_call_count"] == 1
+    run_config = json.loads(
+        (outcome.run_dir.path / "run_config.json").read_text()
+    )
+    assert run_config["provider_call_count"] == 1
+    summary = json.loads((outcome.run_dir.path / "summary.json").read_text())
+    assert summary["provider_call_count"] == 1
+    assert summary["selection_latency_ms"] >= 0.0
+    assert "provider_call_count=1" in (
+        outcome.run_dir.path / "logs" / "runner.log"
+    ).read_text()
+    assert selection["selection_history"][1]["cache_stats"]["hits"] == 2
+    assert (outcome.run_dir.path / "results" / "cache_events.json").exists()
 
 
 def test_online_loader_recovers_legacy_graph_scoped_fingerprint(tmp_path) -> None:
