@@ -9,7 +9,13 @@ from __future__ import annotations
 
 from concurrent.futures import ProcessPoolExecutor, TimeoutError as FutureTimeout, as_completed
 from dataclasses import dataclass
-from enum import StrEnum
+try:
+    from enum import StrEnum
+except ImportError:  # pragma: no cover - exercised only on Python 3.10
+    from enum import Enum
+
+    class StrEnum(str, Enum):
+        """Minimal Python 3.10 compatibility for the stdlib StrEnum API."""
 import multiprocessing
 from typing import Any, Callable, Mapping, Sequence
 

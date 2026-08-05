@@ -106,3 +106,34 @@ def test_invalid_serialized_graph_returns_auditable_failure():
     assert result.success is False
     assert result.failure_class == RehearsalFailureClass.INVALID_GRAPH
     assert result.failure_reason
+
+
+def test_depth_initialization_failure_is_a_reset_failure(monkeypatch):
+    import capmas.evaluation.libero_rehearsal as module
+
+    class FailingResetBackend(_FakeBackend):
+        def reset(self, seed=None, options=None):
+            del seed, options
+            raise RuntimeError(
+                "LIBERO depth initialization failed (agentview: valid=0)"
+            )
+
+    monkeypatch.setattr(
+        module,
+        "_default_build_runtime",
+        lambda config: _FakeBundle(FailingResetBackend(), SkillRegistry()),
+    )
+    job = RehearsalJob(
+        "candidate-reset",
+        1,
+        {"graph": _checkpoint_graph()},
+        task_id="fake-task",
+        scene_version=0,
+        candidate_fingerprint="fp-reset",
+    )
+
+    result = run_libero_rehearsal_job(job, LiberoRehearsalConfig("fake.yaml"))
+
+    assert result.failure_class == RehearsalFailureClass.RESET_FAILURE
+    assert result.failure_step == 0
+    assert "depth initialization failed" in (result.failure_reason or "")

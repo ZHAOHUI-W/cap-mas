@@ -10,6 +10,7 @@ from capmas.contracts.core import SkillRef
 from capmas.contracts.graph import CheckpointSpec, MissionGraph, SubgraphNodeSpec, SubgraphSpec
 from capmas.evaluation.rehearsal import RehearsalResult
 from capmas.evaluation.rehearsal_evidence import RehearsalPoolConfig
+from scripts.run_libero_p53_online import _physical_result_payload
 from capmas.evaluation.evidence_cache import VersionedEvidenceCache
 from capmas.graph.serialization import mission_graph_to_dict
 from scripts.run_libero_p53_online import (
@@ -136,6 +137,72 @@ def test_online_driver_rehearses_candidates_then_executes_one_winner(tmp_path) -
     assert (outcome.run_dir.path / "summary.json").exists()
     assert (outcome.run_dir.path / "logs" / "runner.log").exists()
     assert (outcome.run_dir.path / "manifest.json").exists()
+
+
+def test_physical_payload_preserves_graph_failure_metadata() -> None:
+    from types import SimpleNamespace
+
+    from capmas.contracts.failures import FailureArtifact
+
+    failure = FailureArtifact(
+        failure_id="failure-1",
+        failure_class="EXECUTION_ERROR",
+        message="node returned EXECUTION_ERROR",
+        scene_version=3,
+        node_id="pick-action",
+        subgraph_id="pick",
+    )
+    result = SimpleNamespace(
+        completed=False,
+        traces=(SimpleNamespace(trace_id="trace-1"),),
+        failure=failure,
+        terminal_subgraph="pick",
+        next_subgraph=None,
+    )
+
+    payload = _physical_result_payload(result, evaluator_success=False)
+
+    assert payload["execution_valid"] is True
+    assert payload["failure_class"] == "EXECUTION_ERROR"
+    assert payload["failure_reason"] == "node returned EXECUTION_ERROR"
+    assert payload["failure"]["node_id"] == "pick-action"
+    assert payload["failure"]["subgraph_id"] == "pick"
+    assert payload["trace_count"] == 1
+
+
+def test_physical_payload_preserves_skill_failure_details() -> None:
+    from types import SimpleNamespace
+
+    trace = SimpleNamespace(
+        trace_id="trace-1",
+        status="failed",
+        failure_class="EXECUTION_ERROR",
+        skill_traces=(
+            SimpleNamespace(
+                invocation_id="invoke-1",
+                skill_id="goto_pose",
+                skill_version="capx-compat-1",
+                args={"z_approach": 0.08},
+                status="failed",
+                error_type="ConnectionError",
+                error_message="grasp service unavailable",
+                output={},
+            ),
+        ),
+    )
+    result = SimpleNamespace(
+        completed=False,
+        traces=(trace,),
+        failure=None,
+        terminal_subgraph="pick",
+        next_subgraph=None,
+    )
+
+    payload = _physical_result_payload(result, evaluator_success=False)
+
+    assert payload["traces"][0]["skill_traces"][0]["skill_id"] == "goto_pose"
+    assert payload["traces"][0]["skill_traces"][0]["error_type"] == "ConnectionError"
+    assert payload["traces"][0]["skill_traces"][0]["error_message"] == "grasp service unavailable"
 
 
 def test_online_driver_publishes_enabled_cache_artifacts(tmp_path) -> None:
@@ -356,9 +423,11 @@ def test_online_capx_paths_prefer_libero_robosuite(monkeypatch) -> None:
     capx_root = Path(__file__).resolve().parents[1].parent / "cap-x"
     libero_robosuite = capx_root / "capx" / "third_party" / "libero_dependencies" / "robosuite"
     generic_robosuite = capx_root / "capx" / "third_party" / "robosuite"
+    libero_package_root = capx_root / "capx" / "third_party" / "LIBERO-PRO" / "libero"
 
     monkeypatch.setattr(sys, "path", [])
     _setup_capx_paths()
 
     assert str(libero_robosuite) in sys.path
+    assert str(libero_package_root) in sys.path
     assert str(generic_robosuite) not in sys.path

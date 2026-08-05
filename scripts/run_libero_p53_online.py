@@ -119,6 +119,7 @@ def run_online_experiment(
     max_steps: int = 32,
     object_name: str = "akita black bowl",
     target_name: str = "plate",
+    layout_variant: Mapping[str, object] | None = None,
     gpu: str = "5",
     run_fn: RehearsalRunFn = run_with_respawn,
     physical_executor: PhysicalExecutor | None = None,
@@ -159,6 +160,7 @@ def run_online_experiment(
         "gpu": gpu,
         "artifact_dir": str(run_dir.path),
         "provider_call_count": 0,
+        "layout_variant": dict(layout_variant or {}),
     }
     run_dir.write_json("run_config.json", {**run_config, "status": "running"})
     rehearsal_results: list[RehearsalResult] = []
@@ -185,6 +187,7 @@ def run_online_experiment(
         object_name=object_name,
         target_name=target_name,
         max_steps=max_steps,
+        layout_variant=dict(layout_variant or {}),
     )
 
     def provider(
@@ -494,6 +497,75 @@ def _winner_id(result: object | None) -> str | None:
     return getattr(selected, "candidate_id", None)
 
 
+def _execution_trace_payload(trace: object) -> dict[str, object]:
+    return {
+        "trace_id": getattr(trace, "trace_id", None),
+        "status": getattr(trace, "status", None),
+        "failure_class": getattr(trace, "failure_class", None),
+        "skill_traces": [
+            {
+                "invocation_id": getattr(skill_trace, "invocation_id", None),
+                "skill_id": getattr(skill_trace, "skill_id", None),
+                "skill_version": getattr(skill_trace, "skill_version", None),
+                "args": dict(getattr(skill_trace, "args", {}) or {}),
+                "status": getattr(skill_trace, "status", None),
+                "error_type": getattr(skill_trace, "error_type", None),
+                "error_message": getattr(skill_trace, "error_message", None),
+                "output": dict(getattr(skill_trace, "output", {}) or {}),
+            }
+            for skill_trace in getattr(trace, "skill_traces", ())
+        ],
+    }
+
+
+def _physical_result_payload(
+    result: object,
+    *,
+    evaluator_success: bool,
+    layout_report: object | None = None,
+) -> dict[str, object]:
+    """Serialize graph execution failure context at the physical boundary."""
+    failure = getattr(result, "failure", None)
+    failure_payload: dict[str, object] | None = None
+    if failure is not None:
+        metadata = getattr(failure, "metadata", {})
+        evidence_refs = getattr(failure, "evidence_refs", ())
+        failure_payload = {
+            "failure_id": getattr(failure, "failure_id", None),
+            "failure_class": getattr(failure, "failure_class", None),
+            "message": getattr(failure, "message", None),
+            "scene_version": getattr(failure, "scene_version", None),
+            "source_agent": getattr(failure, "source_agent", None),
+            "node_id": getattr(failure, "node_id", None),
+            "subgraph_id": getattr(failure, "subgraph_id", None),
+            "recoverable": bool(getattr(failure, "recoverable", True)),
+            "retry_count": int(getattr(failure, "retry_count", 0)),
+            "recovery_policy": getattr(failure, "recovery_policy", None),
+            "evidence_refs": list(evidence_refs),
+            "metadata": dict(metadata),
+        }
+    completed = bool(getattr(result, "completed", False))
+    failure_class = failure_payload.get("failure_class") if failure_payload else None
+    failure_reason = failure_payload.get("message") if failure_payload else None
+    return {
+        "completed": completed,
+        "evaluator_success": bool(evaluator_success),
+        "success": bool(completed and evaluator_success),
+        "execution_valid": True,
+        "failure_class": failure_class,
+        "failure_reason": failure_reason,
+        "failure": failure_payload,
+        "trace_count": len(getattr(result, "traces", ())),
+        "traces": [
+            _execution_trace_payload(trace)
+            for trace in getattr(result, "traces", ())
+        ],
+        "terminal_subgraph": getattr(result, "terminal_subgraph", None),
+        "next_subgraph": getattr(result, "next_subgraph", None),
+        "layout_application": layout_report,
+    }
+
+
 def _setup_capx_paths() -> None:
     capx_root = PROJECT_ROOT.parent / "cap-x"
     os.environ.setdefault("MUJOCO_GL", "egl")
@@ -503,6 +575,9 @@ def _setup_capx_paths() -> None:
         capx_root / "capx" / "third_party" / "contact_graspnet_pytorch",
         capx_root / "capx" / "third_party" / "sam3",
         capx_root / "capx" / "third_party" / "LIBERO-PRO",
+        # The vendored distribution keeps the importable package one level
+        # below the repository root: LIBERO-PRO/libero/libero/__init__.py.
+        capx_root / "capx" / "third_party" / "LIBERO-PRO" / "libero",
         # LIBERO is coupled to cap-x's robosuite 1.4 fork. Do not add the
         # generic robosuite checkout here, because it shadows this path.
         capx_root / "capx" / "third_party" / "libero_dependencies" / "robosuite",
@@ -518,6 +593,7 @@ def _build_live_executor(
     target_name: str,
     max_steps: int,
     seed: int,
+    layout_variant: Mapping[str, object] | None = None,
 ) -> PhysicalExecutor:
     from capmas.backends.capx_libero_factory import build_capx_runtime_from_yaml
     from capmas.runtime.action_lease import ActionLeaseManager
@@ -526,12 +602,21 @@ def _build_live_executor(
     from capmas.runtime.orchestrator import RuntimeOrchestrator
     from capmas.runtime.scheduler import FixedGraphScheduler
     from capmas.runtime.state_store import InMemoryStateStore
-    from capmas.verification.libero import LiberoObservableVerifier
+    from capmas.verification.libero import (
+        LiberoObservableVerifier,
+        ground_libero_mission_graph,
+    )
+    from capmas.evaluation.layout_variants import LayoutResetHook
 
     def execute(_candidate: GraphCandidate, graph: MissionGraph) -> object:
         bundle = build_capx_runtime_from_yaml(
             config_path,
             object_names=(object_name, target_name),
+            reset_hook=(
+                LayoutResetHook(layout_variant)
+                if layout_variant
+                else None
+            ),
         )
         try:
             runtime = RuntimeOrchestrator(
@@ -544,6 +629,7 @@ def _build_live_executor(
             episode = runtime.backend.reset(seed=seed)
             runtime.start_episode(episode)
             scene = runtime.state_store.latest()
+            graph = ground_libero_mission_graph(graph, scene)
             result = FixedGraphInterpreter(
                 FixedGraphScheduler(runtime),
                 artifact_store=ArtifactStore(),
@@ -556,12 +642,15 @@ def _build_live_executor(
                 task_id=bundle.task_id,
             )
             evaluator_success = bool(bundle.backend.evaluator_success())
-            return {
-                "completed": bool(result.completed),
-                "evaluator_success": evaluator_success,
-                "success": bool(result.completed and evaluator_success),
-                "trace_count": len(result.traces),
-            }
+            return _physical_result_payload(
+                result,
+                evaluator_success=evaluator_success,
+                layout_report=getattr(
+                    bundle.low_level_environment,
+                    "_capmas_layout_report",
+                    None,
+                ),
+            )
         finally:
             bundle.backend.stop(None)
 

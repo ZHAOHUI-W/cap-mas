@@ -470,6 +470,68 @@ giving `2/5` in each condition. The same candidate was selected in every pair,
 so this closes the single-task five-seed cache-efficiency gate but not a
 downstream success-rate or multi-task generalization gate.
 
+P5.5 frozen OOD replay code status (2026-08-03): `capmas/evaluation/ood.py`
+defines immutable case/split/evidence contracts and explicit `pair_id`
+provenance. `capmas/evaluation/ood_statistics.py` provides Wilson intervals,
+paired deltas, exact McNemar tests, bootstrap OOD gaps, and unknown/failure
+accounting. `scripts/run_libero_p55_ood.py` performs preflight digest and
+leakage validation, then runs independent ID/OOD cases through the existing
+CAP-X online path with shadow-only evidence and retained manifests/logs.
+
+The initial fixture is `configs/phase5/p55_ood_smoke.json`. Its layout-OOD
+label is a manually curated smoke membership without a physical perturbation
+generator; therefore it is a replay/provenance gate, not a measured OOD gap.
+The runner does not alter active Arbiter selection or promote Memory/Robot
+Skills. The real paired smoke and five-seed, multi-family pilot are now
+completed and documented below with confidence intervals. P5.6 calibration is
+required before OOD evidence can become an active selection signal.
+
+P5.5 real smoke result (2026-08-03): the suite at
+`outputs/phase5/P5.5_ood_replay_20260803_smoke1/P5.5_frozen_ood_replay/20260803_090001_suite_fa2ccc0e/`
+completed one ID and one manually labeled layout-OOD case with no runner
+failures. Both cases executed one physical candidate and both had evaluator
+success `0/1`; the paired result was a tie at `0/0`. Suite and case artifact
+manifests passed SHA-256 and size checks and evidence remained shadow-only. Since both
+cases used the same physical config and candidate artifact, this closes only
+the real replay/provenance gate, not the physical OOD-generalization gate.
+
+P5.5 real layout-variant pilot result (2026-08-04):
+`outputs/phase5/P5.5_real_layout_pilot_20260803/P5.5_frozen_ood_replay/20260803_113118_suite_b4bbc31b/`
+completed all 30 cases across `spatial-0`, `goal-1`, and `object-6`, with
+five matched seeds per family. The ID and real layout-OOD results were both
+`0/15`, with zero infrastructure unknowns, 15 paired ties, paired delta 0,
+and exact McNemar `p=1.0`. All cases retained `shadow_only=true`, all 15
+pairs had distinct layout state fingerprints, and all artifact manifests
+passed digest/size verification. This closes the five-seed multi-family
+measurement gate only; the formal ten-seed gate is recorded below. Active OOD
+calibration and downstream success-rate claims remain open. The Arbiter used
+`evidence_tie_break` in all 30 cases, so no causal selection improvement is
+claimed.
+
+P5.5 real layout-variant ten-seed formal gate result (2026-08-05): the
+frozen manifest
+`outputs/phase5/P5.5_real_layout_assets_20260803/p55_real_layout_3family_10seed.json`
+(canonical manifest SHA-256, excluding the self-digest field:
+`5aeff85dae764c72fe9c0b1f3a0a07f4070e95247baea1b8d93f15311ea72141`)
+was evaluated in
+`outputs/phase5/P5.5_real_layout_formal_20260804/P5.5_frozen_ood_replay/20260804_014522_suite_dda9defe/`.
+It contains 60 cases, 30 matched pairs, three families, and seeds 1--10.
+The CAP-X `.venv-libero` run used CUDA device 5, two workers, no restarts,
+`max_steps=32`, `timeout_s=360`, one selection repeat, and disabled cache.
+All 60 cases completed at the runner level with zero infrastructure
+unknowns; all 60 were `task_failure` with zero recovery and intervention.
+ID and OOD success were both `0/30`, both Wilson estimates were `0.0` with
+95% upper bound `0.1135`, paired delta was `0`, there were 30 paired ties,
+and exact McNemar `p=1.0`. Mean/median/range reported latency was
+`78.73/72.68/55.18--211.06 s`. Horizon buckets were not available because
+the case artifact records no realized subgoal count; `max_steps=32` is only a
+budget. All 30 pairs had distinct layout fingerprints, all manifests passed
+digest/size checks, and `selection_basis=evidence_tie_break` was used in all
+60 cases. This closes the P5.5 measurement/provenance gate only; it is not a
+downstream success or causal Arbiter result. P5.6 calibration, correlated
+signal correction, active OOD weighting, and learned Arbiter weighting remain
+deferred.
+
 ## Phase 6 — Memory Controller learning
 
 - Add verified terminal and intermediate learning-return calculation.

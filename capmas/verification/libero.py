@@ -7,7 +7,7 @@ from dataclasses import replace
 from capmas.contracts.action import SkillCall, SkillOutputRef
 from capmas.contracts.candidates import CandidateEvidence, GraphCandidate, PerceptionEvidence
 from capmas.contracts.core import SkillRef
-from capmas.contracts.graph import SubgraphSpec
+from capmas.contracts.graph import MissionGraph, SubgraphSpec
 from capmas.contracts.scene import SceneSnapshot
 from capmas.verification.predicates import PredicateBasedVerifier
 from capmas.verification.evidence import (
@@ -237,6 +237,28 @@ def ground_libero_grasp_subgraph(
     if tuple(grounded_nodes) == subgraph.nodes:
         return subgraph
     return replace(subgraph, nodes=tuple(grounded_nodes))
+
+
+def ground_libero_mission_graph(
+    graph: MissionGraph,
+    scene: SceneSnapshot,
+) -> MissionGraph:
+    """Rebase every LIBERO subgraph against the post-reset scene.
+
+    Candidate artifacts contain planner-time poses so they can be validated
+    and fingerprinted before an environment is constructed. A physical
+    executor must bind those poses again after reset, because layout variants
+    and simulator seeds can move the target between artifact creation and
+    execution. The graph identity is intentionally unchanged: this is an
+    execution-time grounding step, not a new policy candidate.
+    """
+    grounded_subgraphs = tuple(
+        ground_libero_grasp_subgraph(subgraph, scene)
+        for subgraph in graph.subgraphs
+    )
+    if grounded_subgraphs == graph.subgraphs:
+        return graph
+    return replace(graph, subgraphs=grounded_subgraphs)
 
 
 def _shift_call_reference(value: object, insertion_index: int) -> object:

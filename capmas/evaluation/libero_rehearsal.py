@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import os
 import time
 from collections.abc import Mapping
@@ -21,6 +21,7 @@ class LiberoRehearsalConfig:
     object_name: str = "akita black bowl"
     target_name: str = "plate"
     max_steps: int = 32
+    layout_variant: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.config_path:
@@ -31,10 +32,16 @@ class LiberoRehearsalConfig:
 
 def _default_build_runtime(config: LiberoRehearsalConfig):
     from capmas.backends.capx_libero_factory import build_capx_runtime_from_yaml
+    from capmas.evaluation.layout_variants import LayoutResetHook
 
     return build_capx_runtime_from_yaml(
         config.config_path,
         object_names=(config.object_name, config.target_name),
+        reset_hook=(
+            LayoutResetHook(config.layout_variant)
+            if config.layout_variant
+            else None
+        ),
     )
 
 
@@ -60,7 +67,10 @@ def run_libero_rehearsal_job(
         from capmas.runtime.orchestrator import RuntimeOrchestrator
         from capmas.runtime.scheduler import FixedGraphScheduler
         from capmas.runtime.state_store import InMemoryStateStore
-        from capmas.verification.libero import LiberoObservableVerifier
+        from capmas.verification.libero import (
+            LiberoObservableVerifier,
+            ground_libero_mission_graph,
+        )
 
         runtime = RuntimeOrchestrator(
             backend=bundle.backend,
@@ -72,6 +82,7 @@ def run_libero_rehearsal_job(
         episode = runtime.backend.reset(seed=job.seed)
         runtime.start_episode(episode)
         scene = runtime.state_store.latest()
+        graph = ground_libero_mission_graph(graph, scene)
         result = FixedGraphInterpreter(
             FixedGraphScheduler(runtime),
             artifact_store=ArtifactStore(),
@@ -137,7 +148,13 @@ def run_libero_rehearsal_job(
     except GraphSchemaError as exc:
         return _failure_result(job, started_ns, worker_pid, RehearsalFailureClass.INVALID_GRAPH, str(exc))
     except Exception as exc:
-        return _failure_result(job, started_ns, worker_pid, RehearsalFailureClass.WORKER_CRASH, str(exc))
+        return _failure_result(
+            job,
+            started_ns,
+            worker_pid,
+            _exception_failure_class(exc),
+            str(exc),
+        )
     finally:
         if bundle is not None:
             try:
@@ -189,4 +206,11 @@ def _failure_class(value: str | None) -> RehearsalFailureClass:
         return RehearsalFailureClass.TIMEOUT
     if value:
         return RehearsalFailureClass.SKILL_FAILURE
+    return RehearsalFailureClass.WORKER_CRASH
+
+
+def _exception_failure_class(exc: Exception) -> RehearsalFailureClass:
+    """Classify setup failures without treating a valid worker as crashed."""
+    if "LIBERO depth initialization failed" in str(exc):
+        return RehearsalFailureClass.RESET_FAILURE
     return RehearsalFailureClass.WORKER_CRASH

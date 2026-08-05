@@ -213,6 +213,7 @@ case.
 @dataclass(frozen=True)
 class OODReplayEvidence:
     case_id: str
+    pair_id: str
     condition: Literal["capx", "capmas"]
     candidate_id: str
     split: Literal["id", "ood"]
@@ -228,6 +229,7 @@ class OODReplayEvidence:
     latency_ms: float
     provider_call_count: int
     cache_hit_count: int
+    selection_basis: str | None = None
     shadow_only: bool = True
 ```
 

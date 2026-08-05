@@ -419,6 +419,171 @@ An artifact is incomplete for latency or parallelism claims unless it contains
 `run_config` and per-request `llm_calls`. A successful evaluator score alone is
 not evidence of a multi-agent quality improvement.
 
+### P5.5 frozen OOD replay implementation (2026-08-03)
+
+The P5.5 runner is `scripts/run_libero_p55_ood.py`. It consumes the frozen
+manifest `configs/phase5/p55_ood_smoke.json`, validates candidate SHA-256
+digests and split/leakage constraints before any online call, and creates a
+new suite and case directory for every run. The initial gate uses
+`max_workers=1`, `max_restarts=0`, `cache_mode=disabled`, and at most one
+physical execution per case:
+
+```bash
+CUDA_VISIBLE_DEVICES=5 \
+/data/MLLM/wzh/agent/paper/infiAgent/workspace/cap-x/.venv-libero/bin/python \
+scripts/run_libero_p55_ood.py \
+  --manifest configs/phase5/p55_ood_smoke.json \
+  --output-root outputs/phase5/P5.5_ood_replay_20260803 \
+  --max-workers 1 --max-restarts 0 --gpu 5
+```
+
+This smoke is intentionally a structural gate. The layout-OOD entry is a
+manual membership label and the fixture does not generate or apply a physical
+layout perturbation. Results therefore validate replay isolation, explicit
+pairing, provenance, shadow-only evidence, and retained logs/manifests; they
+must not be reported as an OOD success-rate improvement. A real OOD pilot
+requires physically distinct layout variants, matched seeds, multiple task or
+layout families, Wilson intervals, paired deltas, and all infrastructure
+unknowns reported separately.
+
+The real smoke completed in the fresh directory
+`outputs/phase5/P5.5_ood_replay_20260803_smoke1/`. It used the CAP-X
+`.venv-libero` environment, CUDA device 5, one worker, zero restarts, and the
+Spatial-0 seed-1 candidate artifact. Both cases completed the runner and
+executed one physical candidate; ID and layout-OOD-labeled evaluator results
+were both `0/1`, with paired tie `0/0`, `selection_basis=evidence_tie_break`,
+and `shadow_only=true`.
+
+This is deliberately not an OOD performance result: the fixture's OOD case
+uses the same physical CAP-X config and candidate artifact as ID and carries a
+manual placeholder layout label. It validates real replay execution,
+pairing, provenance, leakage checks, and artifact retention only. A physical
+The placeholder smoke was followed by the real layout-variant pilot below.
+
+### P5.5 real layout-variant five-seed pilot (2026-08-04)
+
+`scripts/create_p55_real_layout_manifest.py` froze three task families
+(`spatial-0`, `goal-1`, and `object-6`), five matched seeds, and 15 ID/OOD
+pairs. ID uses the native reset layout; OOD applies a deterministic free-joint
+translation to the task objects and records the resulting state fingerprint.
+The manifest is
+`outputs/phase5/P5.5_real_layout_assets_20260803/p55_real_layout_3family_5seed.json`.
+
+The formal run used CUDA device 5, the CAP-X `.venv-libero` environment,
+`max_workers=2`, `max_restarts=0`, `max_steps=32`, and disabled evidence
+cache. Its retained suite is
+`outputs/phase5/P5.5_real_layout_pilot_20260803/P5.5_frozen_ood_replay/20260803_113118_suite_b4bbc31b/`.
+All 30 cases completed without infrastructure failures and all case-level
+logs and manifests passed digest/size verification.
+
+| split | cases | evaluator success | graph completed | unknowns |
+| --- | ---: | ---: | ---: | ---: |
+| ID | 15 | 0/15 | 0/15 | 0 |
+| real layout OOD | 15 | 0/15 | 0/15 | 0 |
+
+The aggregate report gives ID/OOD Wilson intervals of `0.0` with upper
+bound `0.2039`, paired delta `0`, 15 paired ties, and exact McNemar `p=1.0`.
+All failures are classified as `task_failure`; no recovery or human
+intervention was recorded. All 15 pairs have different layout fingerprints,
+and all 30 evidence records are `shadow_only=true`. Selection used
+`evidence_tie_break` in every case, so this pilot closes the real layout,
+pairing, provenance, and measurement gate but does not demonstrate a
+downstream success-rate improvement or causal Arbiter gain. The ten-seed
+formal gate is recorded below; P5.6 calibration remains open.
+
+### P5.5 real layout-variant ten-seed formal gate (2026-08-05)
+
+The formal run expanded the frozen manifest to seeds 1--10 for the same
+`spatial-0`, `goal-1`, and `object-6` families. It contains 60 cases and 30
+matched ID/OOD pairs. The manifest is
+`outputs/phase5/P5.5_real_layout_assets_20260803/p55_real_layout_3family_10seed.json`
+with canonical manifest digest (SHA-256 excluding the self-digest field)
+`5aeff85dae764c72fe9c0b1f3a0a07f4070e95247baea1b8d93f15311ea72141`.
+The retained suite is
+`outputs/phase5/P5.5_real_layout_formal_20260804/P5.5_frozen_ood_replay/20260804_014522_suite_dda9defe/`.
+
+The run used the CAP-X `.venv-libero` interpreter, CUDA device 5,
+`max_workers=2`, `max_restarts=0`, `max_steps=32`, `timeout_s=360`, one
+selection repeat, and disabled evidence cache. All 60 cases completed with
+zero infrastructure unknowns, and each case retained its own log, evidence,
+manifest, and result boundary.
+
+The zero-unknown aggregate above is a historical result from the
+pre-diagnostic runner and must not be interpreted as a valid task-success
+measurement. Its case-level rehearsal artifacts contain 120 candidate
+attempts: 117 failed at depth initialization with
+`LIBERO depth initialization failed`, while three entered the first skill
+path and failed there. Because two spawned workers shared CUDA device 5,
+renderer/model initialization was not isolated. The old physical result also
+omitted an explicit failure class, so an incomplete graph was incorrectly
+reported as `task_failure`.
+
+| family | ID success | OOD success | pairs | mean latency |
+| --- | ---: | ---: | ---: | ---: |
+| `spatial-0` | 0/10 | 0/10 | 10 | 74.99 s |
+| `goal-1` | 0/10 | 0/10 | 10 | 78.34 s |
+| `object-6` | 0/10 | 0/10 | 10 | 82.86 s |
+| **all** | **0/30** | **0/30** | **30** | **78.73 s** |
+
+Both success estimates are `0.0` with Wilson 95% upper bound `0.1135`.
+There were 30 paired ties, paired delta `0`, and exact McNemar `p=1.0`.
+All 60 failures were `task_failure`; infrastructure unknowns, recoveries,
+and human interventions were all zero. Reported latency had median
+`72.68 s` and range `55.18--211.06 s`.
+
+Horizon buckets are not reported for this run: the current P5.5 evidence
+artifact does not record realized subgoal count, and `max_steps=32` is a
+budget rather than an observed horizon. Since every case had
+`graph_completed=false`, assigning H2/H4/H6 would be invalid. The runner
+needs an explicit verified-horizon field before horizon-stability analysis.
+
+All 30 pairs had distinct ID/OOD layout fingerprints and all case manifests
+passed SHA-256/size verification. Every evidence record remained
+`shadow_only=true`, and all 60 selections used `evidence_tie_break`. Thus
+this closes the P5.5 ten-seed measurement/provenance gate only. It does not
+support an OOD generalization, downstream success-rate, or causal Arbiter
+claim; calibration and active weighting move to P5.6.
+
+### P5.5 failure-diagnostics correction (2026-08-05)
+
+The corrected runner enforces `max_workers=1` for a configured GPU. Rehearsal
+exceptions matching CAP-X depth initialization are classified as
+`reset_failure`; other isolated-process failures retain `worker_crash`, and
+physical `GraphExecutionResult.failure` metadata is preserved in
+`results/online.json`. The OOD adapter excludes `reset_failure`,
+`worker_crash`, `timeout`, and `infrastructure_unknown` from success-rate
+denominators. An incomplete physical graph without an explicit task failure is
+also `infrastructure_unknown`, while explicit `EXECUTION_ERROR`,
+`MOTION_TIMEOUT`, and `POSTCONDITION_FAILED` remain valid task-failure
+evidence.
+
+Each completed case now retains
+`evidence/rehearsal_failure_summary.json`, including candidate IDs, failure
+classes, reasons, and failure steps. The 2026-08-04 two-worker formal suite
+is diagnostic-only and is not eligible for an ID/OOD success claim. A fresh
+CUDA-5, single-worker matched smoke is required before expanding the run to
+five or ten seeds.
+
+The corrected single-worker matched smoke completed at
+`outputs/phase5/P5.5_failure_diag_smoke_20260805/P5.5_frozen_ood_replay/20260805_032606_suite_d733ad12/`.
+It used the three-family, one-seed real-layout manifest on CUDA device 5 with
+`max_workers=1`, `max_restarts=0`, and disabled cache. All six cases completed
+with zero runner failures and zero infrastructure unknowns. The 12 rehearsal
+candidate attempts were classified as `skill_failure` rather than depth
+initialization failure; all six physical executions retained explicit
+`EXECUTION_ERROR` metadata.
+
+| split | evaluator success | known failures | infrastructure unknowns |
+| --- | ---: | ---: | ---: |
+| ID | 0/3 | 3 | 0 |
+| real layout OOD | 0/3 | 3 | 0 |
+
+This confirms the single-GPU isolation and provenance fixes. It does not claim
+success-rate improvement: the smoke has one seed, all physical candidates
+failed during execution, and selection remained `evidence_tie_break`. A new
+five-seed run is allowed by the infrastructure gate, but its task performance
+must be reported independently from the invalidated two-worker formal suite.
+
 ## 6. Failure taxonomy
 
 Every failed episode should be assigned one primary cause and optional secondary causes: stale state, perception uncertainty, invalid contract, motion/planning failure, execution error, postcondition failure, recovery failure, budget timeout, or evaluator failure.

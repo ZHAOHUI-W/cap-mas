@@ -2,13 +2,19 @@ import pytest
 
 from capmas.contracts.action import ActionContract, SkillCall, SkillOutputRef
 from capmas.contracts.core import SkillRef
-from capmas.contracts.graph import MotionIntent, SubgraphNodeSpec, SubgraphSpec
+from capmas.contracts.graph import (
+    MissionGraph,
+    MotionIntent,
+    SubgraphNodeSpec,
+    SubgraphSpec,
+)
 from capmas.contracts.scene import ObjectTrack, SceneSnapshot
 from capmas.contracts.trace import ExecutionTrace
 from capmas.verification.libero import (
     LiberoObservableVerifier,
     compile_time_preconditions,
     ground_libero_grasp_subgraph,
+    ground_libero_mission_graph,
     pre_dispatch_preconditions,
     repair_libero_grasp_subgraph,
     validate_libero_grasp_subgraph,
@@ -457,6 +463,83 @@ def test_libero_placement_grounding_reads_target_predicate_from_subgraph_checkpo
     assert args["position"] == (0.4, 0.5, 0.6)
     assert args["quaternion_wxyz"] == (0.0, 1.0, 0.0, 0.0)
     assert args["z_approach"] == 0.12
+
+
+def test_libero_mission_grounding_rebases_all_subgraphs_after_reset() -> None:
+    pick = SubgraphSpec(
+        "pick",
+        "pick",
+        "pick",
+        (
+            SubgraphNodeSpec(
+                "action",
+                "pick",
+                (
+                    SkillCall(
+                        SkillRef("sample_grasp_pose", "1"),
+                        {"object_name": "bowl"},
+                    ),
+                    SkillCall(
+                        SkillRef("goto_pose", "1"),
+                        {"position": [0, 0, 0], "quaternion_wxyz": [1, 0, 0, 0]},
+                    ),
+                    SkillCall(SkillRef("close_gripper", "1"), {}),
+                ),
+            ),
+        ),
+        (),
+        "action",
+        ("action",),
+        ("action",),
+    )
+    place = SubgraphSpec(
+        "place",
+        "place",
+        "place",
+        (
+            SubgraphNodeSpec(
+                "action",
+                "place",
+                (
+                    SkillCall(
+                        SkillRef("goto_pose", "1"),
+                        {"position": [9, 9, 9], "quaternion_wxyz": [1, 0, 0, 0]},
+                    ),
+                ),
+                postconditions=("object_at_target(bowl,plate)",),
+            ),
+        ),
+        (),
+        "action",
+        ("action",),
+        ("action",),
+    )
+    graph = MissionGraph(
+        "mission",
+        "place bowl on plate",
+        (pick, place),
+        (),
+        (),
+        "pick",
+        ("place",),
+        (),
+    )
+    scene = SceneSnapshot(
+        "ep",
+        1,
+        3,
+        4,
+        4,
+        {},
+        objects=(_track("plate", "plate", (0.7, 0.8, 0.9)),),
+    )
+
+    grounded = ground_libero_mission_graph(graph, scene)
+
+    assert grounded is not graph
+    assert graph.subgraph("place").nodes[0].skill_calls[0].args["position"] == [9, 9, 9]
+    assert grounded.subgraph("pick").nodes[0].skill_calls[1].args["position"].call_index == 0
+    assert grounded.subgraph("place").nodes[0].skill_calls[0].args["position"] == (0.7, 0.8, 0.9)
 
 
 def test_libero_verifier_rejects_unknown_precondition_without_evaluator_access() -> None:

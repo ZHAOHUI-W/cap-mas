@@ -160,6 +160,7 @@ def build_capx_runtime_from_yaml(
     instantiate_code_env: bool = False,
     object_names: Sequence[str] | None = None,
     artifact_store: ArtifactSink | None = None,
+    reset_hook: Callable[[object, int | None, Mapping[str, object]], None] | None = None,
 ) -> CAPXRuntimeBundle:
     """Build CAP-MAS resources from an existing CAP-X LIBERO YAML.
 
@@ -351,6 +352,7 @@ def build_capx_runtime_from_yaml(
         task_id=task_id,
         suite_name=suite_name,
         backend_id=backend_id,
+        reset_hook=reset_hook,
     )
     typed_skills: dict[Any, CAPXTypedSkill] = build_capx_skills(
         primary_api,

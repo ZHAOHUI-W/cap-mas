@@ -137,6 +137,7 @@ def test_manifest_rejects_task_family_overlap_for_task_object_ood() -> None:
 def test_ood_replay_evidence_preserves_unknown_evaluator_and_is_shadow_only() -> None:
     evidence = OODReplayEvidence(
         case_id="ood-1",
+        pair_id="pair-1",
         condition="capmas",
         candidate_id="candidate-a",
         split="ood",

@@ -58,6 +58,26 @@ from capmas.evaluation.verifier_artifacts import (
     collect_dynamic_verifier_artifacts,
     static_verifier_artifacts_from_arbitrations,
 )
+from capmas.evaluation.ood import (
+    Condition,
+    LeakageAudit,
+    OODCase,
+    OODReplayEvidence,
+    OODSplitManifest,
+    canonical_manifest_payload,
+    dump_ood_manifest,
+    load_ood_manifest,
+    manifest_sha256,
+    validate_ood_manifest,
+)
+from capmas.evaluation.ood_statistics import (
+    ConfidenceInterval,
+    OODAggregateReport,
+    aggregate_ood_pairs,
+    exact_mcnemar_pvalue,
+    paired_success_delta,
+    wilson_interval,
+)
 
 __all__ = [
     "CandidateIdentity",
@@ -97,4 +117,20 @@ __all__ = [
     "DynamicVerifierArtifact",
     "collect_dynamic_verifier_artifacts",
     "static_verifier_artifacts_from_arbitrations",
+    "Condition",
+    "LeakageAudit",
+    "OODCase",
+    "OODReplayEvidence",
+    "OODSplitManifest",
+    "canonical_manifest_payload",
+    "dump_ood_manifest",
+    "load_ood_manifest",
+    "manifest_sha256",
+    "validate_ood_manifest",
+    "ConfidenceInterval",
+    "OODAggregateReport",
+    "aggregate_ood_pairs",
+    "exact_mcnemar_pvalue",
+    "paired_success_delta",
+    "wilson_interval",
 ]

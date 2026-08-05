@@ -284,6 +284,7 @@ class CAPXRobotBackend(RobotBackend):
         suite_name: str,
         backend_id: str = "capx",
         scene_enricher: SceneEnricher | Callable[[ObservationBundle, SceneSnapshot], SceneSnapshot] | None = None,
+        reset_hook: Callable[[object, int | None, Mapping[str, object]], None] | None = None,
     ) -> None:
         self.env = env
         self.observation_provider = observation_provider
@@ -291,6 +292,7 @@ class CAPXRobotBackend(RobotBackend):
         self.suite_name = suite_name
         self.backend_id = backend_id
         self._scene_enricher = scene_enricher
+        self._reset_hook = reset_hook
         self._handle: EpisodeHandle | None = None
         self._scene_version = 0
 
@@ -301,9 +303,18 @@ class CAPXRobotBackend(RobotBackend):
         """Attach or clear an optional observation-to-scene enrichment seam."""
         self._scene_enricher = enricher
 
+    def set_reset_hook(
+        self,
+        hook: Callable[[object, int | None, Mapping[str, object]], None] | None,
+    ) -> None:
+        self._reset_hook = hook
+
     def reset(self, seed: int | None = None, options: Mapping[str, object] | None = None) -> EpisodeStart:
         reset = getattr(self.env, "reset")
-        reset(seed=seed, options=dict(options or {}))
+        reset_options = dict(options or {})
+        reset(seed=seed, options=reset_options)
+        if self._reset_hook is not None:
+            self._reset_hook(self.env, seed, reset_options)
         self._scene_version = 0
         self._handle = EpisodeHandle(
             episode_id=str(uuid4()),
