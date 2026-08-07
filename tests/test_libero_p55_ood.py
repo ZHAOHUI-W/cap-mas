@@ -230,6 +230,56 @@ def test_ood_suite_does_not_count_reset_failure_as_task_failure(tmp_path) -> Non
     assert summary["failed_count"] == 1
 
 
+def test_ood_suite_derives_failed_verifier_from_postcondition_failure(tmp_path) -> None:
+    def fake_runner(**kwargs):
+        winner = kwargs["candidates"][0].candidate_id
+        return {
+            "mode": "online_bounded",
+            "physical_candidate_id": winner,
+            "physical_result": {
+                "completed": False,
+                "evaluator_success": True,
+                "success": False,
+                "execution_valid": True,
+                "failure_class": "POSTCONDITION_FAILED",
+            },
+            "provider_call_count": 1,
+            "selection_latency_ms": 10.0,
+            "live_selection_basis": "evidence_tie_break",
+        }
+
+    report = run_ood_suite(
+        _manifest_with_id_and_layout_ood_pair(),
+        output_root=tmp_path,
+        run_config=OODRunConfig(),
+        online_runner=fake_runner,
+        executor_factory=lambda **_: None,
+    )
+
+    evidence = tuple(
+        item
+        for result in report.case_results
+        for item in result.evidence
+    )
+    assert all(item.evaluator_success is True for item in evidence)
+    assert all(item.verifier_success is False for item in evidence)
+    assert report.aggregate.task_failure_classes == {}
+    assert report.aggregate.verifier_false_negative_classes == {
+        "POSTCONDITION_FAILED": 2
+    }
+    summary = (report.suite_dir / "summary.md").read_text(encoding="utf-8")
+    assert "id_graph_completion: 0/1" in summary
+    assert "ood_graph_completion: 0/1" in summary
+    assert "id_verifier_success: 0/1" in summary
+    assert "ood_verifier_success: 0/1" in summary
+    assert "task_failure_classes: {}" in summary
+    assert (
+        "verifier_false_negative_classes: {'POSTCONDITION_FAILED': 2}"
+        in summary
+    )
+    assert "evaluator_graph_disagreement_count: 2" in summary
+
+
 def test_ood_suite_passes_layout_variant_to_online_runner(tmp_path) -> None:
     layout_variant = {
         "variant_id": "translated-v1",

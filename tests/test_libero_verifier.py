@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from capmas.contracts.action import ActionContract, SkillCall, SkillOutputRef
@@ -360,11 +362,60 @@ def test_libero_placement_grounding_uses_scene_target_pose() -> None:
     )
 
     grounded = ground_libero_grasp_subgraph(subgraph, scene)
-    args = grounded.nodes[0].skill_calls[0].args
+    calls = grounded.nodes[0].skill_calls
 
-    assert args["position"] == (0.4, 0.5, 0.6)
+    assert [call.skill.skill_id for call in calls] == [
+        "goto_pose",
+        "goto_pose",
+        "open_gripper",
+        "goto_pose",
+    ]
+    assert calls[0].args == {
+        "position": (0.4, 0.5, 0.7),
+        "quaternion_wxyz": (0.0, 1.0, 0.0, 0.0),
+    }
+    assert calls[1].args == {
+        "position": (0.4, 0.5, 0.6),
+        "quaternion_wxyz": (0.0, 1.0, 0.0, 0.0),
+        "z_approach": 0.12,
+    }
+    assert calls[3].args == calls[0].args
+
+
+def test_libero_placement_grounding_prefers_target_placement_pose() -> None:
+    subgraph = SubgraphSpec(
+        "place",
+        "place",
+        "place",
+        (
+            SubgraphNodeSpec(
+                "action",
+                "place",
+                (
+                    SkillCall(
+                        SkillRef("goto_pose", "1"),
+                        {"position": [9, 9, 9], "quaternion_wxyz": [1, 0, 0, 0]},
+                    ),
+                ),
+                postconditions=("object_at_target(bowl,plate)",),
+            ),
+        ),
+        (),
+        "action",
+        ("action",),
+        ("action",),
+    )
+    target = replace(
+        _track("plate", "plate", (0.4, 0.5, 0.6)),
+        placement_pose_wxyz_xyz=(1.0, 0.0, 0.0, 0.0, 0.2, 0.3, 0.4),
+    )
+    scene = SceneSnapshot("ep", 1, 0, 1, 1, {}, objects=(target,))
+
+    grounded = ground_libero_grasp_subgraph(subgraph, scene)
+
+    args = grounded.nodes[0].skill_calls[0].args
+    assert args["position"] == (0.2, 0.3, 0.4)
     assert args["quaternion_wxyz"] == (0.0, 1.0, 0.0, 0.0)
-    assert args["z_approach"] == 0.12
 
 
 def test_libero_placement_grounding_rebinds_motion_intent_to_effective_pose() -> None:
@@ -667,6 +718,34 @@ def test_predicate_verifier_checks_object_at_target_distance() -> None:
     assert result.passed is True
 
 
+def test_predicate_verifier_uses_placement_xy_when_target_pose_is_occluded() -> None:
+    target = replace(
+        _track("plate-1", "plate", (0.80, 0.80, 0.20)),
+        placement_pose_wxyz_xyz=(1.0, 0.0, 0.0, 0.0, 0.40, 0.20, 0.90),
+    )
+    scene = SceneSnapshot(
+        "ep",
+        1,
+        1,
+        2_000_000,
+        2_000_000,
+        {"gripper_opening": 1.0},
+        objects=(
+            _track("bowl-1", "bowl", (0.40, 0.20, 0.20)),
+            target,
+        ),
+    )
+
+    result = PredicateBasedVerifier().commit(
+        make_contract(expected_postconditions=("object_at_target(bowl-1,plate-1)",)),
+        replace(scene, scene_version=0),
+        scene,
+        ExecutionTrace("t", "ep", 1, "c", "l", 0, 0, 1, 1, 2, "completed"),
+    )
+
+    assert result.passed is True
+
+
 def test_predicate_verifier_checks_scene_fresh_threshold() -> None:
     scene = SceneSnapshot("ep", 1, 0, 1_000_000, 1_000_000, {})
     contract = make_contract(preconditions=("scene_fresh(5)",))
@@ -688,6 +767,28 @@ def test_predicate_verifier_checks_gripper_open_and_closed() -> None:
 
     assert PredicateBasedVerifier().approve(open_contract, open_scene).passed is True
     assert PredicateBasedVerifier().approve(closed_contract, closed_scene).passed is True
+
+
+def test_predicate_verifier_uses_commanded_closure_when_object_keeps_fingers_apart() -> None:
+    scene = SceneSnapshot(
+        "ep",
+        1,
+        1,
+        2,
+        2,
+        {
+            # A held LIBERO object keeps the physical finger opening non-zero.
+            "gripper_opening": 0.486,
+            "gripper_commanded_fraction": 0.0,
+        },
+    )
+
+    result = PredicateBasedVerifier().approve(
+        make_contract(preconditions=("gripper_closed()",)),
+        scene,
+    )
+
+    assert result.passed is True
 
 
 def test_predicate_verifier_exposes_task_goal_check_without_evaluator_access() -> None:

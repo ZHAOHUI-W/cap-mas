@@ -258,6 +258,22 @@ The report must distinguish evaluator success, observable verifier success,
 graph completion, and infrastructure completion. A task that times out before
 arbitration is not silently counted as an ordinary policy failure.
 
+The aggregate failure taxonomy is also typed. `failure_classes` preserves the
+raw runtime/infrastructure provenance for backward compatibility;
+`graph_failure_classes` counts valid executions whose graph did not complete;
+`task_failure_classes` counts only records with `evaluator_success=false`; and
+`verifier_false_negative_classes` counts records where the benchmark evaluator
+succeeded but the observable verifier rejected the graph. A non-null graph
+failure may coexist with `evaluator_success=true`; such records must not be described as downstream task failures. The report also records graph-completion
+and known verifier-success counts by split plus the evaluator/graph disagreement
+count.
+
+When the physical payload omits `verifier_success`, normalization may infer it
+only from conclusive graph evidence: a completed graph implies `true`, while an
+explicit `PRECONDITION_FAILED` or `POSTCONDITION_FAILED` implies `false`.
+Execution, motion, reset, worker, and timeout failures leave verifier success
+unknown.
+
 Recommended experiment sizes are:
 
 - smoke: one paired ID/OOD case;

@@ -285,6 +285,11 @@ def _evidence_from_outcome(
         failure_class = "task_failure"
     elif failure_class is None and evaluator_success is None:
         failure_class = "infrastructure_unknown"
+    if verifier_success is None:
+        if graph_completed is True:
+            verifier_success = True
+        elif failure_class in {"PRECONDITION_FAILED", "POSTCONDITION_FAILED"}:
+            verifier_success = False
     cache_stats = _as_mapping(payload.get("cache_stats"))
     layout_report = _as_mapping(physical.get("layout_application"))
     cache_hit_count = _int_value(payload, "cache_hit_count")
@@ -684,6 +689,16 @@ def run_ood_suite(
         f"- failed_case_count: {report.failed_case_count}\n"
         f"- id_success_rate: {aggregate.id_rate.estimate:.6f}\n"
         f"- ood_success_rate: {aggregate.ood_rate.estimate:.6f}\n"
+        f"- id_graph_completion: {aggregate.id_graph_completed_count}/{aggregate.id_graph_completed_total}\n"
+        f"- ood_graph_completion: {aggregate.ood_graph_completed_count}/{aggregate.ood_graph_completed_total}\n"
+        f"- id_verifier_success: {aggregate.id_verifier_success_count}/{aggregate.id_verifier_success_total}\n"
+        f"- ood_verifier_success: {aggregate.ood_verifier_success_count}/{aggregate.ood_verifier_success_total}\n"
+        f"- graph_failure_classes: {aggregate.graph_failure_classes}\n"
+        f"- task_failure_classes: {aggregate.task_failure_classes}\n"
+        "- verifier_false_negative_classes: "
+        f"{aggregate.verifier_false_negative_classes}\n"
+        "- evaluator_graph_disagreement_count: "
+        f"{aggregate.evaluator_graph_disagreement_count}\n"
         f"- shadow_only: True\n",
     )
     suite_dir.write_text(
@@ -694,6 +709,12 @@ def run_ood_suite(
                 f"case_count={report.case_count}",
                 f"failed_case_count={report.failed_case_count}",
                 f"infrastructure_unknown_count={aggregate.infrastructure_unknown_count}",
+                "evaluator_graph_disagreement_count="
+                f"{aggregate.evaluator_graph_disagreement_count}",
+                f"graph_failure_classes={aggregate.graph_failure_classes}",
+                f"task_failure_classes={aggregate.task_failure_classes}",
+                "verifier_false_negative_classes="
+                f"{aggregate.verifier_false_negative_classes}",
                 "shadow_only=True",
                 "",
             ]

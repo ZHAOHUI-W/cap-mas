@@ -22,6 +22,10 @@ def _replace(value: object, replacements: tuple[tuple[str, str], ...]) -> object
     if isinstance(value, str):
         for source, target in replacements:
             value = value.replace(source, target)
+            source_slug = source.replace(" ", "_")
+            target_slug = target.replace(" ", "_")
+            if source_slug != source:
+                value = value.replace(source_slug, target_slug)
         return value
     if isinstance(value, list):
         return [_replace(item, replacements) for item in value]

@@ -532,6 +532,96 @@ downstream success or causal Arbiter result. P5.6 calibration, correlated
 signal correction, active OOD weighting, and learned Arbiter weighting remain
 deferred.
 
+P5.5 execution-grounding smoke result (2026-08-05): after reset-time graph
+grounding was added to both the live executor and isolated rehearsal worker,
+the six-case three-family, one-seed real-layout smoke completed at
+`outputs/phase5/P5.5_grounding_smoke_venv_20260805/P5.5_frozen_ood_replay/20260805_085352_suite_fd89ecef/`.
+It used CUDA device 5, one worker, zero restarts, `max_steps=32`, and disabled
+cache. ID success was `1/3`; layout-OOD success was `0/3`; infrastructure
+unknowns were `0`. The five failures were explicit
+`POSTCONDITION_FAILED` outcomes. The native/OOD spatial placement trace moved
+from `x=0.72409` to `x=0.81099`, matching the direction of the audited layout
+translation, so execution grounding is confirmed. This is a one-seed
+grounding smoke only; it does not close multi-seed OOD quality or causal
+Arbiter gates. Remaining failures concern grasp/coordinate postconditions and
+task-to-graph mapping. Full regression verification was `421 passed` with
+compileall success.
+
+P5.5 gripper-state semantic correction (2026-08-05): CAP-X measured finger
+opening and commanded gripper fraction are now represented separately. The
+CAP-MAS CAP-X adapter publishes optional
+`robot_state["gripper_commanded_fraction"]` from the low-level environment;
+the verifier uses that signal for `gripper_open()` and `gripper_closed()` and
+falls back to `gripper_opening` for legacy snapshots. A fresh object-6
+grounded probe physically lifted butter and passed both
+`object_in_gripper(butter)` and `gripper_closed()`. The probe stopped before
+placement, so this closes only the pick-checkpoint semantic issue.
+
+### P5.5 target-pose verified object-6 online closure (2026-08-06)
+
+Placement grounding now separates a container's semantic body-center pose from
+the safe release pose. The implementation uses the clipped point-cloud center,
+adds top release clearance for basket-like targets, and grounds placement as
+pre-place approach, target descent, release, and retreat. The placement
+postcondition uses robust target XY while retaining semantic target Z, which
+prevents partial target occlusion from producing a false verifier failure.
+
+The disabled-mode physical smoke completed object-6, and the subsequent full
+online rehearsal-Arbiter smoke completed at
+`outputs/phase5/P5.5_target_pose_verified_object6_online_20260806/P5.3.1_online_rehearsal_arbiter/20260806_052654_seed1_d1b5f0d1/`.
+The online run used CUDA device 5, one worker, zero restarts, 32 maximum
+steps, one selection repeat, and disabled cache. Both isolated candidates
+completed rehearsal, the Arbiter attached both and selected the first
+candidate with `evidence_tie_break`, and exactly one physical execution was
+performed. The final boundary reported `completed=true`,
+`evaluator_success=true`, and `success=true` with no failure artifact.
+
+The pre-fix online failure was caused by a verifier/placement-frame mismatch,
+not by failure to execute the robot action: a partially occluded basket
+produced an erroneous semantic target pose and `object_at_target` reported a
+`0.1369 m` distance. This run closes the object-6 target-pose regression and
+the full online smoke. It is still a one-seed, one-family smoke and does not
+close the P5.5 multi-seed OOD success-rate gate or establish causal Arbiter
+improvement. The retained online artifact has a `null` final basket
+`placement_pose_wxyz_xyz` only when queried as a missing JSON field: that run
+predates placement provenance in `_scene_debug_payload`, so it did not prove a
+provider-side null.
+
+P5.5 placement observability implementation (2026-08-06): `ObjectTrack` now
+retains `placement_pose_source` and `placement_pose_reason`. The CAP-X adapter
+marks successful estimates as `geometry_pointcloud`, while callback errors,
+unexpected payloads, and invalid/insufficient point clouds become explicit
+`semantic_pose_fallback` records. Runtime behavior remains unchanged. Unit and
+serialization coverage is complete; a fresh real object-6 capture is the
+remaining validation gate.
+
+P5.5 placement provenance real capture (2026-08-06): the fresh CUDA-5 run at
+`outputs/phase5/P5.5_placement_provenance_object6_20260806/P5.3.1_online_rehearsal_arbiter/20260806_064328_seed1_5168c2e2/`
+recorded basket `placement_pose_source=geometry_pointcloud` both before and
+after physical execution, with non-null placement poses and no fallback
+reason. The object-6 mission again completed with evaluator success. This
+closes the placement provenance software and real-capture gates; matched
+multi-seed ID/OOD evaluation remains separate.
+
+P5.5 matched provenance five-seed pilot (2026-08-06): the corrected
+single-worker suite at
+`outputs/phase5/P5.5_matched_provenance_5seed_20260806/P5.5_frozen_ood_replay/20260806_091429_suite_e169a480/`
+completed all 30 cases with zero infrastructure unknowns. Evaluator success
+was ID `3/15` and OOD `5/15`; graph/verifier success was ID `2/15` and OOD
+`4/15`. The paired result had two OOD-only successes and McNemar `p=0.5`, so
+no OOD improvement is claimed. Selection used `evidence_tie_break` 28 times
+and `evidence_score` twice.
+
+The reporting audit separates 24 graph-level `POSTCONDITION_FAILED` records
+into 22 physical task failures and 2 verifier false negatives. The latter are
+`id-object-6-seed4` and `ood-object-6-seed2`, where LIBERO accepted the
+placement but the point-distance verifier rejected it. The corrected offline
+report is retained under
+`outputs/phase5/P5.5_matched_provenance_5seed_report_correction_20260807/P5.5_offline_reaggregation/20260807_013832_suite_e169a480/`.
+P5.5 remains open until a corrected ten-seed, three-family run is complete;
+the five-seed pilot does not close the formal gate or demonstrate causal
+Arbiter improvement.
+
 ## Phase 6 — Memory Controller learning
 
 - Add verified terminal and intermediate learning-return calculation.

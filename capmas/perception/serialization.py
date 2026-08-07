@@ -178,6 +178,13 @@ def _object_to_dict(obj: ObjectTrack) -> dict[str, object]:
         "velocity_xyz": list(obj.velocity_xyz) if obj.velocity_xyz is not None else None,
         "prediction_timestamp_ns": obj.prediction_timestamp_ns,
         "track_status": obj.track_status,
+        "placement_pose_wxyz_xyz": (
+            list(obj.placement_pose_wxyz_xyz)
+            if obj.placement_pose_wxyz_xyz is not None
+            else None
+        ),
+        "placement_pose_source": obj.placement_pose_source,
+        "placement_pose_reason": obj.placement_pose_reason,
     }
 
 
@@ -227,6 +234,9 @@ def _object_from_dict(value: object) -> ObjectTrack:
             "velocity_xyz",
             "prediction_timestamp_ns",
             "track_status",
+            "placement_pose_wxyz_xyz",
+            "placement_pose_source",
+            "placement_pose_reason",
         },
         "object",
     )
@@ -245,6 +255,17 @@ def _object_from_dict(value: object) -> ObjectTrack:
         velocity_xyz=tuple(_number_list(velocity)) if velocity is not None else None,
         prediction_timestamp_ns=_optional_int(item.get("prediction_timestamp_ns"), "prediction_timestamp_ns"),
         track_status=_str(item.get("track_status", "observed"), "track_status"),
+        placement_pose_wxyz_xyz=(
+            tuple(_number_list(item["placement_pose_wxyz_xyz"]))
+            if item.get("placement_pose_wxyz_xyz") is not None
+            else None
+        ),
+        placement_pose_source=_optional_str(
+            item.get("placement_pose_source"), "placement_pose_source"
+        ),
+        placement_pose_reason=_optional_str(
+            item.get("placement_pose_reason"), "placement_pose_reason"
+        ),
     )
 
 

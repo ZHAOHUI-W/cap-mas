@@ -19,7 +19,7 @@ class ObservationProvider(Protocol):
 class ObservationBundle:
     timestamp_ns: int
     frames: tuple[CameraFrame, ...]      # 所有相机帧
-    robot_state: Mapping[str, object]    # {"joint_position": ArtifactRef, "ee_pose": ArtifactRef, "gripper_opening": ...}
+    robot_state: Mapping[str, object]    # includes measured gripper_opening and optional gripper_commanded_fraction
 ```
 
 **实现**：`CAPXObservationProvider`（`backends/capx.py:32-84`）— 将 CAP-X 观测标准化为 `ArtifactRef` 格式。
@@ -107,6 +107,10 @@ def test_fused_backend_infer_returns_unified_result():
 
 def test_tracks_from_result_preserves_confidence():
     """PerceptionResult → ObjectTrack 保留置信度信息。"""
+    ...
+
+def test_placement_pose_fallback_preserves_reason():
+    """几何放置位姿不可用时保留 semantic fallback 的原因。"""
     ...
 
 def test_scene_publish_does_not_mutate_active_snapshot():

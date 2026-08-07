@@ -168,12 +168,18 @@ class SceneSnapshot:
     scene_version: int             # 单调递增版本号
     sensor_timestamp_ns: int       # 传感器采集时间
     publish_timestamp_ns: int      # 发布时间
-    robot: Mapping[str, object]    # {"joint_position": ArtifactRef, "ee_pose": ArtifactRef, "gripper_opening": float}
+    robot: Mapping[str, object]    # measured gripper_opening plus optional gripper_commanded_fraction
     objects: Sequence[ObjectTrack] # 被追踪对象的列表
     local_map: ArtifactRef | None  # 增量局部 3D 地图（可选）
     freshness_ms: float            # 快照新鲜度
     source_artifacts: tuple[ArtifactRef, ...]  # 原始 RGB-D 帧引用
 ```
+
+`ObjectTrack` 可选地携带 `placement_pose_wxyz_xyz`、
+`placement_pose_source` 和 `placement_pose_reason`。点云估计成功时 source 为
+`geometry_pointcloud`；感知异常或点云不足时 pose 保持为空，source 为
+`semantic_pose_fallback`，reason 保留具体失败原因。这样 verifier 的语义位姿
+fallback 不再表现为无法解释的 `null`。
 
 **版本单调性**：
 - `StateStore.publish()` 拒绝非单调版本号

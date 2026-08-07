@@ -36,6 +36,15 @@ class SceneEnricher(Protocol):
     ) -> SceneSnapshot: ...
 
 
+@dataclass(frozen=True)
+class PlacementPoseResult:
+    """Internal placement estimate with explicit fallback provenance."""
+
+    pose: object | None
+    source: str
+    reason: str | None = None
+
+
 def _flatten_numbers(value: object) -> tuple[float, ...]:
     if hasattr(value, "reshape"):
         value = value.reshape(-1).tolist()  # type: ignore[union-attr]
@@ -57,6 +66,8 @@ class CAPXObservationProvider(ObservationProvider):
     object_pose_fn: Callable[[str], object] | None = None
     object_names: tuple[str, ...] = ()
     object_pose_confidence: float = 1.0
+    placement_pose_fn: Callable[[str], PlacementPoseResult | object] | None = None
+    placement_object_names: tuple[str, ...] = ()
 
     def capture(self) -> ObservationBundle:
         raw = self.observation_fn()
@@ -94,6 +105,11 @@ class CAPXObservationProvider(ObservationProvider):
             "ee_pose_wxyz_xyz": self._as_ee_pose(robot_cartesian_pos),
             "gripper_opening": robot_cartesian_pos[-1] if robot_cartesian_pos is not None else None,
         }
+        commanded_gripper_fraction = self._as_scalar(
+            raw.get("gripper_commanded_fraction")
+        )
+        if commanded_gripper_fraction is not None:
+            robot_state["gripper_commanded_fraction"] = commanded_gripper_fraction
         return ObservationBundle(
             timestamp_ns=timestamp_ns,
             frames=tuple(frames),
@@ -113,6 +129,13 @@ class CAPXObservationProvider(ObservationProvider):
             return _flatten_numbers(value)
         except (TypeError, ValueError):
             return None
+
+    @classmethod
+    def _as_scalar(cls, value: object) -> float | None:
+        values = cls._as_float_tuple(value)
+        if values is None or len(values) != 1:
+            return None
+        return values[0]
 
     @classmethod
     def _as_ee_pose(cls, value: object) -> tuple[float, ...] | None:
@@ -149,6 +172,39 @@ class CAPXObservationProvider(ObservationProvider):
             if pose is None:
                 continue
             position, quaternion_wxyz = pose
+            placement_pose = None
+            placement_pose_source = None
+            placement_pose_reason = None
+            if (
+                self.placement_pose_fn is not None
+                and name in self.placement_object_names
+            ):
+                try:
+                    raw_placement = self.placement_pose_fn(name)
+                except Exception as exc:
+                    placement_pose_source = "semantic_pose_fallback"
+                    placement_pose_reason = f"{type(exc).__name__}: {exc}"
+                else:
+                    if isinstance(raw_placement, PlacementPoseResult):
+                        placement_pose = _normalize_capx_object_pose(
+                            raw_placement.pose
+                        )
+                        placement_pose_source = raw_placement.source
+                        placement_pose_reason = raw_placement.reason
+                    else:
+                        placement_pose = _normalize_capx_object_pose(raw_placement)
+                        if placement_pose is not None:
+                            placement_pose_source = "placement_pose_fn"
+                        else:
+                            placement_pose_source = "semantic_pose_fallback"
+                            placement_pose_reason = "placement_pose_unavailable"
+                    if (
+                        raw_placement is not None
+                        and placement_pose is None
+                        and placement_pose_reason is None
+                    ):
+                        placement_pose_source = "semantic_pose_fallback"
+                        placement_pose_reason = "invalid_placement_pose"
             label = str(name).replace("_", " ")
             tracks.append(
                 ObjectTrack(
@@ -157,6 +213,13 @@ class CAPXObservationProvider(ObservationProvider):
                     pose_wxyz_xyz=tuple(quaternion_wxyz) + tuple(position),
                     confidence=self.object_pose_confidence,
                     last_seen_ns=timestamp_ns,
+                    placement_pose_wxyz_xyz=(
+                        tuple(placement_pose[1]) + tuple(placement_pose[0])
+                        if placement_pose is not None
+                        else None
+                    ),
+                    placement_pose_source=placement_pose_source,
+                    placement_pose_reason=placement_pose_reason,
                 )
             )
         return tuple(tracks)

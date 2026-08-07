@@ -584,6 +584,40 @@ failed during execution, and selection remained `evidence_tie_break`. A new
 five-seed run is allowed by the infrastructure gate, but its task performance
 must be reported independently from the invalidated two-worker formal suite.
 
+### P5.5 execution-grounding smoke (2026-08-05)
+
+After the failure-diagnostics smoke, the live executor and isolated rehearsal
+worker were changed to call `ground_libero_mission_graph()` after the
+post-reset `SceneSnapshot` is available. This rebases scene-dependent LIBERO
+target poses without changing candidate fingerprints. The six-case smoke used
+the real-layout three-family, one-seed manifest
+`outputs/phase5/P5.5_real_layout_assets_20260803/p55_real_layout_3family_1seed.json`
+on CUDA device 5, the CAP-X Python 3.10 environment, `max_workers=1`,
+`max_restarts=0`, `max_steps=32`, and disabled cache. Its retained suite is
+`outputs/phase5/P5.5_grounding_smoke_venv_20260805/P5.5_frozen_ood_replay/20260805_085352_suite_fd89ecef/`.
+
+| split | cases | evaluator success | infrastructure unknowns |
+| --- | ---: | ---: | ---: |
+| ID | 3 | 1/3 | 0 |
+| real layout OOD | 3 | 0/3 | 0 |
+
+The ID success is the native `spatial-0` case. The five failures are explicit
+`POSTCONDITION_FAILED` task failures, not reset, renderer, or worker failures.
+The paired result is one ID-only success and two ties; the Wilson estimates are
+`0.3333` (95% CI `[0.0615, 0.7923]`) for ID and `0.0` (95% CI `[0.0, 0.5615]`)
+for OOD. Selection used `evidence_score` once and `evidence_tie_break` five
+times. This is a grounding/regression smoke, not a multi-seed quality result.
+
+The execution trace confirms that grounding reached the physical action path:
+for spatial-0, placement `goto_pose` moved from native `x=0.72409` to OOD
+`x=0.81099`, while the layout report recorded the same positive object
+translation. Remaining failures are candidate/task-specific: OOD spatial
+failed `object_at_target` after release, both goal cases failed
+`object_in_gripper`, and both object cases exposed a `gripper_closed`
+postcondition failure. These failures are the next grasp/coordinate and task
+mapping investigation; they are not evidence that execution grounding was
+ignored. Full regression verification remains `421 passed` plus compileall.
+
 ## 6. Failure taxonomy
 
 Every failed episode should be assigned one primary cause and optional secondary causes: stale state, perception uncertainty, invalid contract, motion/planning failure, execution error, postcondition failure, recovery failure, budget timeout, or evaluator failure.
@@ -620,3 +654,114 @@ reduction, with 3 exact hits, 5 stores, 2 invalidations, 1 stale rejection,
 and 0 stale attachments. The enabled cache ended at scene version 2 with
 three current entries. Both manifests passed SHA-256 verification. This is an
 isolated cache-contract result and does not establish downstream task success.
+
+### P5.5 gripper-state semantic correction (2026-08-05)
+
+The object-6 failure was traced to two different gripper signals being treated
+as one. CAP-X's measured finger opening remained about `0.486` while a held
+butter object prevented the fingers from closing further, but CAP-X's target
+command was `0.0`. `CAPXObservationProvider` now carries the target as
+`gripper_commanded_fraction`, the YAML factory reads it from the low-level
+environment, and `PredicateBasedVerifier` uses it for open/closed predicates
+with a legacy opening fallback.
+
+The independent grounded probe was retained at
+`outputs/phase5/P5.5_grasp_probe_object6_commanded_20260805/20260805_101645_c98dd434/`.
+It physically lifted butter (`z=0.0087` to `z=0.1234`) and reported both
+`object_in_gripper(butter)` and `gripper_closed()` as passed. It did not run
+placement, so `task_completed=false` is expected. This is a pick-checkpoint
+semantic regression result, not a full P5.5 success-rate measurement.
+
+### P5.5 target-pose verified object-6 online closure (2026-08-06)
+
+The placement fix was validated first in a disabled-mode physical run and then
+through the full `online_bounded` rehearsal-Arbiter lane. The retained online
+run is
+`outputs/phase5/P5.5_target_pose_verified_object6_online_20260806/P5.3.1_online_rehearsal_arbiter/20260806_052654_seed1_d1b5f0d1/`.
+It used the real CAP-X object-6 configuration, CUDA device 5,
+`max_workers=1`, `max_restarts=0`, `max_steps=32`, one selection repeat, and
+disabled evidence cache. Both candidates completed isolated rehearsal
+successfully (`122301.288867 ms` and `91026.945827 ms`); the provider call
+took `215962.848232 ms` and the single physical execution was reserved for
+the selected winner.
+
+The online Arbiter attached both candidates and selected
+`sg_pick_butter:policy-0:0` with `selection_basis=evidence_tie_break`.
+`baseline_selection_basis` remained `confidence_fallback`, the winner did
+not change, and `would_change_selection=false`; this verifies the
+evidence-aware online path and execution gating, but does not claim that the
+Arbiter causally preferred one candidate over another.
+
+The physical result closed end to end: `completed=true`,
+`evaluator_success=true`, `success=true`, no failure artifact, and two
+completed action traces. The placement trace contains pre-place approach,
+target descent, gripper release, and retreat. The earlier online failure was
+not a motion/evaluator failure: the basket was partially occluded, its
+semantic body-center pose was used as the placement target, and the verifier
+therefore measured `object_at_target` distance `0.1369 m` after the physical
+evaluator had already succeeded. The current path uses a clipped point-cloud
+placement center, top release clearance, robust XY with semantic Z, and emits
+`placement_pose_wxyz_xyz` in scene diagnostics. This closes the object-6
+target-pose regression and full online smoke, but not a multi-seed or
+multi-family P5.5 success-rate gate. The original artifact predates placement
+provenance in `_scene_debug_payload`; the field was absent rather than a
+confirmed provider-side `null`.
+
+The observability follow-up is now implemented in code. Every attempted target
+placement estimate records `placement_pose_source` and
+`placement_pose_reason`: successful point-cloud estimates use
+`geometry_pointcloud`; unavailable or invalid geometry uses
+`semantic_pose_fallback` with the exception or
+`invalid_or_insufficient_pointcloud`. Physical fallback behavior is unchanged.
+A fresh real capture is still required to identify the reason emitted by the
+object-6 provider and to verify the new artifact fields outside unit tests.
+
+That real capture completed at
+`outputs/phase5/P5.5_placement_provenance_object6_20260806/P5.3.1_online_rehearsal_arbiter/20260806_064328_seed1_5168c2e2/`.
+It used disabled rehearsal mode to isolate the physical CAP-X observation and
+execution path. Before execution, basket placement provenance was
+`geometry_pointcloud` with pose
+`[0,1,0,0,0.60293,0.24965,0.12755]`; after execution it remained
+`geometry_pointcloud` with pose
+`[0,1,0,0,0.62065,0.25059,0.13144]`. Both reasons were `null`. The physical
+boundary again reported `completed=true`, `evaluator_success=true`, and
+`success=true`. This closes the real placement-provenance capture gate; the
+fallback reason paths remain covered by deterministic tests.
+
+### P5.5 matched provenance five-seed pilot (2026-08-06)
+
+The post-fix matched suite is retained at
+`outputs/phase5/P5.5_matched_provenance_5seed_20260806/P5.5_frozen_ood_replay/20260806_091429_suite_e169a480/`.
+It used CUDA device 5, one rehearsal worker, three task families, five paired
+seeds per family, and a frozen manifest with SHA-256
+`cb106ca9ccc57785a38cd0c08f3d59f447bb879bc39a4b6d66db9efe9d1f320f`.
+All 30 cases completed with no failure artifact or infrastructure-unknown
+record, and all target tracks recorded
+`placement_pose_source=geometry_pointcloud`.
+
+| split | evaluator success | graph completion | verifier success |
+| --- | ---: | ---: | ---: |
+| ID | 3/15 | 2/15 | 2/15 |
+| layout OOD | 5/15 | 4/15 | 4/15 |
+
+ID evaluator success was 20.0% with Wilson 95% CI `[0.0705, 0.4519]`; OOD
+success was 33.3% with CI `[0.1518, 0.5829]`. The paired table contains zero
+ID-only successes, two OOD-only successes, and 13 ties. The estimated
+`ID - OOD` gap is `-0.1333` with bootstrap CI `[-0.3333, 0]`, and exact
+McNemar `p=0.5`. This pilot therefore does not establish an OOD improvement.
+Per-family evaluator results were `0/5` versus `0/5` for spatial-0, `0/5`
+versus `0/5` for goal-1, and `3/5` versus `5/5` for object-6.
+
+A reporting audit found 24 raw `POSTCONDITION_FAILED` graph outcomes but only
+22 physical task failures. The remaining two records,
+`id-object-6-seed4` and `ood-object-6-seed2`, had
+`evaluator_success=true` while `object_at_target(butter,basket)` rejected
+distances of 0.0928 m and 0.0609 m. They are 2 verifier false negatives, not
+downstream task failures. The offline correction, which did not rerun the
+robot or modify the source suite, is retained at
+`outputs/phase5/P5.5_matched_provenance_5seed_report_correction_20260807/P5.5_offline_reaggregation/20260807_013832_suite_e169a480/`.
+
+Selection used `evidence_tie_break` 28 times and `evidence_score` twice, with
+no `confidence_fallback`. This is a valid five-seed pilot, not the formal P5.5
+gate: closure still requires at least ten paired seeds across all three
+families using the corrected single-worker protocol.

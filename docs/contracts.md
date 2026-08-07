@@ -53,7 +53,8 @@ scene snapshot.
   "robot": {
     "joint_position": "artifact://array/...",
     "ee_pose": "artifact://array/...",
-    "gripper_opening": 1.0
+    "gripper_opening": 1.0,
+    "gripper_commanded_fraction": 1.0
   },
   "objects": [
     {
@@ -62,7 +63,10 @@ scene snapshot.
       "pose": [0, 0, 0, 1, 0, 0, 0],
       "covariance": "artifact://array/...",
       "confidence": 0.96,
-      "last_seen_ns": 0
+      "last_seen_ns": 0,
+      "placement_pose_wxyz_xyz": null,
+      "placement_pose_source": "semantic_pose_fallback",
+      "placement_pose_reason": "invalid_or_insufficient_pointcloud"
     }
   ],
   "local_map_delta": "artifact://voxel-delta/...",
@@ -70,6 +74,13 @@ scene snapshot.
   "freshness_ms": 24
 }
 ~~~
+
+Placement metadata is explicit rather than inferred from a nullable pose.
+`geometry_pointcloud` means the placement pose was derived from target points.
+`semantic_pose_fallback` means execution and verification must use the normal
+semantic object pose; `placement_pose_reason` records why geometry was not
+available. Source objects that were never placement targets leave all three
+placement fields unset.
 
 ### Multimodal grounding
 

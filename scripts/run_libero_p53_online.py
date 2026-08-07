@@ -523,6 +523,7 @@ def _physical_result_payload(
     *,
     evaluator_success: bool,
     layout_report: object | None = None,
+    scene_diagnostics: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Serialize graph execution failure context at the physical boundary."""
     failure = getattr(result, "failure", None)
@@ -563,7 +564,138 @@ def _physical_result_payload(
         "terminal_subgraph": getattr(result, "terminal_subgraph", None),
         "next_subgraph": getattr(result, "next_subgraph", None),
         "layout_application": layout_report,
+        "scene_diagnostics": dict(scene_diagnostics or {}),
     }
+
+
+def _scene_debug_payload(
+    scene: SceneSnapshot,
+    *,
+    object_ids: Sequence[str] = (),
+) -> dict[str, object]:
+    """Serialize the geometry used by the physical postcondition verifier.
+
+    This is intentionally a diagnostic projection rather than a second source
+    of truth. It makes coordinate-frame or stale-vision errors inspectable at
+    the physical execution boundary without exposing image bytes.
+    """
+
+    requested = {str(identifier).strip().lower() for identifier in object_ids}
+    tracks = []
+    for track in scene.objects:
+        identifiers = {
+            str(track.track_id).strip().lower(),
+            str(track.label).strip().lower(),
+        }
+        if requested and requested.isdisjoint(identifiers):
+            continue
+        tracks.append(
+            {
+                "track_id": track.track_id,
+                "label": track.label,
+                "pose_wxyz_xyz": tuple(track.pose_wxyz_xyz),
+                "placement_pose_wxyz_xyz": (
+                    tuple(track.placement_pose_wxyz_xyz)
+                    if track.placement_pose_wxyz_xyz is not None
+                    else None
+                ),
+                "placement_pose_source": track.placement_pose_source,
+                "placement_pose_reason": track.placement_pose_reason,
+                "confidence": track.confidence,
+                "last_seen_ns": track.last_seen_ns,
+            }
+        )
+    return {
+        "scene_version": scene.scene_version,
+        "sensor_timestamp_ns": scene.sensor_timestamp_ns,
+        "publish_timestamp_ns": scene.publish_timestamp_ns,
+        "freshness_ms": scene.freshness_ms,
+        "processing_latency_ms": scene.processing_latency_ms,
+        "robot": {
+            key: scene.robot.get(key)
+            for key in (
+                "ee_pose_wxyz_xyz",
+                "gripper_opening",
+                "gripper_commanded_fraction",
+            )
+            if key in scene.robot
+        },
+        "objects": tracks,
+    }
+
+
+def _physical_sim_debug_payload(
+    environment: object,
+    *,
+    object_ids: Sequence[str] = (),
+) -> dict[str, object]:
+    """Serialize raw MuJoCo poses in world and robot-base coordinates."""
+    handle = getattr(environment, "handle", None)
+    simulator_owner = getattr(handle, "env", None)
+    sim = getattr(simulator_owner, "sim", None)
+    model = getattr(sim, "model", None)
+    data = getattr(sim, "data", None)
+    if model is None or data is None:
+        return {"available": False, "reason": "low-level MuJoCo sim unavailable"}
+
+    try:
+        import numpy as np
+        from viser import transforms as vtf
+
+        base_id = model.body_name2id("robot0_base")
+        base_pose = vtf.SE3(
+            wxyz_xyz=np.concatenate(
+                [np.asarray(data.xquat[base_id]), np.asarray(data.xpos[base_id])]
+            )
+        )
+        base_inverse = base_pose.inverse()
+        body_names = [
+            model.body_id2name(index) for index in range(int(model.nbody))
+        ]
+    except Exception as exc:
+        return {
+            "available": False,
+            "reason": f"MuJoCo pose inspection failed: {type(exc).__name__}: {exc}",
+        }
+
+    requested = {str(identifier).strip().lower().replace(" ", "_") for identifier in object_ids}
+
+    def body_pose(body_name: str) -> dict[str, object]:
+        body_id = model.body_name2id(body_name)
+        world_pose = vtf.SE3(
+            wxyz_xyz=np.concatenate(
+                [np.asarray(data.xquat[body_id]), np.asarray(data.xpos[body_id])]
+            )
+        )
+        base_pose_value = base_inverse @ world_pose
+        return {
+            "body_name": body_name,
+            "world_wxyz_xyz": tuple(world_pose.wxyz_xyz),
+            "robot_base_wxyz_xyz": tuple(base_pose_value.wxyz_xyz),
+        }
+
+    objects: list[dict[str, object]] = []
+    for identifier in requested:
+        matches = [
+            name
+            for name in body_names
+            if name
+            and name.lower().replace("_1_main", "").replace("_main", "") == identifier
+        ]
+        if not matches:
+            continue
+        preferred = next((name for name in matches if name.endswith("_1_main")), matches[0])
+        objects.append(body_pose(preferred))
+
+    payload: dict[str, object] = {
+        "available": True,
+        "base_world_wxyz_xyz": tuple(base_pose.wxyz_xyz),
+        "objects": objects,
+    }
+    ee_name = next((name for name in body_names if name == "gripper0_eef"), None)
+    if ee_name is not None:
+        payload["ee"] = body_pose(ee_name)
+    return payload
 
 
 def _setup_capx_paths() -> None:
@@ -584,6 +716,25 @@ def _setup_capx_paths() -> None:
     ):
         if path.exists() and str(path) not in sys.path:
             sys.path.insert(0, str(path))
+
+    # CAP-X and LIBERO are installed as two editable robosuite forks.  The
+    # LIBERO fork supplies the manipulation environments while CAP-X adds the
+    # composite controllers and IK helpers.  Both live under the same regular
+    # Python package, so extend the already imported subpackages explicitly.
+    try:
+        import importlib
+
+        import robosuite
+
+        capx_robosuite = capx_root / "capx" / "third_party" / "robosuite" / "robosuite"
+        for subpackage in ("controllers", "utils"):
+            module = importlib.import_module(f"robosuite.{subpackage}")
+            extra_path = str(capx_robosuite / subpackage)
+            if Path(extra_path).exists() and extra_path not in module.__path__:
+                module.__path__.append(extra_path)
+    except (ImportError, OSError):
+        # Non-LIBERO CAP-X runs may not install robosuite at all.
+        pass
 
 
 def _build_live_executor(
@@ -630,6 +781,10 @@ def _build_live_executor(
             runtime.start_episode(episode)
             scene = runtime.state_store.latest()
             graph = ground_libero_mission_graph(graph, scene)
+            physical_before = _physical_sim_debug_payload(
+                bundle.low_level_environment,
+                object_ids=(object_name, target_name),
+            )
             result = FixedGraphInterpreter(
                 FixedGraphScheduler(runtime),
                 artifact_store=ArtifactStore(),
@@ -642,6 +797,7 @@ def _build_live_executor(
                 task_id=bundle.task_id,
             )
             evaluator_success = bool(bundle.backend.evaluator_success())
+            final_scene = runtime.state_store.latest()
             return _physical_result_payload(
                 result,
                 evaluator_success=evaluator_success,
@@ -650,6 +806,21 @@ def _build_live_executor(
                     "_capmas_layout_report",
                     None,
                 ),
+                scene_diagnostics={
+                    "before": _scene_debug_payload(
+                        scene,
+                        object_ids=(object_name, target_name),
+                    ),
+                    "after": _scene_debug_payload(
+                        final_scene,
+                        object_ids=(object_name, target_name),
+                    ),
+                    "physical_before": physical_before,
+                    "physical_after": _physical_sim_debug_payload(
+                        bundle.low_level_environment,
+                        object_ids=(object_name, target_name),
+                    ),
+                },
             )
         finally:
             bundle.backend.stop(None)

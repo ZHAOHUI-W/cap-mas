@@ -169,6 +169,66 @@ def ground_libero_grasp_subgraph(
                 args["z_approach"] = _placement_approach(args.get("z_approach"))
             calls[index] = SkillCall(call.skill, args)
             changed = True
+        has_place_postcondition = any(
+            predicate.startswith("object_at_target(")
+            for predicate in node.postconditions
+        )
+        if grounded_target_position is not None and has_place_postcondition:
+            place_goto_indices = [
+                index
+                for index, call in enumerate(calls)
+                if call.skill.skill_id == "goto_pose"
+            ]
+            open_index = next(
+                (
+                    index
+                    for index, call in enumerate(calls)
+                    if call.skill.skill_id == "open_gripper"
+                ),
+                None,
+            )
+            if place_goto_indices and open_index is not None:
+                first_goto_index = place_goto_indices[0]
+                placement_call = calls[first_goto_index]
+                placement_quaternion = placement_call.args.get(
+                    "quaternion_wxyz", (0.0, 1.0, 0.0, 0.0)
+                )
+                # CAP-X's IK is more stable when the held object is first
+                # aligned above the target, then lowered in a separate solve.
+                # Keep this repair execution-local so candidate fingerprints
+                # continue to represent the Policy output.
+                if len(place_goto_indices) == 1:
+                    calls.insert(
+                        first_goto_index,
+                        SkillCall(
+                            SkillRef("goto_pose", placement_call.skill.version),
+                            {
+                                "position": _offset_z(
+                                    grounded_target_position, 0.10
+                                ),
+                                "quaternion_wxyz": placement_quaternion,
+                            },
+                        ),
+                    )
+                    open_index += 1
+                    changed = True
+                if not any(
+                    call.skill.skill_id == "goto_pose"
+                    for call in calls[open_index + 1 :]
+                ):
+                    calls.insert(
+                        open_index + 1,
+                        SkillCall(
+                            SkillRef("goto_pose", placement_call.skill.version),
+                            {
+                                "position": _offset_z(
+                                    grounded_target_position, 0.10
+                                ),
+                                "quaternion_wxyz": placement_quaternion,
+                            },
+                        ),
+                    )
+                    changed = True
         if sample_index is not None:
             close_index = next(
                 (
@@ -209,10 +269,6 @@ def ground_libero_grasp_subgraph(
                 changed = True
         grounded_intent = node.motion_intent
         if grounded_target_position is not None and grounded_intent is not None:
-            has_place_postcondition = any(
-                predicate.startswith("object_at_target(")
-                for predicate in node.postconditions
-            )
             if has_place_postcondition and grounded_intent.kind == "place":
                 grounded_intent = replace(
                     grounded_intent,
@@ -275,6 +331,17 @@ def _placement_approach(value: object) -> float:
     except (TypeError, ValueError):
         approach = 0.12
     return max(0.12, approach)
+
+
+def _offset_z(position: Sequence[float], offset: float) -> tuple[float, float, float]:
+    """Return a stable Cartesian pre-place/retreat position."""
+    if len(position) != 3:
+        raise ValueError("placement position must contain exactly three values")
+    return (
+        float(position[0]),
+        float(position[1]),
+        float(position[2]) + float(offset),
+    )
 
 
 def repair_libero_grasp_subgraph(subgraph: SubgraphSpec) -> SubgraphSpec:
@@ -424,6 +491,9 @@ def _target_position(
             normalized_id = track.track_id.replace(" ", "_")
             normalized_label = track.label.replace(" ", "_")
             if target_id in {track.track_id, normalized_id, normalized_label}:
+                placement_pose = track.placement_pose_wxyz_xyz
+                if placement_pose is not None and len(placement_pose) >= 7:
+                    return tuple(float(value) for value in placement_pose[4:7])
                 return tuple(float(value) for value in track.pose_wxyz_xyz[4:7])
     return None
 

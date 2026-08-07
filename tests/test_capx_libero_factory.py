@@ -1,7 +1,10 @@
 from dataclasses import dataclass
 
 from capmas.backends.capx import CAPXTypedSkill
-from capmas.backends.capx_libero_factory import build_capx_runtime_from_yaml
+from capmas.backends.capx_libero_factory import (
+    build_capx_runtime_from_yaml,
+    estimate_libero_placement_pose,
+)
 from capmas.contracts.action import ExecutionBudget
 from capmas.contracts.core import SkillRef
 from capmas.perception.artifact_bridge import EncodedArtifactStore, FileArtifactStore, NumpyArtifactCodec
@@ -98,7 +101,35 @@ class UnavailablePoseGroundingApi(GroundingApi):
     def get_object_pose(self, object_name, use_multiview=True):
         del use_multiview
         self.pose_queries.append(object_name)
-        raise ValueError("no grounded pose available")
+        if object_name == "akita black bowl":
+            raise ValueError("no canonical grounded pose available")
+        return ([0.1, 0.2, 0.3], [1.0, 0.0, 0.0, 0.0])
+
+
+class GeometryGroundingApi(GroundingApi):
+    def get_object_3d_points_and_masks_from_language(
+        self, object_name, use_multiview=True
+    ):
+        del use_multiview
+        if object_name == "basket":
+            normal = [[0.6, 0.25, 0.05]] * 100
+            return {"points_3d": normal + [[9.0, 9.0, 9.0]]}
+        return {"points_3d": []}
+
+    def functions(self):
+        functions = super().functions()
+        functions["get_object_3d_points_and_masks_from_language"] = (
+            self.get_object_3d_points_and_masks_from_language
+        )
+        return functions
+
+
+class InvalidGeometryGroundingApi(GeometryGroundingApi):
+    def get_object_3d_points_and_masks_from_language(
+        self, object_name, use_multiview=True
+    ):
+        del object_name, use_multiview
+        return {"points_3d": [[0.6, 0.25, 0.05]] * 3}
 
 
 @dataclass
@@ -233,7 +264,36 @@ def test_factory_injects_replaceable_artifact_store_into_capx_provider(tmp_path)
     assert bundle.observation_provider.artifacts is artifacts
 
 
-def test_factory_preserves_task_language_and_routes_source_grasp_query() -> None:
+def test_factory_injects_low_level_commanded_gripper_fraction_into_observation() -> None:
+    low_level = FakeLowLevelEnv()
+    low_level._gripper_fraction = 0.0
+    api = FakeApi()
+    config = {
+        "env": {
+            "cfg": {
+                "low_level": {"suite_name": "libero_spatial", "task_id": 0},
+                "apis": ["FrankaLiberoApi"],
+            }
+        }
+    }
+
+    bundle = build_capx_runtime_from_yaml(
+        "unused.yaml",
+        loader=lambda path: config,
+        instantiator=lambda env_config: low_level,
+        api_factory=lambda name: (lambda env: api),
+        skill_bindings={
+            "get_observation": "get_observation",
+            "open_gripper": "open_gripper",
+        },
+    )
+
+    observation = bundle.observation_provider.capture()
+
+    assert observation.robot_state["gripper_commanded_fraction"] == 0.0
+
+
+def test_factory_preserves_task_language_and_prefers_canonical_source_grasp_query() -> None:
     low_level = GroundingLowLevelEnv()
     api = GroundingApi()
     config = {
@@ -266,7 +326,7 @@ def test_factory_preserves_task_language_and_routes_source_grasp_query() -> None
     assert result.output["result"] == (
         (0.1, 0.2, 0.3), (0.0, 1.0, 0.0, 0.0)
     )
-    assert api.pose_queries == [low_level.handle.task_language]
+    assert api.pose_queries == ["akita black bowl"]
     assert api.grasp_queries == []
 
 
@@ -297,10 +357,10 @@ def test_factory_observation_uses_same_relation_aware_source_query() -> None:
     )
 
     assert tracks[0].track_id == "akita black bowl"
-    assert api.pose_queries == [low_level.handle.task_language, "plate"]
+    assert api.pose_queries == ["akita black bowl", "plate"]
 
 
-def test_factory_grounded_grasp_prefers_relation_aware_object_pose() -> None:
+def test_factory_grounded_grasp_prefers_canonical_object_pose() -> None:
     low_level = GroundingLowLevelEnv()
     api = GroundingApi()
     config = {
@@ -332,11 +392,11 @@ def test_factory_grounded_grasp_prefers_relation_aware_object_pose() -> None:
     assert result.output["result"] == (
         ((0.1, 0.2, 0.3), (0.0, 1.0, 0.0, 0.0))
     )
-    assert api.pose_queries == [low_level.handle.task_language]
+    assert api.pose_queries == ["akita black bowl"]
     assert api.grasp_queries == []
 
 
-def test_factory_grounded_grasp_falls_back_to_raw_sample_on_pose_failure() -> None:
+def test_factory_grounded_grasp_falls_back_to_task_language_on_pose_failure() -> None:
     low_level = GroundingLowLevelEnv()
     api = UnavailablePoseGroundingApi()
     config = {
@@ -366,7 +426,93 @@ def test_factory_grounded_grasp_falls_back_to_raw_sample_on_pose_failure() -> No
 
     assert result.ok is True
     assert result.output["result"] == (
-        [0.9, 0.8, 0.7], [0.0, 0.0, 0.0, 1.0]
+        (0.1, 0.2, 0.3), (0.0, 1.0, 0.0, 0.0)
     )
-    assert api.pose_queries == [low_level.handle.task_language]
-    assert api.grasp_queries == [low_level.handle.task_language]
+    assert api.pose_queries == ["akita black bowl", low_level.handle.task_language]
+    assert api.grasp_queries == []
+
+
+def test_estimate_libero_placement_pose_trims_outlier_points() -> None:
+    result = estimate_libero_placement_pose(
+        [[0.6, 0.25, 0.05]] * 100 + [[9.0, 9.0, 9.0]]
+    )
+
+    assert result is not None
+    position, quaternion = result
+    assert position == (0.6, 0.25, 0.05)
+    assert quaternion == (0.0, 1.0, 0.0, 0.0)
+
+
+def test_factory_attaches_geometry_placement_pose_only_to_target_track() -> None:
+    low_level = FakeLowLevelEnv()
+    api = GeometryGroundingApi()
+    config = {
+        "env": {
+            "cfg": {
+                "low_level": {"suite_name": "libero_object", "task_id": 6},
+                "apis": ["FrankaLiberoApi"],
+                "scene": {"object_names": ["butter", "basket"]},
+            }
+        }
+    }
+
+    bundle = build_capx_runtime_from_yaml(
+        "unused.yaml",
+        loader=lambda path: config,
+        instantiator=lambda env_config: low_level,
+        api_factory=lambda name: (lambda env: api),
+        object_names=("butter", "basket"),
+    )
+
+    tracks = bundle.observation_provider.capture_object_tracks(
+        timestamp_ns=1,
+        episode_id="episode",
+        episode_epoch=1,
+    )
+    tracks_by_id = {track.track_id: track for track in tracks}
+
+    assert tracks_by_id["butter"].placement_pose_wxyz_xyz is None
+    assert tracks_by_id["basket"].placement_pose_wxyz_xyz == (
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.6,
+        0.25,
+        0.07,
+    )
+    assert tracks_by_id["basket"].placement_pose_source == "geometry_pointcloud"
+    assert tracks_by_id["basket"].placement_pose_reason is None
+
+
+def test_factory_records_invalid_geometry_fallback_reason() -> None:
+    low_level = FakeLowLevelEnv()
+    api = InvalidGeometryGroundingApi()
+    config = {
+        "env": {
+            "cfg": {
+                "low_level": {"suite_name": "libero_object", "task_id": 6},
+                "apis": ["FrankaLiberoApi"],
+                "scene": {"object_names": ["butter", "basket"]},
+            }
+        }
+    }
+
+    bundle = build_capx_runtime_from_yaml(
+        "unused.yaml",
+        loader=lambda path: config,
+        instantiator=lambda env_config: low_level,
+        api_factory=lambda name: (lambda env: api),
+        object_names=("butter", "basket"),
+    )
+
+    tracks = bundle.observation_provider.capture_object_tracks(
+        timestamp_ns=1,
+        episode_id="episode",
+        episode_epoch=1,
+    )
+    basket = {track.track_id: track for track in tracks}["basket"]
+
+    assert basket.placement_pose_wxyz_xyz is None
+    assert basket.placement_pose_source == "semantic_pose_fallback"
+    assert basket.placement_pose_reason == "invalid_or_insufficient_pointcloud"

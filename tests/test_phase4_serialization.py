@@ -79,6 +79,8 @@ def test_snapshot_envelope_round_trip_preserves_phase4_fields():
                 velocity_xyz=(0.1, 0.0, 0.0),
                 prediction_timestamp_ns=110,
                 track_status="predicted",
+                placement_pose_source="semantic_pose_fallback",
+                placement_pose_reason="invalid_or_insufficient_pointcloud",
             ),
         ),
         processing_latency_ms=2.5,

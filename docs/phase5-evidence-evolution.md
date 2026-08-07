@@ -80,7 +80,8 @@ artifacts retain the original trace index, so replay can prove that evidence
 was produced after the corresponding action.
 
 The predicate contract is explicit: object_in_gripper(obj) checks object/EE
-distance and pose only, gripper_closed() checks opening independently, and
+distance and pose only, gripper_closed() checks the commanded gripper fraction
+when CAP-X exposes it and otherwise falls back to physical opening, and
 object_held(obj) is the strict composite predicate. The code gate is covered
 by focused tests and the full repository suite. The 2026-07-30 CAP-X/LIBERO
 pilot used CUDA_VISIBLE_DEVICES=5, gpt-5.5, and the staged two-policy path:
@@ -765,3 +766,139 @@ is not a downstream quality claim: it uses one seed, all physical candidates
 failed during execution, and all selections used `evidence_tie_break`. A new
 five-seed run is permitted by this infrastructure gate and must be reported
 separately from the invalidated two-worker formal suite.
+
+### P5.5 execution-grounding smoke (2026-08-05)
+
+The next smoke moved LIBERO graph grounding to the execution reset boundary:
+both the online physical executor and isolated rehearsal worker now call
+`ground_libero_mission_graph()` after reset and after the refreshed
+`SceneSnapshot` is available. The rewrite updates scene-dependent target poses
+and leaves candidate fingerprints unchanged. The six-case real-layout smoke
+used the one-seed, three-family manifest
+`outputs/phase5/P5.5_real_layout_assets_20260803/p55_real_layout_3family_1seed.json`
+on CUDA device 5 with the CAP-X Python 3.10 environment, one worker, zero
+restarts, `max_steps=32`, and disabled cache. Results are retained at
+`outputs/phase5/P5.5_grounding_smoke_venv_20260805/P5.5_frozen_ood_replay/20260805_085352_suite_fd89ecef/`.
+
+| split | cases | evaluator success | infrastructure unknowns |
+| --- | ---: | ---: | ---: |
+| ID | 3 | 1/3 | 0 |
+| layout-OOD | 3 | 0/3 | 0 |
+
+The suite completed all six cases with no runner or infrastructure failures.
+Five cases ended in explicit `POSTCONDITION_FAILED` task failures. The ID/OOD
+Wilson estimates are `0.3333` (95% CI `[0.0615, 0.7923]`) and `0.0` (95% CI
+`[0.0, 0.5615]`), respectively; the paired table has one ID-only success and
+two ties. Arbiter selection used `evidence_score` once and
+`evidence_tie_break` five times. This closes the execution-grounding smoke
+check but not the P5.5 multi-seed or OOD-quality gate.
+
+Grounding is observable in the physical trace: the spatial placement target
+changed from `x=0.72409` in native layout to `x=0.81099` in the translated
+layout, consistent with the recorded layout translation. The remaining failure
+signatures are `object_at_target` after OOD spatial release,
+`object_in_gripper` in the goal family, and `gripper_closed` in the object
+family. These are retained as follow-up grasp/coordinate and task-mapping
+diagnostics rather than being relabeled as infrastructure failures. The
+regression suite passed `421` tests and Python compilation succeeded.
+
+### P5.5 gripper-state semantic correction (2026-08-05)
+
+The object-family grounding probe isolated the remaining `gripper_closed()`
+failure. CAP-X's `robot_cartesian_pos[-1]` reflects measured finger opening,
+so a held object leaves it at approximately `0.486` even though the low-level
+controller's commanded fraction is `0.0` (closed). CAP-MAS now propagates that
+optional command as `ObservationBundle.robot_state["gripper_commanded_fraction"]`
+from the CAP-X factory, and the verifier prefers it for `gripper_open()` and
+`gripper_closed()`. Snapshots without the field retain the legacy
+`gripper_opening` fallback. `object_in_gripper()` remains purely geometric;
+`object_held()` uses the same closure-state preference as its strict composite
+check.
+
+A fresh CUDA-5 grounded probe at
+`outputs/phase5/P5.5_grasp_probe_object6_commanded_20260805/20260805_101645_c98dd434/`
+physically lifted the butter from approximately `z=0.0087` to `z=0.1234`.
+The final reports were `object_in_gripper(butter)=passed` and
+`gripper_closed()=passed`, while `task_completed=false` because the probe
+intentionally stops after the pick/lift checkpoint. This closes the verifier
+semantic regression at the pick checkpoint; it is not a full-task success
+claim or an OOD result.
+
+### P5.5 target-pose verified object-6 online closure (2026-08-06)
+
+The placement regression was isolated to target geometry under partial basket
+occlusion. The prior path used the semantic body-center pose as the release
+target, while the physical evaluator accepted the placement; the verifier then
+used the occluded target pose and rejected the episode with
+`object_at_target` distance `0.1369 m`. CAP-MAS now derives a safe placement
+pose from the clipped target point cloud, applies top release clearance, and
+uses robust XY plus semantic Z when checking the final relation. The grounded
+placement sequence is explicitly approach, descent, release, and retreat.
+
+The real online closure run is retained at
+`outputs/phase5/P5.5_target_pose_verified_object6_online_20260806/P5.3.1_online_rehearsal_arbiter/20260806_052654_seed1_d1b5f0d1/`.
+It used CUDA device 5, `max_workers=1`, zero restarts, `max_steps=32`, one
+selection repeat, and disabled cache. Both candidate rehearsal attempts
+passed, with latencies `122301.288867 ms` and `91026.945827 ms`; the single
+online provider call took `215962.848232 ms`. The Arbiter attached both
+candidates, used `evidence_tie_break`, and executed only the selected winner.
+
+The physical boundary passed all required checks:
+
+| check | result |
+| --- | --- |
+| candidate rehearsal | 2/2 success |
+| online selection | `evidence_tie_break` |
+| physical executions | 1 |
+| graph completion | `true` |
+| LIBERO evaluator | `true` |
+| final success | `true` |
+
+This closes the target-pose/verifier regression and the full object-6 online
+smoke. The evidence tie-break did not change the confidence baseline winner,
+so the run is not a causal candidate-selection gain. It also remains a
+one-seed, one-family validation and does not replace the required matched
+multi-seed ID/OOD evaluation. The original run predates placement provenance
+in the scene debug projection; the apparent `null` came from querying a missing
+JSON field, not from a confirmed provider-side fallback.
+
+That artifact contract is now implemented. `ObjectTrack`, snapshot JSON, and
+the online scene debug payload preserve `placement_pose_source` and
+`placement_pose_reason`. The CAP-X factory emits `geometry_pointcloud` on a
+valid estimate and `semantic_pose_fallback` with an explicit exception,
+payload, or point-cloud reason otherwise. This closes the silent-null software
+gap; the real-capture gate remains open until a fresh object-6 run records the
+new fields.
+
+The fresh real capture at
+`outputs/phase5/P5.5_placement_provenance_object6_20260806/P5.3.1_online_rehearsal_arbiter/20260806_064328_seed1_5168c2e2/`
+closed that gate. The basket track carried `geometry_pointcloud` provenance
+before and after execution, both placement poses were non-null, and both
+reasons were `null`. The physical graph, LIBERO evaluator, and final success
+all passed. Fallback source/reason behavior is covered by regression tests and
+can now be measured in future multi-seed runs without changing execution.
+
+### P5.5 matched provenance five-seed status (2026-08-06)
+
+The corrected matched suite at
+`outputs/phase5/P5.5_matched_provenance_5seed_20260806/P5.5_frozen_ood_replay/20260806_091429_suite_e169a480/`
+completed 30/30 cases on CUDA device 5 with one worker, no infrastructure
+unknowns, and geometry-derived target placement provenance. ID evaluator
+success was `3/15`; OOD evaluator success was `5/15`. Graph and known
+verifier success were `2/15` for ID and `4/15` for OOD. There were two
+OOD-only paired successes, 13 ties, and exact McNemar `p=0.5`; the observed
+gap is not statistically persuasive and does not support an OOD improvement
+claim.
+
+The original aggregate's 24 `POSTCONDITION_FAILED` entries are graph failure
+provenance, not 24 downstream failures. Reclassification gives 22 physical
+task failures and 2 verifier false negatives: `id-object-6-seed4` and
+`ood-object-6-seed2` both passed the LIBERO evaluator while the internal
+point-distance placement predicate failed. The immutable offline correction
+is retained at
+`outputs/phase5/P5.5_matched_provenance_5seed_report_correction_20260807/P5.5_offline_reaggregation/20260807_013832_suite_e169a480/`.
+
+Arbitration used `evidence_tie_break` for 28 cases and `evidence_score` for
+two. This validates the matched execution and reporting path but not causal
+candidate-selection benefit. The formal P5.5 gate remains a corrected
+ten-seed run across all three families; this five-seed result is a pilot.

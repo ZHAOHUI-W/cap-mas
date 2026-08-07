@@ -174,6 +174,38 @@ def test_capx_object_pose_is_aligned_to_scene_track_pose() -> None:
     assert tracks[0].pose_wxyz_xyz == (0.707, 0.0, 0.707, 0.0, 0.2, 0.3, 0.4)
 
 
+def test_capx_placement_pose_failure_records_semantic_fallback_reason() -> None:
+    def fail_placement_pose(name: str) -> object:
+        raise RuntimeError(f"geometry unavailable for {name}")
+
+    provider = CAPXObservationProvider(
+        observation_fn=lambda: {
+            "timestamp_ns": 42,
+            "robot_cartesian_pos": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+        },
+        artifacts=InMemoryArtifactStore(),
+        object_pose_fn=lambda name: (
+            [0.6, 0.25, 0.05],
+            [1.0, 0.0, 0.0, 0.0],
+        ),
+        object_names=("basket",),
+        placement_pose_fn=fail_placement_pose,
+        placement_object_names=("basket",),
+    )
+
+    tracks = provider.capture_object_tracks(
+        timestamp_ns=42,
+        episode_id="episode-1",
+        episode_epoch=1,
+    )
+
+    assert tracks[0].placement_pose_wxyz_xyz is None
+    assert tracks[0].placement_pose_source == "semantic_pose_fallback"
+    assert tracks[0].placement_pose_reason == (
+        "RuntimeError: geometry unavailable for basket"
+    )
+
+
 def test_capx_robot_pose_is_reordered_for_scene_geometry() -> None:
     provider = CAPXObservationProvider(
         observation_fn=lambda: {
@@ -187,6 +219,22 @@ def test_capx_robot_pose_is_reordered_for_scene_geometry() -> None:
 
     assert observation.robot_state["ee_pose_wxyz_xyz"] == (1.0, 0.0, 0.0, 0.0, 0.2, 0.3, 0.4)
     assert observation.robot_state["gripper_opening"] == 0.25
+
+
+def test_capx_observation_propagates_commanded_gripper_fraction() -> None:
+    provider = CAPXObservationProvider(
+        observation_fn=lambda: {
+            "timestamp_ns": 42,
+            "robot_cartesian_pos": [0.2, 0.3, 0.4, 1.0, 0.0, 0.0, 0.0, 0.486],
+            "gripper_commanded_fraction": 0.0,
+        },
+        artifacts=InMemoryArtifactStore(),
+    )
+
+    observation = provider.capture()
+
+    assert observation.robot_state["gripper_opening"] == 0.486
+    assert observation.robot_state["gripper_commanded_fraction"] == 0.0
 
 
 def test_capx_snapshot_publish_time_is_after_observation_processing(monkeypatch) -> None:

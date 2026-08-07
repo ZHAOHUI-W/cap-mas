@@ -68,3 +68,51 @@ def test_phase5_docs_record_p55_ten_seed_formal_boundary():
     assert "max_steps=32" in experiments
     assert "- [x] **Step 1: Record the final formal gate**" in plan
     assert "- [x] **Step 2: Verify the P5.6 boundary**" in plan
+
+
+def test_phase5_docs_record_execution_grounding_smoke():
+    phase5 = (ROOT / "docs/phase5-evidence-evolution.md").read_text(encoding="utf-8")
+    roadmap = (ROOT / "docs/implementation-roadmap.md").read_text(encoding="utf-8")
+    experiments = (ROOT / "docs/experiments.md").read_text(encoding="utf-8")
+
+    for document in (phase5, roadmap, experiments):
+        assert "P5.5 execution-grounding smoke" in document
+        assert "P5.5_grounding_smoke_venv_20260805" in document
+        assert "1/3" in document
+        assert "0/3" in document
+        assert "0.72409" in document
+    assert "0.81099" in document
+    assert "not a multi-seed quality result" in experiments
+
+
+def test_phase5_docs_record_gripper_state_semantic_correction():
+    phase5 = (ROOT / "docs/phase5-evidence-evolution.md").read_text(encoding="utf-8")
+    roadmap = (ROOT / "docs/implementation-roadmap.md").read_text(encoding="utf-8")
+    experiments = (ROOT / "docs/experiments.md").read_text(encoding="utf-8")
+
+    for document in (phase5, roadmap, experiments):
+        assert "gripper_commanded_fraction" in document
+        assert "P5.5" in document
+    assert "P5.5_grasp_probe_object6_commanded_20260805" in phase5
+    assert "task_completed=false" in experiments
+
+
+def test_phase5_docs_record_p55_matched_provenance_failure_semantics():
+    phase5 = (ROOT / "docs/phase5-evidence-evolution.md").read_text(encoding="utf-8")
+    roadmap = (ROOT / "docs/implementation-roadmap.md").read_text(encoding="utf-8")
+    experiments = (ROOT / "docs/experiments.md").read_text(encoding="utf-8")
+    specification = (
+        ROOT / "docs/superpowers/specs/2026-08-03-p5-5-ood-replay-design.md"
+    ).read_text(encoding="utf-8")
+
+    for document in (phase5, roadmap, experiments):
+        assert "20260806_091429_suite_e169a480" in document
+        assert "3/15" in document
+        assert "5/15" in document
+        assert "McNemar `p=0.5`" in document
+        assert "22" in document
+        assert "2 verifier false negatives" in document
+    assert "task_failure_classes" in specification
+    assert "graph_failure_classes" in specification
+    assert "verifier_false_negative_classes" in specification
+    assert "must not be described as downstream task failures" in specification

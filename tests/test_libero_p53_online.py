@@ -8,9 +8,10 @@ import pytest
 from capmas.contracts.action import SkillCall
 from capmas.contracts.core import SkillRef
 from capmas.contracts.graph import CheckpointSpec, MissionGraph, SubgraphNodeSpec, SubgraphSpec
+from capmas.contracts.scene import ObjectTrack, SceneSnapshot
 from capmas.evaluation.rehearsal import RehearsalResult
 from capmas.evaluation.rehearsal_evidence import RehearsalPoolConfig
-from scripts.run_libero_p53_online import _physical_result_payload
+from scripts.run_libero_p53_online import _physical_result_payload, _scene_debug_payload
 from capmas.evaluation.evidence_cache import VersionedEvidenceCache
 from capmas.graph.serialization import mission_graph_to_dict
 from scripts.run_libero_p53_online import (
@@ -168,6 +169,51 @@ def test_physical_payload_preserves_graph_failure_metadata() -> None:
     assert payload["failure"]["node_id"] == "pick-action"
     assert payload["failure"]["subgraph_id"] == "pick"
     assert payload["trace_count"] == 1
+
+
+def test_scene_debug_payload_includes_placement_pose() -> None:
+    scene = SceneSnapshot(
+        episode_id="episode",
+        episode_epoch=0,
+        scene_version=2,
+        sensor_timestamp_ns=10,
+        publish_timestamp_ns=11,
+        robot={},
+        objects=(
+            ObjectTrack(
+                track_id="basket",
+                label="basket",
+                pose_wxyz_xyz=(1.0, 0.0, 0.0, 0.0, 0.6, 0.25, 0.0),
+                confidence=1.0,
+                last_seen_ns=10,
+                placement_pose_wxyz_xyz=(
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.6,
+                    0.25,
+                    0.04,
+                ),
+                placement_pose_source="geometry_pointcloud",
+                placement_pose_reason=None,
+            ),
+        ),
+    )
+
+    payload = _scene_debug_payload(scene, object_ids=("basket",))
+
+    assert payload["objects"][0]["placement_pose_wxyz_xyz"] == (
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.6,
+        0.25,
+        0.04,
+    )
+    assert payload["objects"][0]["placement_pose_source"] == "geometry_pointcloud"
+    assert payload["objects"][0]["placement_pose_reason"] is None
 
 
 def test_physical_payload_preserves_skill_failure_details() -> None:

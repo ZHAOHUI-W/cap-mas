@@ -55,6 +55,12 @@ class ObjectTrack:
     velocity_xyz: tuple[float, float, float] | None = None
     prediction_timestamp_ns: int | None = None
     track_status: str = "observed"
+    # Optional pose used to approach a placement target.  This is deliberately
+    # separate from ``pose_wxyz_xyz``: a container's semantic body center is
+    # not necessarily a safe point for the gripper to enter.
+    placement_pose_wxyz_xyz: tuple[float, ...] | None = None
+    placement_pose_source: str | None = None
+    placement_pose_reason: str | None = None
 
 
 @dataclass(frozen=True)

@@ -45,6 +45,18 @@ class OODAggregateReport:
     paired_mcnemar_pvalue: float
     infrastructure_unknown_count: int
     failure_classes: dict[str, int]
+    graph_failure_classes: dict[str, int]
+    task_failure_classes: dict[str, int]
+    verifier_false_negative_classes: dict[str, int]
+    evaluator_graph_disagreement_count: int
+    id_graph_completed_count: int
+    id_graph_completed_total: int
+    ood_graph_completed_count: int
+    ood_graph_completed_total: int
+    id_verifier_success_count: int
+    id_verifier_success_total: int
+    ood_verifier_success_count: int
+    ood_verifier_success_total: int
     selection_bases: dict[str, int]
 
 
@@ -189,6 +201,39 @@ def aggregate_ood_pairs(
         for record in records
         if record.failure_class is not None
     )
+    graph_failure_classes = Counter(
+        record.failure_class
+        for record in records
+        if (
+            not record.graph_completed
+            and record.evaluator_success is not None
+            and record.failure_class is not None
+        )
+    )
+    task_failure_classes = Counter(
+        record.failure_class
+        for record in records
+        if record.evaluator_success is False and record.failure_class is not None
+    )
+    verifier_false_negative_classes = Counter(
+        record.failure_class
+        for record in records
+        if (
+            record.evaluator_success is True
+            and record.verifier_success is False
+            and record.failure_class is not None
+        )
+    )
+    id_verifier_known = [
+        record.verifier_success
+        for record in id_records.values()
+        if record.verifier_success is not None
+    ]
+    ood_verifier_known = [
+        record.verifier_success
+        for record in ood_records.values()
+        if record.verifier_success is not None
+    ]
     selection_bases = Counter(
         record.selection_basis
         for record in records
@@ -208,6 +253,22 @@ def aggregate_ood_pairs(
         paired_mcnemar_pvalue=exact_mcnemar_pvalue(id_only, ood_only),
         infrastructure_unknown_count=sum(value is None for value in id_successes + ood_successes),
         failure_classes=dict(failure_classes),
+        graph_failure_classes=dict(graph_failure_classes),
+        task_failure_classes=dict(task_failure_classes),
+        verifier_false_negative_classes=dict(verifier_false_negative_classes),
+        evaluator_graph_disagreement_count=sum(
+            record.evaluator_success is not None
+            and record.evaluator_success != record.graph_completed
+            for record in records
+        ),
+        id_graph_completed_count=sum(record.graph_completed for record in id_records.values()),
+        id_graph_completed_total=len(id_records),
+        ood_graph_completed_count=sum(record.graph_completed for record in ood_records.values()),
+        ood_graph_completed_total=len(ood_records),
+        id_verifier_success_count=sum(id_verifier_known),
+        id_verifier_success_total=len(id_verifier_known),
+        ood_verifier_success_count=sum(ood_verifier_known),
+        ood_verifier_success_total=len(ood_verifier_known),
         selection_bases=dict(selection_bases),
     )
 

@@ -87,3 +87,60 @@ def test_aggregate_pairs_by_explicit_pair_id_not_case_id_suffix() -> None:
     report = aggregate_ood_pairs(evidence)
     assert report.paired_id_only == 1
     assert report.paired_ood_only == 0
+
+
+def test_aggregate_separates_task_failures_from_verifier_false_negatives() -> None:
+    id_evidence = OODReplayEvidence(
+        case_id="id-verifier-disagreement",
+        pair_id="pair-verifier-disagreement",
+        condition="capmas",
+        candidate_id="candidate-id",
+        split="id",
+        ood_type="none",
+        source_scene_version=2,
+        candidate_fingerprint="fingerprint-id",
+        evaluator_success=True,
+        verifier_success=False,
+        graph_completed=False,
+        failure_class="POSTCONDITION_FAILED",
+        recovery_count=0,
+        human_intervention_count=0,
+        latency_ms=10.0,
+        provider_call_count=1,
+        cache_hit_count=0,
+    )
+    ood_evidence = OODReplayEvidence(
+        case_id="ood-task-failure",
+        pair_id="pair-verifier-disagreement",
+        condition="capmas",
+        candidate_id="candidate-ood",
+        split="ood",
+        ood_type="layout",
+        source_scene_version=2,
+        candidate_fingerprint="fingerprint-ood",
+        evaluator_success=False,
+        verifier_success=False,
+        graph_completed=False,
+        failure_class="POSTCONDITION_FAILED",
+        recovery_count=0,
+        human_intervention_count=0,
+        latency_ms=10.0,
+        provider_call_count=1,
+        cache_hit_count=0,
+    )
+
+    report = aggregate_ood_pairs((id_evidence, ood_evidence))
+
+    assert report.failure_classes == {"POSTCONDITION_FAILED": 2}
+    assert report.graph_failure_classes == {"POSTCONDITION_FAILED": 2}
+    assert report.task_failure_classes == {"POSTCONDITION_FAILED": 1}
+    assert report.verifier_false_negative_classes == {"POSTCONDITION_FAILED": 1}
+    assert report.evaluator_graph_disagreement_count == 1
+    assert report.id_graph_completed_count == 0
+    assert report.id_graph_completed_total == 1
+    assert report.ood_graph_completed_count == 0
+    assert report.ood_graph_completed_total == 1
+    assert report.id_verifier_success_count == 0
+    assert report.id_verifier_success_total == 1
+    assert report.ood_verifier_success_count == 0
+    assert report.ood_verifier_success_total == 1

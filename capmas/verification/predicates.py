@@ -109,11 +109,11 @@ class PredicateBasedVerifier:
                 reason=None if passed else "scene version did not advance",
             )
         if predicate in {"gripper_open", "gripper.open"}:
-            value = _gripper_value(scene)
+            value = _gripper_control_value(scene)
             passed = value is not None and value >= self.gripper_open_threshold
             return PredicateReport(name, passed, reason=None if passed else "gripper is not open")
         if predicate in {"gripper_closed", "gripper.closed"}:
-            value = _gripper_value(scene)
+            value = _gripper_control_value(scene)
             passed = value is not None and value <= self.gripper_closed_threshold
             return PredicateReport(name, passed, reason=None if passed else "gripper is not closed")
         if predicate == "scene_fresh":
@@ -135,7 +135,7 @@ class PredicateBasedVerifier:
             if len(arguments) != 1:
                 return PredicateReport(name, False, reason=f"{predicate} requires obj_id")
             track = _find_track(scene, arguments[0])
-            gripper_value = _gripper_value(scene)
+            gripper_value = _gripper_control_value(scene)
             ee_position = _ee_position(scene)
             if track is None:
                 return PredicateReport(name, False, reason="object track not found")
@@ -168,6 +168,18 @@ class PredicateBasedVerifier:
             target_position = _position_from_pose(target_track.pose_wxyz_xyz)
             if object_position is None or target_position is None:
                 return PredicateReport(name, False, reason="object or target pose is unavailable")
+            # A container can be partially occluded after release, which makes
+            # the OBB-based semantic pose drift laterally.  The CAP-X adapter's
+            # placement pose has a robust XY reference; retain the semantic
+            # target height because placement poses may intentionally sit above
+            # a container opening for collision-free release.
+            placement_pose = target_track.placement_pose_wxyz_xyz
+            if placement_pose is not None and len(placement_pose) >= 7:
+                target_position = (
+                    float(placement_pose[4]),
+                    float(placement_pose[5]),
+                    target_position[2],
+                )
             distance = _distance(object_position, target_position)
             passed = distance <= self.object_target_distance_threshold_m
             return PredicateReport(
@@ -272,6 +284,22 @@ def _gripper_value(scene: SceneSnapshot) -> float | None:
         return float(value) if value is not None else None
     except (TypeError, ValueError):
         return None
+
+
+def _gripper_control_value(scene: SceneSnapshot) -> float | None:
+    """Prefer CAP-X's commanded fraction over physical finger opening.
+
+    A held object can keep the physical fingers apart even after the robot has
+    received the closed command. Older snapshots do not carry the command, so
+    they retain the legacy opening-based behavior.
+    """
+    value = scene.robot.get("gripper_commanded_fraction")
+    try:
+        if value is not None:
+            return float(value)
+    except (TypeError, ValueError):
+        pass
+    return _gripper_value(scene)
 
 
 def _distance(first: tuple[float, float, float], second: tuple[float, float, float]) -> float:

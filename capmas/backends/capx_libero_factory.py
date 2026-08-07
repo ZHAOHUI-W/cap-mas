@@ -9,6 +9,7 @@ from capmas.backends.capx import (
     CAPXObservationProvider,
     CAPXRobotBackend,
     CAPXTypedSkill,
+    PlacementPoseResult,
     _normalize_capx_object_pose,
     build_capx_skills,
 )
@@ -46,6 +47,41 @@ DEFAULT_LIBERO_POSTCONDITIONS: dict[str, tuple[str, ...]] = {
     "close_gripper": ("gripper_closed()",),
     "open_gripper": ("gripper_open()",),
 }
+
+
+def estimate_libero_placement_pose(
+    points: object,
+    *,
+    release_clearance_m: float = 0.0,
+) -> tuple[tuple[float, ...], tuple[float, ...]] | None:
+    """Estimate a safe placement reference from a segmented target cloud.
+
+    CAP-X's generic ``get_object_pose`` returns an oriented-box center. That
+    center is useful as an object track pose, but it is biased for open
+    containers because only visible walls are segmented. A trimmed
+    axis-aligned cloud center is a more stable XY entry point for the gripper.
+    ``release_clearance_m`` moves the robot-only release reference above the
+    visible top of a container. The semantic track keeps the original pose;
+    this result is only used by placement grounding.
+    """
+    try:
+        import numpy as np
+
+        values = np.asarray(points, dtype=float)
+        if values.ndim != 2 or values.shape[1] != 3:
+            return None
+        values = values[np.isfinite(values).all(axis=1)]
+        if len(values) < 16:
+            return None
+        lower = np.percentile(values, 2.0, axis=0)
+        upper = np.percentile(values, 98.0, axis=0)
+        position = (lower + upper) / 2.0
+        position[2] = upper[2] + max(float(release_clearance_m), 0.0)
+        if not np.isfinite(position).all():
+            return None
+        return tuple(float(value) for value in position), (0.0, 1.0, 0.0, 0.0)
+    except (ImportError, TypeError, ValueError):
+        return None
 
 
 @dataclass(frozen=True)
@@ -227,8 +263,22 @@ def build_capx_runtime_from_yaml(
     observation_fn = function_map.get("get_observation")
     if not callable(observation_fn):
         raise ValueError("selected CAP-X API must expose get_observation")
+
+    def observation_with_gripper_state() -> Mapping[str, object]:
+        """Add the commanded state that CAP-X keeps on the low-level env."""
+        raw = observation_fn()
+        commanded_fraction = getattr(low_level_env, "_gripper_fraction", None)
+        if commanded_fraction is None:
+            return raw
+        enriched = dict(raw)
+        enriched["gripper_commanded_fraction"] = commanded_fraction
+        return enriched
+
     get_all_object_poses = function_map.get("get_all_object_poses")
     get_object_pose = function_map.get("get_object_pose")
+    get_object_geometry = function_map.get(
+        "get_object_3d_points_and_masks_from_language"
+    )
     sample_grasp_pose = function_map.get("sample_grasp_pose")
     configured_object_names = tuple(
         str(name)
@@ -271,19 +321,44 @@ def build_capx_runtime_from_yaml(
         raise ValueError(f"CAP-X API is missing configured functions: {sorted(set(missing))}")
 
     if callable(get_object_pose):
+        def _task_language_query(
+            args: Sequence[object], kwargs: Mapping[str, object]
+        ) -> tuple[list[object], dict[str, object]] | None:
+            if not task_language:
+                return None
+            rewritten_args = list(args)
+            rewritten_kwargs = dict(kwargs)
+            if "object_name" in rewritten_kwargs:
+                rewritten_kwargs["object_name"] = task_language
+            elif rewritten_args:
+                rewritten_args[0] = task_language
+            else:
+                return None
+            return rewritten_args, rewritten_kwargs
+
         @wraps(get_object_pose)
         def tracked_get_object_pose(*args: object, **kwargs: object) -> object:
             name = kwargs.get("object_name", args[0] if args else None)
-            rewritten_args = list(args)
-            rewritten_kwargs = dict(kwargs)
-            if name is not None and _normalize_object_name(name) == _normalize_object_name(
-                source_object_name
-            ) and task_language:
-                if "object_name" in rewritten_kwargs:
-                    rewritten_kwargs["object_name"] = task_language
-                elif rewritten_args:
-                    rewritten_args[0] = task_language
-            result = get_object_pose(*rewritten_args, **rewritten_kwargs)
+            is_source_object = (
+                name is not None
+                and _normalize_object_name(name)
+                == _normalize_object_name(source_object_name)
+            )
+            fallback = _task_language_query(args, kwargs) if is_source_object else None
+            try:
+                result = get_object_pose(*args, **kwargs)
+            except Exception as primary_error:
+                if fallback is None:
+                    raise
+                try:
+                    result = get_object_pose(*fallback[0], **fallback[1])
+                except Exception:
+                    raise primary_error
+            else:
+                if fallback is not None and _normalize_capx_object_pose(result) is None:
+                    fallback_result = get_object_pose(*fallback[0], **fallback[1])
+                    if _normalize_capx_object_pose(fallback_result) is not None:
+                        result = fallback_result
             if name is not None:
                 pose_cache[str(name)] = result
             return result
@@ -294,35 +369,76 @@ def build_capx_runtime_from_yaml(
         @wraps(sample_grasp_pose)
         def grounded_sample_grasp_pose(*args: object, **kwargs: object) -> object:
             name = kwargs.get("object_name", args[0] if args else None)
-            rewritten_args = list(args)
-            rewritten_kwargs = dict(kwargs)
             is_source_object = (
                 name is not None
                 and _normalize_object_name(name)
                 == _normalize_object_name(source_object_name)
             )
-            if is_source_object and task_language:
-                if "object_name" in rewritten_kwargs:
-                    rewritten_kwargs["object_name"] = task_language
-                elif rewritten_args:
-                    rewritten_args[0] = task_language
             if is_source_object and callable(get_object_pose):
                 grounded_pose = pose_cache.get(str(name))
                 if grounded_pose is None:
                     try:
-                        grounded_pose = tracked_get_object_pose(
-                            *rewritten_args,
-                            **rewritten_kwargs,
-                        )
+                        grounded_pose = tracked_get_object_pose(*args, **kwargs)
                     except Exception:
                         grounded_pose = None
                 normalized_pose = _normalize_capx_object_pose(grounded_pose)
                 if normalized_pose is not None:
                     position, _ = normalized_pose
                     return position, (0.0, 1.0, 0.0, 0.0)
-            return sample_grasp_pose(*rewritten_args, **rewritten_kwargs)
+            try:
+                return sample_grasp_pose(*args, **kwargs)
+            except Exception as primary_error:
+                fallback = _task_language_query(args, kwargs) if is_source_object else None
+                if fallback is None:
+                    raise
+                try:
+                    return sample_grasp_pose(*fallback[0], **fallback[1])
+                except Exception:
+                    raise primary_error
 
         function_overrides["sample_grasp_pose"] = grounded_sample_grasp_pose
+
+    def target_placement_pose(object_name: str) -> PlacementPoseResult:
+        if not callable(get_object_geometry):
+            return PlacementPoseResult(
+                None,
+                "semantic_pose_fallback",
+                "geometry_api_unavailable",
+            )
+        try:
+            try:
+                raw = get_object_geometry(object_name, use_multiview=True)
+            except TypeError as exc:
+                if "use_multiview" not in str(exc):
+                    raise
+                raw = get_object_geometry(object_name)
+            if not isinstance(raw, Mapping):
+                return PlacementPoseResult(
+                    None,
+                    "semantic_pose_fallback",
+                    f"unexpected_geometry_payload:{type(raw).__name__}",
+                )
+            normalized_name = _normalize_object_name(object_name)
+            release_clearance_m = (
+                0.02 if "basket" in normalized_name else 0.0
+            )
+            pose = estimate_libero_placement_pose(
+                raw.get("points_3d"),
+                release_clearance_m=release_clearance_m,
+            )
+            if pose is None:
+                return PlacementPoseResult(
+                    None,
+                    "semantic_pose_fallback",
+                    "invalid_or_insufficient_pointcloud",
+                )
+            return PlacementPoseResult(pose, "geometry_pointcloud")
+        except Exception as exc:
+            return PlacementPoseResult(
+                None,
+                "semantic_pose_fallback",
+                f"{type(exc).__name__}: {exc}",
+            )
 
     def object_poses() -> Mapping[str, object]:
         poses: dict[str, object] = dict(pose_cache)
@@ -333,7 +449,7 @@ def build_capx_runtime_from_yaml(
         return poses
 
     observation_provider = CAPXObservationProvider(
-        observation_fn,
+        observation_with_gripper_state,
         artifacts,
         object_poses_fn=object_poses,
         object_pose_fn=(
@@ -342,6 +458,12 @@ def build_capx_runtime_from_yaml(
             else None
         ),
         object_names=tracked_object_names,
+        placement_pose_fn=(
+            target_placement_pose if callable(get_object_geometry) else None
+        ),
+        placement_object_names=tuple(
+            name for name in tracked_object_names if name != source_object_name
+        ),
     )
     suite_name = str(low_level_cfg.get("suite_name", "libero"))
     raw_task_id = low_level_cfg.get("task_id", 0)
