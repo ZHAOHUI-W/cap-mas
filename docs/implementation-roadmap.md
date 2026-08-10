@@ -622,6 +622,36 @@ P5.5 remains open until a corrected ten-seed, three-family run is complete;
 the five-seed pilot does not close the formal gate or demonstrate causal
 Arbiter improvement.
 
+P5.5 corrected matched-provenance ten-seed formal gate (2026-08-07): the
+single-worker suite at
+`outputs/phase5/P5.5_matched_provenance_10seed_retry2_20260807/P5.5_frozen_ood_replay/20260807_024842_suite_20674432/`
+completed all 60 cases and 30 matched pairs across `spatial-0`, `goal-1`, and
+`object-6`. It used the frozen manifest digest
+`5aeff85dae764c72fe9c0b1f3a0a07f4070e95247baea1b8d93f15311ea72141`,
+CUDA device 5, one worker, no restarts, `max_steps=32`, `timeout_s=360`, one
+selection repeat, and disabled cache. There were zero case failures, zero
+infrastructure unknowns, zero recoveries, and zero human interventions. All
+30 pairs had distinct ID/OOD layout fingerprints, all 60 records remained
+shadow-only, and the suite manifest's 907 entries plus all 60 case manifests
+passed size and SHA-256 verification.
+
+Evaluator success was ID `4/30` and OOD `10/30`; graph/verifier success was
+ID `4/30` and OOD `8/30`. The paired table contains zero ID-only successes,
+six OOD-only successes, and 24 ties, with exact McNemar `p=0.03125`. The
+observed difference comes entirely from `object-6` (`4/10` versus `10/10`);
+both `spatial-0` and `goal-1` remained `0/10` in each split. Of 48 graph-level
+`POSTCONDITION_FAILED` outcomes, 46 were physical task failures and two were
+verifier false negatives (`ood-object-6-seed1` and `seed2`). Selection used
+`evidence_tie_break` 57 times and `evidence_score` three times.
+
+This closes the corrected P5.5 ten-seed measurement, pairing, provenance, and
+artifact-retention gate. It does not establish causal Arbiter improvement or
+general OOD robustness: P5.5 is shadow-only, the OOD layout was easier for one
+task family, and 57/60 selections were ties. Realized horizon is still absent
+from `OODReplayEvidence`; `max_steps=32` is only a budget. Adding a verified
+executed-horizon field and calibrated, actively weighted evidence is the P5.6
+handoff before any horizon-stability or causal selection claim.
+
 ## Phase 6 — Memory Controller learning
 
 - Add verified terminal and intermediate learning-return calculation.

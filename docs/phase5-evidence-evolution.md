@@ -902,3 +902,53 @@ Arbitration used `evidence_tie_break` for 28 cases and `evidence_score` for
 two. This validates the matched execution and reporting path but not causal
 candidate-selection benefit. The formal P5.5 gate remains a corrected
 ten-seed run across all three families; this five-seed result is a pilot.
+
+### P5.5 corrected matched-provenance ten-seed gate (2026-08-07)
+
+The corrected formal suite is retained at
+`outputs/phase5/P5.5_matched_provenance_10seed_retry2_20260807/P5.5_frozen_ood_replay/20260807_024842_suite_20674432/`.
+It used the frozen 60-case, 30-pair, three-family manifest with canonical
+SHA-256
+`5aeff85dae764c72fe9c0b1f3a0a07f4070e95247baea1b8d93f15311ea72141`.
+The CAP-X `.venv-libero` run used CUDA device 5, `max_workers=1`,
+`max_restarts=0`, `max_steps=32`, `timeout_s=360`, one selection repeat, and
+disabled cache. All 60 cases completed with no case-level failure artifact or
+infrastructure-unknown record.
+
+| family | ID evaluator | OOD evaluator | ID graph/verifier | OOD graph/verifier | mean latency |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `spatial-0` | 0/10 | 0/10 | 0/10 | 0/10 | 190.98 s |
+| `goal-1` | 0/10 | 0/10 | 0/10 | 0/10 | 165.10 s |
+| `object-6` | 4/10 | 10/10 | 4/10 | 8/10 | 223.35 s |
+| **all** | **4/30** | **10/30** | **4/30** | **8/30** | **193.15 s** |
+
+ID evaluator success was 13.3% with Wilson 95% CI `[0.0531, 0.2968]`; OOD
+success was 33.3% with CI `[0.1923, 0.5122]`. The estimated `ID - OOD` gap was
+`-0.2` with deterministic paired-bootstrap CI `[-0.3667, -0.0667]`. There
+were zero ID-only successes, six OOD-only successes, and 24 ties; exact
+McNemar `p=0.03125`. The split-specific mean/median latency was
+`172.29/171.49 s` for ID and `214.00/208.44 s` for OOD. Overall latency had
+median `175.14 s` and range `137.98--323.84 s`. All 60 cases recorded zero
+recoveries and zero human interventions, one provider call, and no cache hit.
+
+The corrected failure taxonomy records 48 graph-level
+`POSTCONDITION_FAILED` outcomes, of which 46 were physical task failures. The
+two remaining cases, `ood-object-6-seed1` and `ood-object-6-seed2`, passed the
+LIBERO evaluator while the point-distance verifier rejected the final state;
+they are verifier false negatives. Arbitration used `evidence_tie_break` 57
+times and `evidence_score` three times, with no `confidence_fallback`.
+
+All 30 pairs had distinct, non-null ID/OOD layout fingerprints; every record
+was `shadow_only=true`. Independent reaggregation exactly matched the retained
+aggregate, the suite manifest's 907 entries and all 60 case manifests passed
+size/SHA-256 verification, and no API secret was found in the suite. This
+closes the corrected P5.5 measurement, pairing, provenance, and artifact gate,
+not a causal evidence-selection or general OOD-robustness claim. The observed
+gap is confined to an easier `object-6` OOD layout, while two families remain
+at zero success.
+
+No evidence record contains realized executed horizon, so this suite cannot
+support horizon buckets or horizon-stability analysis. `max_steps=32` remains
+an execution budget. P5.6 must add a verified horizon field and calibrate
+correlated verifier, geometry, rehearsal, and OOD signals before any active
+weighting or causal Arbiter claim.

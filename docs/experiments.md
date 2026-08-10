@@ -765,3 +765,51 @@ Selection used `evidence_tie_break` 28 times and `evidence_score` twice, with
 no `confidence_fallback`. This is a valid five-seed pilot, not the formal P5.5
 gate: closure still requires at least ten paired seeds across all three
 families using the corrected single-worker protocol.
+
+### P5.5 corrected matched-provenance ten-seed formal gate (2026-08-07)
+
+The corrected formal run is retained at
+`outputs/phase5/P5.5_matched_provenance_10seed_retry2_20260807/P5.5_frozen_ood_replay/20260807_024842_suite_20674432/`.
+It used CUDA device 5, one worker, no restarts, `max_steps=32`,
+`timeout_s=360`, one selection repeat, disabled cache, and frozen manifest
+SHA-256
+`5aeff85dae764c72fe9c0b1f3a0a07f4070e95247baea1b8d93f15311ea72141`.
+All 60 cases and 30 ID/OOD pairs completed with zero case-level failures and
+zero infrastructure unknowns.
+
+| family | ID evaluator | OOD evaluator | ID graph/verifier | OOD graph/verifier | mean latency |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `spatial-0` | 0/10 | 0/10 | 0/10 | 0/10 | 190.98 s |
+| `goal-1` | 0/10 | 0/10 | 0/10 | 0/10 | 165.10 s |
+| `object-6` | 4/10 | 10/10 | 4/10 | 8/10 | 223.35 s |
+| **all** | **4/30** | **10/30** | **4/30** | **8/30** | **193.15 s** |
+
+The ID Wilson estimate was `0.1333` with 95% CI `[0.0531, 0.2968]`; OOD was
+`0.3333` with CI `[0.1923, 0.5122]`. The paired `ID - OOD` gap was `-0.2`
+with bootstrap CI `[-0.3667, -0.0667]`. There were zero ID-only successes,
+six OOD-only successes, and 24 ties, giving exact McNemar `p=0.03125`.
+Overall latency had median `175.14 s` and range `137.98--323.84 s`; ID and OOD
+mean latency was `172.29 s` and `214.00 s`, respectively. Recovery and human
+intervention counts were zero for every case. Each case made one provider call
+and no case used a cache hit.
+
+There were 48 graph-level `POSTCONDITION_FAILED` outcomes. Evaluator-based
+reclassification gives 46 physical task failures and two verifier false
+negatives: `ood-object-6-seed1` and `ood-object-6-seed2`. Both false negatives
+passed the LIBERO evaluator but failed CAP-MAS `object_at_target` verification.
+Selection used `evidence_tie_break` 57 times and `evidence_score` three times,
+with no `confidence_fallback`.
+
+All 30 pairs had distinct, non-null ID/OOD layout fingerprints and all 60
+records remained shadow-only. Independent reaggregation exactly matched the
+retained aggregate. The suite manifest covered 907 files, and its entries plus
+all 60 case manifests passed size and SHA-256 checks; secret-pattern checks
+found no API key or Authorization value.
+
+This closes the corrected P5.5 measurement, pairing, provenance, and artifact
+retention gate. It does not demonstrate general OOD robustness or causal
+Arbiter improvement: the success difference is entirely from the `object-6`
+layout, two families stayed at zero, P5.5 evidence was shadow-only, and 57/60
+selections were ties. Realized horizon was not recorded, so no horizon bucket
+or stability claim is reported; adding that field and calibrated active
+evidence weighting is the P5.6 handoff.
