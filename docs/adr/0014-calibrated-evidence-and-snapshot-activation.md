@@ -48,6 +48,12 @@ abstention path.
 9. No global online calibrated Arbiter is enabled until target families pass
    capability gates. A bounded canary is safety-only and cannot support a
    downstream improvement claim.
+10. P5.6.0 is diagnostic-only. Task mapping, prompt, skill-argument, and
+    physical-parameter repair is isolated in P5.3.2 and blocks only the
+    affected family's promotion.
+11. Task horizon is bucketed by action-bearing subgraphs on the planned
+    critical path. Checkpoint-only subgraphs and typed skill-call counts remain
+    diagnostics and do not inflate horizon.
 
 ## Consequences
 
@@ -64,7 +70,8 @@ Positive:
 
 Negative:
 
-- P5.6 needs more physical data than the current P5.5 suite provides.
+- Existing P5.5 physical results need a compatibility audit and potentially
+  pre-registered fresh seed blocks before they become P5.6 Tier A data.
 - Zero-success families require capability debugging before calibration can
   be promoted for them.
 - Group policy and snapshot lifecycle add contracts and artifact overhead.
@@ -80,3 +87,6 @@ Negative:
 - Use `max_steps` as the task horizon.
 - Mutate a live calibration model in place or change a pinned episode's model.
 - Let calibration bypass existing safety, freshness, schema, or lease gates.
+- Repair zero-success task families inside the calibration work package.
+- Mark every semantically single benchmark instruction H1 without inspecting
+  its action-bearing Mission Graph structure.

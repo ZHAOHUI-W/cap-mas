@@ -953,6 +953,21 @@ an execution budget. P5.6 must add a verified horizon field and calibrate
 correlated verifier, geometry, rehearsal, and OOD signals before any active
 weighting or causal Arbiter claim.
 
+## P5.3.2 task-family capability repair boundary
+
+P5.3.2 is an independent work package triggered by a read-only P5.6.0
+diagnosis. It owns task-goal mapping, Policy prompt, typed skill arguments,
+placement/release parameters, and other task-completion fixes for
+`spatial-0` and `goal-1`. It cannot add calibration weights or probability
+logic. It requires a separate design and implementation plan and closes only
+when the affected family passes the fixed ten-seed capability gate with zero
+infrastructure unknowns, typed failures, at least 80% physical-execution reach,
+and at least one evaluator success.
+
+P5.3.2 failure does not block P5.6 contracts, object-6 offline calibration, or
+eligible-family shadow evaluation. It blocks calibrated promotion for that
+family and any all-family performance claim.
+
 ## P5.6 accepted design boundary
 
 P5.6 is a family-scoped, qualified calibration increment. The online primary
@@ -964,20 +979,36 @@ pre-execution feature-snapshot, horizon, and calibration-lineage contracts.
 They remain a smoke/provenance source and must be recollected or normalized
 only through a separately validated compatibility audit.
 
-The implementation route is parallel but gated. P5.6.0 diagnoses and
-recollects capability for the two zero-success families while P5.6.1--P5.6.6
-build horizon/label contracts, three-tier datasets, leakage audits,
-correlation-group reduction, constrained logistic/isotonic fitting, and
-immutable snapshots. P5.6.7 adds shadow arbitration; P5.6.8 canary promotion
-is allowed only for eligible families; P5.6.9 performs the formal matched
-evaluation.
+The implementation route is parallel but gated. P5.6.0 is diagnostic-only and
+emits a `P5.3.2 Task-Family Capability Repair` package for each zero-success
+family. P5.3.2 owns task mapping, prompt, skill argument, and motion-parameter
+repairs; it is not calibration work and blocks only that family's promotion.
+Meanwhile P5.6.1--P5.6.6 build horizon/label contracts, three-tier datasets,
+leakage audits, correlation-group reduction, constrained logistic/isotonic
+fitting, and immutable snapshots. P5.6.7 adds shadow arbitration; P5.6.8
+canary promotion is allowed only for eligible families; P5.6.9 performs the
+formal matched evaluation.
+
+The object-6 result contains 20 physical outcomes, not 14 samples: 14 are
+positive and six are negative. This meets the numerical 20/5/5 gate but not
+automatically the new lineage contract. A read-only compatibility audit must
+prove that each admitted row has pre-execution features, candidate/scene
+identity, selection, evaluator outcome, and reconstructable horizon without
+future-state leakage. If the audit leaves too few rows, fresh collection uses
+pre-registered ID seed blocks 11-20 and then 21-30. No per-outcome stopping or
+cross-family pooling is allowed. This compatibility audit and fixed-block
+collection is P5.6.2a and must complete before a qualified object-6 offline
+fit; P5.6.8 does not collect training labels during canary execution.
 
 The initial active feature set excludes OOD (`ood_weight=0`). Tier A contains
 only conclusive physical selected-candidate evaluator outcomes; Tier B is
 isolated rehearsal; Tier C is unlabeled evidence. Unselected candidates are
-not physical failures. Unknown evidence remains explicit. Planned
-critical-path horizon and realized attempted/completed actions/subgoals are
-recorded separately from `max_steps`.
+not physical failures. Unknown evidence remains explicit. Planned horizon is
+bucketed by action-bearing subgraphs; checkpoint-only subgraphs, skill calls,
+and `max_steps` do not increase the task bucket. A single action-bearing
+subgraph is H1 and empty higher buckets are `N/A`. The frozen P5.5 candidates
+have two action-bearing subgraphs and one checkpoint-only subgraph, so they
+are H2-3. Realized actions/subgoals/checkpoints remain separate diagnostics.
 
 The deterministic correlation-group reducer prevents verifier/rehearsal or
 other correlated signals from being summed as independent votes. The

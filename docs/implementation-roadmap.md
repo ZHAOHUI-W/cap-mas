@@ -661,6 +661,13 @@ are diagnosed. `object-6` is a pipeline smoke family only and cannot define a
 global model. No family receives an online calibrated probability until it
 passes both gates below.
 
+P5.6.0 is diagnostic-only. It emits typed root-cause artifacts and an
+independent `P5.3.2 Task-Family Capability Repair` work package. P5.3.2 owns
+goal-task mapping, prompt, skill-argument, and placement/release parameter
+changes plus the replacement ten-seed capability run. Its failure blocks only
+the affected family's promotion and an all-family claim; it does not block
+object-6 offline calibration or family-scoped shadow evaluation.
+
 The capability gate requires a fixed ten-seed diagnostic run with zero
 infrastructure unknowns, typed failures, at least 80% physical-execution
 reachability, and at least one valid evaluator success. The calibration gate
@@ -668,11 +675,23 @@ requires at least 20 independent Tier A physical outcomes for that family,
 including at least five positive and five negative `task_success` labels.
 Ineligible families abstain and use the fixed-weight Arbiter fallback.
 
-P5.6 records planned critical-path horizon and realized attempted/completed
-actions/subgoals. `max_steps` remains only a budget. Physical task success is
-the only primary calibration label; graph completion, verifier success,
-rehearsal outcomes, OOD metadata, and horizon remain separate diagnostics or
-shadow inputs.
+The current object-6 suite contains 20 physical outcomes: 14 positive and six
+negative. It meets the numerical 20/5/5 gate, but the records predate P5.6
+feature-snapshot and horizon lineage and therefore require a read-only
+compatibility audit. If admissible rows are insufficient, collection uses
+pre-registered ID seed blocks 11-20 and then, only after block-level review,
+21-30. It never performs outcome-adaptive single-seed stopping or cross-family
+pooling.
+
+P5.6 buckets planned horizon by action-bearing subgraphs on the critical path.
+Checkpoint-only verification subgraphs, skill-call counts, and `max_steps` do
+not inflate the task bucket. A single action-bearing subgraph is H1; empty
+H2-3/H4-6/H7+ buckets are `N/A`. The frozen P5.5 candidates each have two
+action-bearing subgraphs plus one checkpoint-only subgraph and are H2-3.
+Realized attempted/completed actions, subgoals, and checkpoints remain separate
+diagnostics. Physical task success is the only primary calibration label;
+graph completion, verifier success, rehearsal outcomes, OOD metadata, and
+horizon remain separate diagnostics or shadow inputs.
 
 The initial active feature set has `ood_weight=0`. A deterministic
 correlation-group reducer precedes constrained logistic plus isotonic
@@ -685,9 +704,10 @@ rollback is explicit.
 Implementation order:
 
 ```text
-P5.6.0 capability diagnosis and recollection
+P5.6.0 diagnostic-only capability audit and P5.3.2 handoff
 P5.6.1 horizon, label, and lineage contracts
 P5.6.2 three-tier dataset and leakage audit
+P5.6.2a object-6 compatibility audit and fixed-block collection
 P5.6.3 deterministic correlation-group reduction
 P5.6.4 constrained logistic/isotonic calibration
 P5.6.5 immutable snapshot registry and episode pinning

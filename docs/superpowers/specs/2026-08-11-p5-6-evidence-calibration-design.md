@@ -29,20 +29,23 @@ were `0/10` in both splits. Arbitration used `evidence_tie_break` 57/60
 times. These results close P5.5 measurement and provenance gates, but they do
 not qualify an online calibrated Arbiter.
 
-P5.6 therefore has two parallel lanes with a hard dependency at promotion:
+P5.6 therefore has two parallel lanes with a per-family dependency at
+promotion:
 
 ```text
-capability diagnosis for spatial-0/goal-1 ----+
-                                               +--> family eligibility
-calibration infrastructure and offline data --+
-                                                       |
-                                                       v
-                                         shadow --> bounded canary
+P5.6.0 diagnosis --handoff--> P5.3.2 task-family repair --> family gate
+
+P5.6 contracts/dataset/calibration --> eligible-family offline + shadow
+                                                        |
+                                                        v
+                                      family-scoped bounded canary
 ```
 
 `object-6` is a pipeline smoke family until it meets the same capability and
 data gates as every other family. It is not allowed to define a global model
-or compensate for a zero-success family.
+or compensate for a zero-success family. Failure of `spatial-0` or `goal-1`
+does not block object-6 offline calibration or shadow evaluation; it blocks
+only promotion for the failing family and any global all-family claim.
 
 ## 3. Goals and non-goals
 
@@ -62,9 +65,10 @@ or compensate for a zero-success family.
 
 ### Non-goals
 
-- Fixing the physical execution capability of `spatial-0` or `goal-1` inside
-  the calibration model. P5.6.0 diagnoses and recollects those failures; it
-  does not hide them with a learned score.
+- Fixing the physical execution capability of `spatial-0` or `goal-1`.
+  P5.6.0 is diagnostic-only. Goal-task mapping, prompt changes, skill-argument
+  changes, and placement/release parameter repair belong to the independent
+  P5.3.2 Task-Family Capability Repair package.
 - Treating P5.5 OOD success as an online feature. Initial `ood_weight=0`.
 - Using unselected candidates as physical failures.
 - Treating Tier B rehearsal outcomes as physical success labels.
@@ -143,35 +147,49 @@ The horizon has two axes:
 class HorizonLabel:
     planned_critical_path_actions: int | None
     planned_critical_path_subgoals: int | None
+    planned_checkpoint_subgraphs: int | None
     attempted_actions: int | None
     completed_actions: int | None
     attempted_subgoals: int | None
     completed_subgoals: int | None
+    attempted_checkpoints: int | None
+    completed_checkpoints: int | None
     planned_source: Literal["mission_graph", "unknown"]
     realized_source: Literal["execution_trace", "unknown"]
     planned_valid: bool
     realized_valid: bool
 ```
 
-`planned_critical_path_actions` and `planned_critical_path_subgoals` are
-computed from the submitted Mission Graph before physical execution. They
-describe task complexity. Realized fields are counted from execution trace
-events and include retries/recovery according to one fixed event policy. A
-runner must not derive either axis from `max_steps`, wall-clock timeout, or
-the number of LLM calls.
+`planned_critical_path_actions` counts action nodes on the submitted Mission
+Graph critical path. `planned_critical_path_subgoals` counts only critical-path
+subgraphs that contain at least one action node. Checkpoint-only verification
+subgraphs are recorded in `planned_checkpoint_subgraphs` and do not inflate
+task horizon. Realized action/subgoal fields use the same action-bearing rule
+and are counted from execution trace events; checkpoint attempts/completions
+remain separate diagnostics. Retries and recovery follow one fixed event
+policy. A runner must not derive any horizon field from `max_steps`, wall-clock
+timeout, skill-call count, or the number of LLM calls.
 
 The canonical complexity buckets are:
 
 ```text
-H1     planned critical path: 1 action or 1 subgoal
-H2-3   planned critical path: 2-3 actions or subgoals
-H4-6   planned critical path: 4-6 actions or subgoals
-H7+    planned critical path: 7 or more actions or subgoals
+H1     1 action-bearing subgraph on the planned critical path
+H2-3   2-3 action-bearing subgraphs on the planned critical path
+H4-6   4-6 action-bearing subgraphs on the planned critical path
+H7+    7 or more action-bearing subgraphs on the planned critical path
 ```
 
-Reports show action- and subgoal-based buckets separately when they disagree.
-Realized attempted/completed counts are diagnostic columns and do not replace
-the planned bucket.
+The subgoal bucket is the primary task-complexity bucket. A graph with exactly
+one action-bearing subgraph is H1 even when that node contains multiple typed
+skill calls. Action-node, skill-call, checkpoint, and realized counts remain
+diagnostic columns and do not replace the planned bucket. Empty buckets are
+reported as `N/A`, not as zero-success strata.
+
+The frozen P5.5 candidate artifacts for `spatial-0`, `goal-1`, and `object-6`
+each contain three subgraphs: two action-bearing subgraphs and one
+checkpoint-only verification subgraph. They therefore belong to H2-3 under
+this contract, not H1. Future genuinely single-action-subgraph tasks are H1;
+P5.6 does not fabricate H4-6 or H7+ examples when none exist.
 
 ### 5.2 Feature snapshot and lineage
 
@@ -338,8 +356,18 @@ diagnostic run has:
 4. at least one valid evaluator success.
 
 Failure of this gate blocks calibrated online promotion for the family. It
-does not block infrastructure development or diagnosis. A zero-success family
-must be repaired or recollected before it can qualify.
+does not block infrastructure development, object-6 offline calibration, or
+eligible-family shadow evaluation. P5.6.0 stops after producing a typed root-
+cause report and a P5.3.2 work package. P5.3.2 owns any task mapping, prompt,
+skill-argument, motion-parameter, or policy repair and reruns the same fixed
+ten-seed gate. Only a passing capability manifest returns to P5.6 promotion.
+
+The P5.6 diagnostic runner is read-only with respect to prompts, task maps,
+skill arguments, registries, and runtime configuration. Its output records the
+family, source manifest digest, execution-reach rate, typed failure histogram,
+representative evidence references, suspected ownership boundary, and a
+recommended P5.3.2 acceptance test. P5.3.2 requires its own approved design and
+implementation plan; its fixes cannot be hidden inside the P5.6 plan.
 
 ### 7.2 Calibration eligibility gate
 
@@ -351,7 +379,35 @@ that does not meet this gate must abstain and use fixed-weight fallback.
 
 The gate is checked at snapshot build time and again at activation time.
 
-### 7.3 Runtime abstention conditions
+### 7.3 Object-6 data collection
+
+The current object-6 result is 20 physical outcomes, not 14 samples: 10 ID and
+10 OOD episodes produced 14 positive and six negative evaluator labels. The
+number 14 is the success count. Numerically this meets the 20/5/5 gate, but the
+records predate the P5.6 pre-execution feature-snapshot and horizon-lineage
+contracts and therefore are not automatically admissible Tier A rows.
+
+Collection uses this fixed strategy:
+
+1. Run a read-only compatibility audit over the existing 20 outcomes. A row is
+   admissible only if pre-execution evidence, candidate/scene identity,
+   selection event, evaluator outcome, and horizon can be reconstructed from
+   retained artifacts without using future state. Missing features are not
+   backfilled from post-execution observations.
+2. If the audited rows do not meet the 20/5/5 gate, run the pre-registered
+   ID-only seed block 11-20 under the native P5.6 contracts.
+3. Re-evaluate only after the complete block. If still ineligible, run the
+   pre-registered ID-only block 21-30. Do not stop after an individual desired
+   outcome and do not select seeds using observed success.
+4. If the second block still fails count or class balance, object-6 remains
+   ineligible. P5.6 does not pool another family to force qualification.
+
+OOD episodes that pass the audit may retain Tier A physical labels, but split
+identity and aggregate OOD success remain excluded from the active feature
+vector. Seed blocks are ID-only because initial `ood_weight=0` and the first
+calibrator targets the native family distribution.
+
+### 7.4 Runtime abstention conditions
 
 The calibrated path abstains for any of the following:
 
@@ -483,20 +539,22 @@ the feature schema, Memory Skill, Robot Skill, prompts, environment, and code.
 ## 11. P5.6 implementation order
 
 ```text
-P5.6.0  Diagnose and recollect spatial-0/goal-1 capability
+P5.6.0  Diagnose spatial-0/goal-1 and emit P5.3.2 work packages
 P5.6.1  Add horizon, outcome-label, and version-lineage contracts
 P5.6.2  Build three-tier dataset and leakage-safe split audit
+P5.6.2a Audit object-6 history and collect pre-registered ID seed blocks
 P5.6.3  Implement deterministic correlation-group reduction
 P5.6.4  Implement constrained logistic and isotonic calibration
 P5.6.5  Implement immutable snapshot registry and episode pinning
 P5.6.6  Add offline metrics, ablations, and qualification reports
 P5.6.7  Add shadow Arbiter integration with abstention/fallback
-P5.6.8  Recollect eligible families and run bounded online canary
+P5.6.8  Run eligible-family bounded online canary
 P5.6.9  Run formal matched evaluation and write the Phase 6 handoff
 ```
 
 P5.6.0 and P5.6.1--P5.6.6 may proceed in parallel when their interfaces are
-stable. P5.6.7 must consume only immutable snapshots. P5.6.8 is blocked per
+stable. P5.3.2 is a separate task-capability package and is not calibration
+work. P5.6.7 must consume only immutable snapshots. P5.6.8 is blocked per
 family until both qualification gates pass. P5.6.9 must report all eligible
 and ineligible families separately.
 
@@ -513,7 +571,7 @@ The first implementation should keep the following responsibilities separate:
 | `capmas/evaluation/calibration.py` | Constrained fitting, isotonic transform, prediction, and abstention |
 | `capmas/evaluation/snapshot_registry.py` | Content-addressed publish, atomic activation, pin, rollback |
 | `capmas/evaluation/calibrated_arbiter.py` | Safety gates, qualified ranking, fallback, and decision artifacts |
-| `scripts/run_p56_capability.py` | Per-family diagnosis and recollection artifacts |
+| `scripts/run_p56_capability.py` | Read-only per-family diagnosis and P5.3.2 handoff artifacts |
 | `scripts/run_p56_offline.py` | Offline fit, metrics, ablations, and qualification report |
 | `scripts/run_p56_shadow.py` | Shadow comparison without physical execution |
 | `scripts/run_p56_canary.py` | Bounded eligible-family online canary |
@@ -527,6 +585,9 @@ realistic evidence path.
 ### Contract tests
 
 - reject negative or inconsistent horizon counts;
+- classify one action-bearing subgraph as H1 and exclude checkpoint-only
+  subgraphs from the task bucket;
+- report unobserved horizon buckets as `N/A`;
 - preserve `None` for unknown outcomes and unselected candidates;
 - reject Tier B/C masquerading as Tier A;
 - validate canonical snapshot digests and schema/version bindings;
