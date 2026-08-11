@@ -952,3 +952,47 @@ support horizon buckets or horizon-stability analysis. `max_steps=32` remains
 an execution budget. P5.6 must add a verified horizon field and calibrate
 correlated verifier, geometry, rehearsal, and OOD signals before any active
 weighting or causal Arbiter claim.
+
+## P5.6 accepted design boundary
+
+P5.6 is a family-scoped, qualified calibration increment. The online primary
+output is a candidate `rank_score`; `success_probability` is emitted only
+after capability and data gates pass. The corrected P5.5 suite does not provide
+a directly eligible P5.6 dataset: `spatial-0` and `goal-1` have zero evaluator
+successes, while the 20 `object-6` physical outcomes predate the required
+pre-execution feature-snapshot, horizon, and calibration-lineage contracts.
+They remain a smoke/provenance source and must be recollected or normalized
+only through a separately validated compatibility audit.
+
+The implementation route is parallel but gated. P5.6.0 diagnoses and
+recollects capability for the two zero-success families while P5.6.1--P5.6.6
+build horizon/label contracts, three-tier datasets, leakage audits,
+correlation-group reduction, constrained logistic/isotonic fitting, and
+immutable snapshots. P5.6.7 adds shadow arbitration; P5.6.8 canary promotion
+is allowed only for eligible families; P5.6.9 performs the formal matched
+evaluation.
+
+The initial active feature set excludes OOD (`ood_weight=0`). Tier A contains
+only conclusive physical selected-candidate evaluator outcomes; Tier B is
+isolated rehearsal; Tier C is unlabeled evidence. Unselected candidates are
+not physical failures. Unknown evidence remains explicit. Planned
+critical-path horizon and realized attempted/completed actions/subgoals are
+recorded separately from `max_steps`.
+
+The deterministic correlation-group reducer prevents verifier/rehearsal or
+other correlated signals from being summed as independent votes. The
+calibrator enforces non-negative support coefficients and non-positive
+latency/recovery/collision risk coefficients. Calibration abstention falls
+back to safety hard gates, qualified calibration, fixed-weight evidence
+ranking, deterministic evidence tie-break, and confidence fallback only when
+no candidate evidence exists. A content-addressed snapshot is atomically
+activated, pinned per episode, and explicitly rollbackable.
+
+Offline qualification requires at least 20 Tier A outcomes per family, with
+at least five positive and five negative labels, plus the fixed ten-seed
+capability gate. Offline targets are Brier improvement >=10% and ECE <=0.10.
+Shadow requires zero hard-gate disagreement, calibration inference P95 <=5 ms,
+and eligible coverage >=50%. The bounded canary requires at least 20 matched
+physical episodes and supports only a safety/operability claim. Full details
+are in [the P5.6 design](superpowers/specs/2026-08-11-p5-6-evidence-calibration-design.md)
+and [ADR-0014](adr/0014-calibrated-evidence-and-snapshot-activation.md).

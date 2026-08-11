@@ -53,3 +53,15 @@
 | Last Valid Snapshot | The most recent successfully published immutable snapshot retained across worker restart or artifact failure. |
 | Degraded Runtime | A fail-closed health state reached after restart or artifact-failure budgets are exhausted; fresh-dependent actions are rejected. |
 | Artifact Failure | Missing, checksum-invalid, truncated, or undecodable shared data that prevents one observation from producing a snapshot. |
+| Calibration Feature Snapshot | Immutable, pre-execution candidate feature record bound to an episode, candidate fingerprint, scene/map versions, feature schema, and Memory/Robot Skill versions. |
+| Calibration Outcome | A typed result that keeps physical task success, graph completion, verifier success, execution status, and horizon as separate fields. |
+| Tier A Outcome | A conclusive physical evaluator outcome from the selected candidate, eligible as the primary supervised calibration label. |
+| Tier B Outcome | An isolated rehearsal outcome used for diagnostics or shadow analysis; it cannot be relabeled as physical success. |
+| Tier C Evidence | Candidate evidence without a conclusive outcome, used for coverage, drift, and abstention analysis only. |
+| Planned Critical-Path Horizon | The number of action nodes or subgoals on the submitted Mission Graph critical path; it is a complexity label, not `max_steps`. |
+| Realized Execution Horizon | Attempted and completed action/subgoal counts extracted from execution trace events; it is reported separately from planned horizon. |
+| Correlation Group | A declared set of evidence dimensions reduced with an auditable bounded rule before calibration to avoid double-counting correlated facts. |
+| Qualified Calibrator | A family- and snapshot-qualified calibration model allowed to emit `success_probability` after capability, data, schema, uncertainty, and runtime gates pass. |
+| Calibration Abstention | An explicit decision that calibrated probability is unavailable or unsafe; it carries a reason and uses the fixed-weight fallback. |
+| Calibration Snapshot | Immutable, content-addressed model, feature schema, dataset, skill-version, metric, and qualification metadata used for reproducible prediction. |
+| Snapshot Pinning | Binding one Calibration Snapshot to an episode so later activation cannot change that episode's prediction behavior. |

@@ -652,6 +652,60 @@ from `OODReplayEvidence`; `max_steps=32` is only a budget. Adding a verified
 executed-horizon field and calibrated, actively weighted evidence is the P5.6
 handoff before any horizon-stability or causal selection claim.
 
+### Phase 5.6 - Qualified evidence calibration
+
+P5.6 proceeds on two parallel but gated lanes. Calibration infrastructure,
+horizon/label contracts, leakage-safe datasets, correlation control, and
+offline fitting may be built while `spatial-0` and `goal-1` capability failures
+are diagnosed. `object-6` is a pipeline smoke family only and cannot define a
+global model. No family receives an online calibrated probability until it
+passes both gates below.
+
+The capability gate requires a fixed ten-seed diagnostic run with zero
+infrastructure unknowns, typed failures, at least 80% physical-execution
+reachability, and at least one valid evaluator success. The calibration gate
+requires at least 20 independent Tier A physical outcomes for that family,
+including at least five positive and five negative `task_success` labels.
+Ineligible families abstain and use the fixed-weight Arbiter fallback.
+
+P5.6 records planned critical-path horizon and realized attempted/completed
+actions/subgoals. `max_steps` remains only a budget. Physical task success is
+the only primary calibration label; graph completion, verifier success,
+rehearsal outcomes, OOD metadata, and horizon remain separate diagnostics or
+shadow inputs.
+
+The initial active feature set has `ood_weight=0`. A deterministic
+correlation-group reducer precedes constrained logistic plus isotonic
+calibration. Support coefficients must be non-negative; latency, recovery,
+collision, and safety-risk coefficients must be non-positive. Unknown evidence
+is explicit and cannot become zero quality. Snapshots are immutable and
+content-addressed, episodes pin one snapshot, activation is atomic, and
+rollback is explicit.
+
+Implementation order:
+
+```text
+P5.6.0 capability diagnosis and recollection
+P5.6.1 horizon, label, and lineage contracts
+P5.6.2 three-tier dataset and leakage audit
+P5.6.3 deterministic correlation-group reduction
+P5.6.4 constrained logistic/isotonic calibration
+P5.6.5 immutable snapshot registry and episode pinning
+P5.6.6 offline metrics and ablations
+P5.6.7 shadow Arbiter with abstention/fallback
+P5.6.8 eligible-family bounded canary
+P5.6.9 formal matched evaluation and Phase 6 handoff
+```
+
+Offline targets are Brier improvement of at least 10% against the fixed-weight
+baseline mapping and ECE at most `0.10`. The shadow gate requires zero safety
+hard-gate disagreement, calibration inference P95 at most 5 ms, and eligible
+coverage at least 50%. The bounded canary requires at least 20 matched
+physical episodes and is safety/operability evidence only, not a success-rate
+improvement claim. See
+[`P5.6 design`](superpowers/specs/2026-08-11-p5-6-evidence-calibration-design.md)
+and [ADR-0014](adr/0014-calibrated-evidence-and-snapshot-activation.md).
+
 ## Phase 6 — Memory Controller learning
 
 - Add verified terminal and intermediate learning-return calculation.
