@@ -18,7 +18,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from capmas.agents.arbiter import CandidateArbiter
 from capmas.contracts.calibration import CalibrationCollectionContext, CandidateFeatureSnapshot
-from capmas.contracts.candidates import GraphCandidate, subgraph_fingerprint
+from capmas.contracts.candidates import GraphCandidate, rewrite_report_for, subgraph_fingerprint
 from capmas.contracts.graph import MissionGraph
 from capmas.contracts.scene import SceneSnapshot
 from capmas.evaluation.candidate_identity import (
@@ -413,6 +413,21 @@ def _write_failure_artifacts(
         )
         run_dir.write_json("failure.json", failure)
         run_dir.write_json(
+            "summary.json",
+            {
+                "status": "failed",
+                "stage": stage,
+                "error_type": type(error).__name__,
+                "error": str(error),
+                "feature_schema_version": run_config["feature_schema_version"],
+                "feature_snapshot_count": run_config["feature_snapshot_count"],
+                "decision_completed_at_ns": run_config["decision_completed_at_ns"],
+                "physical_execution_started_at_ns": run_config[
+                    "physical_execution_started_at_ns"
+                ],
+            },
+        )
+        run_dir.write_json(
             "results/rehearsal.json", [asdict(item) for item in rehearsal_results]
         )
         if evidence_cache is not None:
@@ -429,6 +444,10 @@ def _write_failure_artifacts(
                     f"error_type={type(error).__name__}",
                     f"error={error}",
                     f"rehearsal_results={len(rehearsal_results)}",
+                    f"feature_schema_version={run_config['feature_schema_version']}",
+                    f"feature_snapshot_count={run_config['feature_snapshot_count']}",
+                    f"decision_completed_at_ns={run_config['decision_completed_at_ns']}",
+                    f"physical_execution_started_at_ns={run_config['physical_execution_started_at_ns']}",
                     "",
                 ]
             ),
@@ -476,6 +495,7 @@ def _typed_candidates(
                 parent_scene_version=scene_version,
                 producer_agent="rehearsal-artifact",
                 raw_subgraph=local,
+                rewrite_report=rewrite_report_for(local, local),
             )
         )
         graphs[spec.candidate_id] = graph

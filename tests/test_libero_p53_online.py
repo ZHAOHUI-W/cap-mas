@@ -585,6 +585,7 @@ def test_online_driver_persists_failure_artifacts_before_reraising(tmp_path) -> 
             output_root=tmp_path / "runs",
             pool_config=RehearsalPoolConfig(max_workers=1, timeout_s=1.0),
             run_fn=successful_run,
+            calibration_context=_calibration_context(),
             physical_executor=failing_physical_executor,
         )
 
@@ -597,6 +598,18 @@ def test_online_driver_persists_failure_artifacts_before_reraising(tmp_path) -> 
     assert failure["error"] == "physical executor unavailable"
     assert (run_dir / "logs" / "runner.log").exists()
     assert (run_dir / "manifest.json").exists()
+    run_config = json.loads((run_dir / "run_config.json").read_text(encoding="utf-8"))
+    summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+    log = (run_dir / "logs" / "runner.log").read_text(encoding="utf-8")
+    for artifact in (run_config, summary):
+        assert artifact["feature_schema_version"] == "p56.feature.v1"
+        assert artifact["feature_snapshot_count"] == len(candidates)
+        assert artifact["decision_completed_at_ns"] is not None
+        assert artifact["physical_execution_started_at_ns"] is not None
+    assert "feature_schema_version=p56.feature.v1" in log
+    assert "feature_snapshot_count=2" in log
+    assert "decision_completed_at_ns=" in log
+    assert "physical_execution_started_at_ns=" in log
 
 
 def test_online_capx_paths_prefer_libero_robosuite(monkeypatch) -> None:

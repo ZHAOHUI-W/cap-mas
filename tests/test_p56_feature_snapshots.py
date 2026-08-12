@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from capmas.contracts.action import SkillCall
 from capmas.contracts.calibration import CalibrationCollectionContext
 from capmas.contracts.candidates import (
     CandidateEvidence,
+    CandidateRewriteReport,
     EvidenceDimension,
     GeometryEvidence,
     GraphCandidate,
     PerceptionEvidence,
+    rewrite_report_for,
     subgraph_fingerprint,
 )
 from capmas.contracts.core import SkillRef
@@ -45,6 +49,7 @@ def _candidate(evidence: CandidateEvidence | None = None) -> GraphCandidate:
         parent_scene_version=7,
         producer_agent="test",
         evidence=evidence,
+        rewrite_report=rewrite_report_for(subgraph, subgraph),
     )
 
 
@@ -169,6 +174,70 @@ def test_feature_snapshot_preserves_unknown_dimensions() -> None:
     assert snapshot.feature_status["scene_freshness"] == "unknown"
     assert snapshot.correlation_groups["scene_freshness"] == "scene_grounding"
     assert all(value is None for value in snapshot.features.values())
+
+
+def test_snapshot_rewrite_lineage_requires_populated_matching_fingerprints() -> None:
+    candidate = _candidate()
+    fingerprint = subgraph_fingerprint(candidate.subgraph)
+    empty_default = replace(
+        candidate,
+        rewrite_report=CandidateRewriteReport("", ""),
+    )
+
+    with pytest.raises(ValueError, match="rewrite normalized fingerprint"):
+        capture_feature_snapshot(empty_default, _context())
+
+    mismatched = replace(
+        candidate,
+        rewrite_report=CandidateRewriteReport(
+            raw_fingerprint=fingerprint,
+            normalized_fingerprint="f" * 64,
+        ),
+    )
+    with pytest.raises(ValueError, match="rewrite normalized fingerprint"):
+        capture_feature_snapshot(mismatched, _context())
+
+    mismatched_raw = replace(
+        candidate,
+        raw_subgraph=candidate.subgraph,
+        rewrite_report=CandidateRewriteReport(
+            raw_fingerprint="e" * 64,
+            normalized_fingerprint=fingerprint,
+        ),
+    )
+    with pytest.raises(ValueError, match="rewrite raw fingerprint"):
+        capture_feature_snapshot(mismatched_raw, _context())
+
+    without_rewrite = replace(
+        candidate,
+        rewrite_report=CandidateRewriteReport(
+            raw_fingerprint=fingerprint,
+            normalized_fingerprint=fingerprint,
+        ),
+    )
+    snapshot = capture_feature_snapshot(without_rewrite, _context())
+
+    assert snapshot.candidate_fingerprint == fingerprint
+    assert snapshot.rewrite_metadata["raw_fingerprint"] == fingerprint
+    assert snapshot.rewrite_metadata["normalized_fingerprint"] == fingerprint
+
+
+def test_snapshot_geometry_lineage_inherits_map_and_preserves_provider_version() -> None:
+    snapshot = capture_feature_snapshot(_candidate(_mixed_evidence()), _context())
+
+    assert snapshot.map_version == 3
+    assert snapshot.evidence_providers["geometry"] == "geometry-v1"
+    assert snapshot.evidence_providers["geometry_version"] == "1.0"
+
+
+def test_snapshot_rejects_declared_evidence_without_aggregate_scene_version() -> None:
+    evidence = CandidateEvidence(
+        available_metrics=("rehearsal",),
+        rehearsal_success_rate=1.0,
+    )
+
+    with pytest.raises(ValueError, match="evidence scene version"):
+        capture_feature_snapshot(_candidate(evidence), _context())
 
 
 def test_static_verifier_with_only_unknown_results_remains_unknown() -> None:
