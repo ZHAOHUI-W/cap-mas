@@ -28,7 +28,7 @@ def planned_horizon(graph: MissionGraph) -> HorizonLabel:
         return (
             sum(_is_action_bearing(subgraph) for subgraph in subgraphs),
             sum(_action_count(subgraph) for subgraph in subgraphs),
-            sum(not _is_action_bearing(subgraph) for subgraph in subgraphs),
+            sum(_is_checkpoint_only(subgraph) for subgraph in subgraphs),
             path,
         )
 
@@ -37,7 +37,7 @@ def planned_horizon(graph: MissionGraph) -> HorizonLabel:
     return HorizonLabel(
         planned_critical_path_actions=sum(_action_count(subgraph) for subgraph in subgraphs),
         planned_critical_path_subgoals=sum(_is_action_bearing(subgraph) for subgraph in subgraphs),
-        planned_checkpoint_subgraphs=sum(not _is_action_bearing(subgraph) for subgraph in subgraphs),
+        planned_checkpoint_subgraphs=sum(_is_checkpoint_only(subgraph) for subgraph in subgraphs),
         attempted_actions=None,
         completed_actions=None,
         attempted_subgoals=None,
@@ -140,6 +140,12 @@ def _successful_paths(graph: MissionGraph) -> Iterable[tuple[str, ...]]:
 
 def _is_action_bearing(subgraph: SubgraphSpec) -> bool:
     return any(node.node_type == "action" for node in subgraph.nodes)
+
+
+def _is_checkpoint_only(subgraph: SubgraphSpec) -> bool:
+    return not _is_action_bearing(subgraph) and any(
+        node.node_type == "checkpoint" for node in subgraph.nodes
+    )
 
 
 def _action_count(subgraph: SubgraphSpec) -> int:

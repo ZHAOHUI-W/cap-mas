@@ -48,6 +48,14 @@ def _checkpoint(node_id: str) -> SubgraphNodeSpec:
     )
 
 
+def _router(node_id: str) -> SubgraphNodeSpec:
+    return SubgraphNodeSpec(
+        node_id=node_id,
+        description=node_id,
+        node_type="router",
+    )
+
+
 def _subgraph(
     subgraph_id: str,
     nodes: tuple[SubgraphNodeSpec, ...],
@@ -190,6 +198,34 @@ def test_checkpoint_only_subgraph_does_not_inflate_planned_bucket() -> None:
     assert label.planned_critical_path_subgoals == 2
     assert label.planned_checkpoint_subgraphs == 1
     assert horizon_bucket(label) == "H2-3"
+
+
+def test_router_only_subgraphs_do_not_count_or_affect_planned_path_selection() -> None:
+    start = _subgraph("start", (_action("start-action"),))
+    one_checkpoint = _subgraph("one-checkpoint", (_checkpoint("verify"),))
+    first_router = _subgraph("first-router", (_router("route-a"),))
+    second_router = _subgraph("second-router", (_router("route-b"),))
+    done = _subgraph("done", (_action("done-action"),))
+    graph = _mission(
+        start,
+        one_checkpoint,
+        first_router,
+        second_router,
+        done,
+        edges=(
+            MissionEdge("start", "one-checkpoint", "success"),
+            MissionEdge("one-checkpoint", "done", "success"),
+            MissionEdge("start", "first-router", "success"),
+            MissionEdge("first-router", "second-router", "success"),
+            MissionEdge("second-router", "done", "success"),
+        ),
+    )
+
+    label = planned_horizon(graph)
+
+    assert label.planned_critical_path_actions == 2
+    assert label.planned_critical_path_subgoals == 2
+    assert label.planned_checkpoint_subgraphs == 1
 
 
 def test_realized_horizon_counts_reentry_as_an_attempt() -> None:
