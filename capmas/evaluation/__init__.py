@@ -56,6 +56,15 @@ from capmas.evaluation.online_rehearsal import (
     select_with_rehearsal,
 )
 from capmas.evaluation.feature_snapshots import FEATURE_GROUPS_V1, capture_feature_snapshot
+from capmas.evaluation.dataset import (
+    DatasetAudit,
+    LeakageFinding,
+    assert_dataset_eligible,
+    assign_lineage_splits,
+    audit_calibration_dataset,
+    build_calibration_dataset,
+    normalize_physical_outcomes,
+)
 from capmas.evaluation.verifier_artifacts import (
     DynamicVerifierArtifact,
     collect_dynamic_verifier_artifacts,
@@ -122,6 +131,13 @@ __all__ = [  # noqa: RUF022
     "select_with_rehearsal",
     "FEATURE_GROUPS_V1",
     "capture_feature_snapshot",
+    "DatasetAudit",
+    "LeakageFinding",
+    "assert_dataset_eligible",
+    "assign_lineage_splits",
+    "audit_calibration_dataset",
+    "build_calibration_dataset",
+    "normalize_physical_outcomes",
     "DynamicVerifierArtifact",
     "collect_dynamic_verifier_artifacts",
     "static_verifier_artifacts_from_arbitrations",

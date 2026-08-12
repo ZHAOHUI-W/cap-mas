@@ -80,6 +80,31 @@ _OUTCOME_FIELDS = {
     "feature_snapshot",
     "dataset_split",
 }
+_LINEAGE_FIELDS = {
+    "episode_id",
+    "lineage_group_id",
+    "seed",
+    "split_identity",
+    "layout_pair_id",
+    "retry_of_episode_id",
+    "candidate_artifact_sha256",
+    "decision_boundary_ns",
+    "evaluator_observed_at_ns",
+}
+_DATASET_MANIFEST_FIELDS = {
+    "dataset_id",
+    "dataset_schema_version",
+    "feature_schema_version",
+    "outcomes",
+    "lineages",
+    "memory_skill_version",
+    "robot_skill_version",
+    "prompt_version",
+    "environment_version",
+    "code_revision",
+    "split_salt",
+    "manifest_sha256",
+}
 _PREDICTION_FIELDS = {
     "candidate_id",
     "rank_score",
@@ -499,6 +524,103 @@ class CalibrationOutcome:
 
 
 @dataclass(frozen=True)
+class CalibrationLineage:
+    episode_id: str
+    lineage_group_id: str
+    seed: int
+    split_identity: Literal["id", "ood", "native"]
+    layout_pair_id: str | None
+    retry_of_episode_id: str | None
+    candidate_artifact_sha256: str
+    decision_boundary_ns: int
+    evaluator_observed_at_ns: int | None
+
+    def __post_init__(self) -> None:
+        for name in ("episode_id", "lineage_group_id"):
+            _require_nonempty(getattr(self, name), name)
+        _require_nonnegative(self.seed, "seed")
+        _require_nonnegative(self.decision_boundary_ns, "decision_boundary_ns")
+        _require_nonnegative(self.evaluator_observed_at_ns, "evaluator_observed_at_ns")
+        _require_string_or_none(self.layout_pair_id, "layout_pair_id")
+        _require_string_or_none(self.retry_of_episode_id, "retry_of_episode_id")
+        _require_sha256(self.candidate_artifact_sha256, "candidate_artifact_sha256")
+        if self.split_identity not in {"id", "ood", "native"}:
+            raise ValueError("split_identity is invalid")
+
+    def to_dict(self) -> dict[str, object]:
+        return _sorted_dict(self)
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, object]) -> CalibrationLineage:
+        _require_fields(raw, _LINEAGE_FIELDS, "calibration lineage")
+        return cls(**cast(dict[str, Any], dict(raw)))
+
+
+@dataclass(frozen=True)
+class CalibrationDatasetManifest:
+    dataset_id: str
+    dataset_schema_version: str
+    feature_schema_version: str
+    outcomes: tuple[CalibrationOutcome, ...]
+    lineages: tuple[CalibrationLineage, ...]
+    memory_skill_version: str
+    robot_skill_version: str
+    prompt_version: str
+    environment_version: str
+    code_revision: str
+    split_salt: str
+    manifest_sha256: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.outcomes, tuple) or any(
+            not isinstance(outcome, CalibrationOutcome) for outcome in self.outcomes
+        ):
+            raise TypeError("outcomes must be a tuple of CalibrationOutcome values")
+        if not isinstance(self.lineages, tuple) or any(
+            not isinstance(lineage, CalibrationLineage) for lineage in self.lineages
+        ):
+            raise TypeError("lineages must be a tuple of CalibrationLineage values")
+        for name in (
+            "dataset_schema_version",
+            "feature_schema_version",
+            "memory_skill_version",
+            "robot_skill_version",
+            "prompt_version",
+            "environment_version",
+            "code_revision",
+            "split_salt",
+        ):
+            _require_nonempty(getattr(self, name), name)
+        if self.dataset_id:
+            if not self.dataset_id.startswith("sha256:"):
+                raise ValueError("dataset_id must use the sha256: prefix")
+            _require_sha256(self.dataset_id.removeprefix("sha256:"), "dataset_id digest")
+        if self.manifest_sha256:
+            _require_sha256(self.manifest_sha256, "manifest_sha256")
+
+    def to_dict(self) -> dict[str, object]:
+        return _sorted_dict(self)
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, object]) -> CalibrationDatasetManifest:
+        _require_fields(raw, _DATASET_MANIFEST_FIELDS, "calibration dataset manifest")
+        data = dict(raw)
+        outcomes = data["outcomes"]
+        lineages = data["lineages"]
+        if not isinstance(outcomes, (tuple, list)) or not isinstance(lineages, (tuple, list)):
+            raise TypeError("manifest outcomes and lineages must be sequences")
+        data["outcomes"] = tuple(
+            CalibrationOutcome.from_dict(cast(Mapping[str, object], outcome))
+            for outcome in outcomes
+        )
+        data["lineages"] = tuple(
+            CalibrationLineage.from_dict(cast(Mapping[str, object], lineage))
+            for lineage in lineages
+        )
+        return cls(**cast(dict[str, Any], data))
+
+
+@dataclass(frozen=True)
 class CalibrationPrediction:
     candidate_id: str
     rank_score: float | None
@@ -563,6 +685,8 @@ __all__ = [
     "FEATURE_SCHEMA_VERSION",
     "HORIZON_SCHEMA_VERSION",
     "CalibrationCollectionContext",
+    "CalibrationDatasetManifest",
+    "CalibrationLineage",
     "CalibrationOutcome",
     "CalibrationPrediction",
     "CandidateFeatureSnapshot",
