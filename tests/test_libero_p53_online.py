@@ -11,10 +11,10 @@ from capmas.contracts.graph import CheckpointSpec, MissionGraph, SubgraphNodeSpe
 from capmas.contracts.scene import ObjectTrack, SceneSnapshot
 from capmas.evaluation.rehearsal import RehearsalResult
 from capmas.evaluation.rehearsal_evidence import RehearsalPoolConfig
-from scripts.run_libero_p53_online import _physical_result_payload, _scene_debug_payload
-from capmas.evaluation.evidence_cache import VersionedEvidenceCache
 from capmas.graph.serialization import mission_graph_to_dict
 from scripts.run_libero_p53_online import (
+    _physical_result_payload,
+    _scene_debug_payload,
     _setup_capx_paths,
     load_online_candidates,
     run_online_experiment,
@@ -169,6 +169,54 @@ def test_physical_payload_preserves_graph_failure_metadata() -> None:
     assert payload["failure"]["node_id"] == "pick-action"
     assert payload["failure"]["subgraph_id"] == "pick"
     assert payload["trace_count"] == 1
+    assert payload["horizon"]["planned_valid"] is False
+
+
+def test_physical_payload_persists_graph_events_and_horizon() -> None:
+    from types import SimpleNamespace
+
+    from capmas.contracts.trace import GraphExecutionEvent
+    from capmas.graph.serialization import mission_graph_from_dict
+
+    graph = mission_graph_from_dict(_graph_payload("telemetry"))
+    event = GraphExecutionEvent(
+        sequence=0,
+        kind="subgraph_started",
+        subgraph_id="sg_pick",
+        node_id=None,
+        node_type=None,
+        attempt=1,
+        outcome=None,
+        occurred_at_ns=1,
+    )
+    result = SimpleNamespace(
+        completed=True,
+        traces=(),
+        failure=None,
+        terminal_subgraph="sg_pick",
+        next_subgraph=None,
+        events=(event,),
+    )
+
+    payload = _physical_result_payload(
+        result,
+        evaluator_success=True,
+        graph=graph,
+    )
+
+    assert payload["graph_events"] == [
+        {
+            "sequence": 0,
+            "kind": "subgraph_started",
+            "subgraph_id": "sg_pick",
+            "node_id": None,
+            "node_type": None,
+            "attempt": 1,
+            "outcome": None,
+            "occurred_at_ns": 1,
+        }
+    ]
+    assert payload["horizon"]["planned_valid"] is True
 
 
 def test_scene_debug_payload_includes_placement_pose() -> None:

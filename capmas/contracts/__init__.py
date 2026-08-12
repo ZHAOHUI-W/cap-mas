@@ -69,7 +69,12 @@ from capmas.contracts.staged import (
     TopologySubgoal,
 )
 from capmas.contracts.strategy import StrategyProfile
-from capmas.contracts.trace import ExecutionTrace, SkillTrace
+from capmas.contracts.trace import (
+    ExecutionTrace,
+    GraphEventKind,
+    GraphExecutionEvent,
+    SkillTrace,
+)
 from capmas.contracts.verification import PredicateReport, VerificationResult
 
 __all__ = [
@@ -107,6 +112,8 @@ __all__ = [
     "GeometryEvidence",
     "GraphCandidate",
     "GraphEdge",
+    "GraphEventKind",
+    "GraphExecutionEvent",
     "GraphPolicyAgent",
     "GroundedPolicyAgent",
     "HorizonLabel",

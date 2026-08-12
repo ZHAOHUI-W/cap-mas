@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass, replace
 import os
-from pathlib import Path
 import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import asdict, dataclass, replace
+from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
@@ -26,11 +26,12 @@ from capmas.evaluation.candidate_identity import (
 )
 from capmas.evaluation.evidence_cache import VersionedEvidenceCache
 from capmas.evaluation.evidence_contracts import EvidenceRequestContext
+from capmas.evaluation.labels import extract_horizon
 from capmas.evaluation.libero_rehearsal import LiberoRehearsalConfig, LiberoRehearsalWorker
 from capmas.evaluation.online_rehearsal import (
     RehearsalArbitrationReport,
-    RehearsalMode,
     RehearsalEvidenceProvider,
+    RehearsalMode,
     select_with_rehearsal,
 )
 from capmas.evaluation.phase5_artifacts import Phase5RunDirectory
@@ -46,7 +47,6 @@ from scripts.run_libero_p53_rehearsal import (
     build_rehearsal_jobs,
     parse_candidate_mapping,
 )
-
 
 PhysicalExecutor = Callable[[GraphCandidate, MissionGraph], object]
 RehearsalRunFn = Callable[..., tuple[RehearsalResult, ...]]
@@ -412,7 +412,7 @@ def _write_failure_artifacts(
             ),
         )
         run_dir.finalize_manifest()
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         # Failure reporting must not replace the exception that caused the run
         # to fail. The run directory itself remains available for inspection.
         pass
@@ -524,6 +524,7 @@ def _physical_result_payload(
     evaluator_success: bool,
     layout_report: object | None = None,
     scene_diagnostics: Mapping[str, object] | None = None,
+    graph: MissionGraph | None = None,
 ) -> dict[str, object]:
     """Serialize graph execution failure context at the physical boundary."""
     failure = getattr(result, "failure", None)
@@ -548,7 +549,7 @@ def _physical_result_payload(
     completed = bool(getattr(result, "completed", False))
     failure_class = failure_payload.get("failure_class") if failure_payload else None
     failure_reason = failure_payload.get("message") if failure_payload else None
-    return {
+    payload = {
         "completed": completed,
         "evaluator_success": bool(evaluator_success),
         "success": bool(completed and evaluator_success),
@@ -566,6 +567,39 @@ def _physical_result_payload(
         "layout_application": layout_report,
         "scene_diagnostics": dict(scene_diagnostics or {}),
     }
+    if graph is not None:
+        events = tuple(getattr(result, "events", ()))
+        payload["graph_events"] = [
+            {
+                "sequence": event.sequence,
+                "kind": event.kind,
+                "subgraph_id": event.subgraph_id,
+                "node_id": event.node_id,
+                "node_type": event.node_type,
+                "attempt": event.attempt,
+                "outcome": event.outcome,
+                "occurred_at_ns": event.occurred_at_ns,
+            }
+            for event in events
+        ]
+        payload["horizon"] = extract_horizon(graph, events).to_dict()
+    else:
+        payload["horizon"] = {
+            "planned_critical_path_actions": None,
+            "planned_critical_path_subgoals": None,
+            "planned_checkpoint_subgraphs": None,
+            "attempted_actions": None,
+            "completed_actions": None,
+            "attempted_subgoals": None,
+            "completed_subgoals": None,
+            "attempted_checkpoints": None,
+            "completed_checkpoints": None,
+            "planned_source": "unknown",
+            "realized_source": "unknown",
+            "planned_valid": False,
+            "realized_valid": False,
+        }
+    return payload
 
 
 def _scene_debug_payload(
@@ -652,7 +686,7 @@ def _physical_sim_debug_payload(
         body_names = [
             model.body_id2name(index) for index in range(int(model.nbody))
         ]
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {
             "available": False,
             "reason": f"MuJoCo pose inspection failed: {type(exc).__name__}: {exc}",
@@ -724,7 +758,7 @@ def _setup_capx_paths() -> None:
     try:
         import importlib
 
-        import robosuite
+        import robosuite  # noqa: F401
 
         capx_robosuite = capx_root / "capx" / "third_party" / "robosuite" / "robosuite"
         for subpackage in ("controllers", "utils"):
@@ -747,6 +781,7 @@ def _build_live_executor(
     layout_variant: Mapping[str, object] | None = None,
 ) -> PhysicalExecutor:
     from capmas.backends.capx_libero_factory import build_capx_runtime_from_yaml
+    from capmas.evaluation.layout_variants import LayoutResetHook
     from capmas.runtime.action_lease import ActionLeaseManager
     from capmas.runtime.artifact_bus import ArtifactStore
     from capmas.runtime.graph_interpreter import FixedGraphInterpreter
@@ -757,7 +792,6 @@ def _build_live_executor(
         LiberoObservableVerifier,
         ground_libero_mission_graph,
     )
-    from capmas.evaluation.layout_variants import LayoutResetHook
 
     def execute(_candidate: GraphCandidate, graph: MissionGraph) -> object:
         bundle = build_capx_runtime_from_yaml(
@@ -801,6 +835,7 @@ def _build_live_executor(
             return _physical_result_payload(
                 result,
                 evaluator_success=evaluator_success,
+                graph=graph,
                 layout_report=getattr(
                     bundle.low_level_environment,
                     "_capmas_layout_report",

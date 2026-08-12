@@ -1,5 +1,6 @@
 """Benchmark and learning metrics."""
 
+# ruff: noqa: I001
 from capmas.evaluation.parity import (
     NormalizedEpisode,
     ParityComparison,
@@ -31,6 +32,7 @@ from capmas.evaluation.evidence_cache import (
     EvidenceCacheStats,
     VersionedEvidenceCache,
 )
+from capmas.evaluation.labels import extract_horizon, planned_horizon, realized_horizon
 from capmas.evaluation.libero_rehearsal import (
     LiberoRehearsalConfig,
     LiberoRehearsalWorker,
@@ -79,7 +81,7 @@ from capmas.evaluation.ood_statistics import (
     wilson_interval,
 )
 
-__all__ = [
+__all__ = [  # noqa: RUF022
     "CandidateIdentity",
     "candidate_identity_from_raw_graph",
     "raw_graph_fingerprint",
@@ -100,6 +102,9 @@ __all__ = [
     "EvidenceCacheKey",
     "EvidenceCacheStats",
     "VersionedEvidenceCache",
+    "extract_horizon",
+    "planned_horizon",
+    "realized_horizon",
     "LiberoRehearsalConfig",
     "LiberoRehearsalWorker",
     "run_libero_rehearsal_job",

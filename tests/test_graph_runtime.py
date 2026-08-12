@@ -12,8 +12,8 @@ from capmas.contracts.graph import (
     CheckpointSpec,
     GraphEdge,
     LoopSpec,
-    MissionEdge,
     MissionBinding,
+    MissionEdge,
     MissionGraph,
     PortBinding,
     PortSpec,
@@ -32,7 +32,6 @@ from capmas.graph.validator import GraphValidator
 from capmas.runtime.artifact_bus import ArtifactEnvelope, ArtifactStore, EventBus, RuntimeEvent
 from capmas.runtime.graph_interpreter import FixedGraphInterpreter
 from capmas.runtime.recovery import MappingRecoverySelector
-
 
 NOOP = SkillRef("noop", "1.0.0")
 
@@ -171,9 +170,9 @@ def test_fixed_graph_interpreter_dispatches_action_nodes_in_order() -> None:
             self.calls: list[str] = []
 
         def dispatch(self, contract, current_scene):
-            from capmas.runtime.orchestrator import CycleResult
             from capmas.contracts.trace import ExecutionTrace
             from capmas.contracts.verification import PredicateReport, VerificationResult
+            from capmas.runtime.orchestrator import CycleResult
 
             self.calls.append(contract.subgoal_id)
             after = replace(current_scene, scene_version=current_scene.scene_version + 1)
@@ -223,9 +222,9 @@ def test_fixed_graph_interpreter_can_stop_after_one_verified_subgraph() -> None:
 
     class Scheduler:
         def dispatch(self, contract, current_scene):
-            from capmas.runtime.orchestrator import CycleResult
             from capmas.contracts.trace import ExecutionTrace
             from capmas.contracts.verification import PredicateReport, VerificationResult
+            from capmas.runtime.orchestrator import CycleResult
 
             after = replace(current_scene, scene_version=current_scene.scene_version + 1)
             verification = VerificationResult(
@@ -443,9 +442,9 @@ def test_fixed_graph_interpreter_resolves_local_and_mission_port_bindings() -> N
             self.calls: list[tuple[str, dict[str, object]]] = []
 
         def dispatch(self, contract, current_scene):
-            from capmas.runtime.orchestrator import CycleResult
             from capmas.contracts.trace import ExecutionTrace, SkillTrace
             from capmas.contracts.verification import PredicateReport, VerificationResult
+            from capmas.runtime.orchestrator import CycleResult
 
             args = contract.skills[0].args
             self.calls.append((contract.subgoal_id, args))
@@ -659,9 +658,9 @@ def test_interpreter_publishes_failure_once_and_uses_declared_recovery_edge() ->
             self.calls = 0
 
         def dispatch(self, contract, current_scene):
-            from capmas.runtime.orchestrator import CycleResult
             from capmas.contracts.trace import ExecutionTrace
             from capmas.contracts.verification import VerificationResult
+            from capmas.runtime.orchestrator import CycleResult
 
             self.calls += 1
             after = replace(current_scene, scene_version=current_scene.scene_version + 1)
