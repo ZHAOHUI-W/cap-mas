@@ -15,12 +15,15 @@ from capmas.contracts.calibration import (
     HorizonLabel,
 )
 from capmas.evaluation.dataset import (
+    DatasetAudit,
+    LeakageFinding,
     assert_dataset_eligible,
     assign_lineage_splits,
     audit_calibration_dataset,
     build_calibration_dataset,
     normalize_physical_outcomes,
 )
+from capmas.evaluation.feature_snapshots import FEATURE_GROUPS_V1
 
 
 def _horizon() -> HorizonLabel:
@@ -48,7 +51,7 @@ def _snapshot(
     fingerprint: str | None = None,
     captured_at_ns: int = 100,
     lane: str = "physical",
-    feature_name: str = "scene_freshness",
+    feature_name: str | None = None,
     feature_value: float | None = None,
     memory_skill_version: str = "memory-v1",
     robot_skill_version: str = "robot-v1",
@@ -64,9 +67,15 @@ def _snapshot(
         feature_schema_version=FEATURE_SCHEMA_VERSION,
         captured_at_ns=captured_at_ns,
         collection_lane=lane,  # type: ignore[arg-type]
-        features={feature_name: feature_value},
-        feature_status={feature_name: "present" if feature_value is not None else "unknown"},
-        correlation_groups={feature_name: "scene_grounding"},
+        features={
+            name: feature_value if name == feature_name else None
+            for name in FEATURE_GROUPS_V1
+        },
+        feature_status={
+            name: "present" if name == feature_name and feature_value is not None else "unknown"
+            for name in FEATURE_GROUPS_V1
+        },
+        correlation_groups=FEATURE_GROUPS_V1,
         memory_skill_version=memory_skill_version,
         robot_skill_version=robot_skill_version,
         evidence_refs=("artifact://decision-evidence",),
@@ -134,7 +143,7 @@ def _manifest(
     return build_calibration_dataset(
         outcomes,
         lineages,
-        split_assignments={lineage.episode_id: "train" for lineage in lineages},
+        split_assignments=assign_lineage_splits(lineages, salt="frozen-split-v1"),
         memory_skill_version="memory-v1",
         robot_skill_version="robot-v1",
         prompt_version="prompt-v1",
@@ -217,6 +226,11 @@ def test_inconclusive_executed_candidate_is_tier_c_without_physical_labels() -> 
         ("GEOMETRY_GATE", "rejected_safety"),
         ("PERCEPTION_GATE", "rejected_safety"),
         ("GRAPH_SCHEMA_INVALID", "rejected_schema"),
+        ("JSON_INVALID", "rejected_schema"),
+        ("JSON_NOT_OBJECT", "rejected_schema"),
+        ("STRUCTURED_PAYLOAD_INVALID", "rejected_schema"),
+        ("REQUEST_ID_MISMATCH", "rejected_schema"),
+        ("MISSION_ID_MISMATCH", "rejected_schema"),
         ("UNREACHABLE_SUBGRAPH", "rejected_schema"),
         ("DUPLICATE_NODE", "rejected_schema"),
         ("DANGLING_EDGE", "rejected_schema"),
@@ -286,6 +300,46 @@ def test_split_ratios_fail_closed(
         )
 
 
+def test_build_rejects_split_assignments_that_differ_from_default_lineage_split() -> None:
+    lineage = _lineage("episode")
+    expected = assign_lineage_splits((lineage,), salt="frozen-split-v1")
+    conflicting_split = next(split for split in ("train", "calibration", "test") if split != expected["episode"])
+
+    with pytest.raises(ValueError, match="default lineage split"):
+        build_calibration_dataset(
+            (_outcome(dataset_split="unassigned"),),
+            (lineage,),
+            split_assignments={"episode": conflicting_split},
+            memory_skill_version="memory-v1",
+            robot_skill_version="robot-v1",
+            prompt_version="prompt-v1",
+            environment_version="libero-v1",
+            code_revision="abc123",
+            split_salt="frozen-split-v1",
+        )
+
+
+def test_audit_rejects_manifest_with_tampered_default_lineage_split() -> None:
+    lineage = _lineage("episode")
+    assignment = assign_lineage_splits((lineage,), salt="frozen-split-v1")
+    manifest = build_calibration_dataset(
+        (_outcome(dataset_split="unassigned"),),
+        (lineage,),
+        split_assignments=assignment,
+        memory_skill_version="memory-v1",
+        robot_skill_version="robot-v1",
+        prompt_version="prompt-v1",
+        environment_version="libero-v1",
+        code_revision="abc123",
+        split_salt="frozen-split-v1",
+    )
+    expected = assignment["episode"]
+    tampered_split = next(split for split in ("train", "calibration", "test") if split != expected)
+    object.__setattr__(manifest.outcomes[0], "dataset_split", tampered_split)
+
+    assert "LINEAGE_SPLIT_ASSIGNMENT_MISMATCH" in _codes(manifest)
+
+
 def test_dataset_rejects_future_state_feature_timestamp() -> None:
     outcome = _outcome(snapshot_captured_at_ns=200)
     lineage = _lineage("episode", decision_boundary_ns=100)
@@ -334,14 +388,42 @@ def test_dataset_rejects_post_outcome_or_forbidden_v1_features(
     feature_name: str, code: str
 ) -> None:
     outcome = _outcome()
-    snapshot = _snapshot(
-        fingerprint="a" * 64,
-        feature_name=feature_name,
-        feature_value=1.0,
+    snapshot = replace(
+        outcome.feature_snapshot,
+        features={**outcome.feature_snapshot.features, feature_name: 1.0},
+        feature_status={**outcome.feature_snapshot.feature_status, feature_name: "present"},
+        correlation_groups={
+            **outcome.feature_snapshot.correlation_groups,
+            feature_name: "cost_risk",
+        },
     )
     object.__setattr__(outcome, "feature_snapshot", snapshot)
 
     assert code in _codes(_manifest((outcome,), (_lineage("episode"),)))
+
+
+@pytest.mark.parametrize(
+    ("features", "groups"),
+    [
+        ({"ood_pass_rate": None}, {"ood_pass_rate": "scene_grounding"}),
+        ({"scene_freshness": None}, {"scene_freshness": "cost_risk"}),
+        ({"dynamic_pass_rate": None}, {"dynamic_pass_rate": "cost_risk"}),
+        ({"ground_truth_label": None}, {"ground_truth_label": "cost_risk"}),
+    ],
+)
+def test_dataset_requires_exact_v1_feature_groups(
+    features: dict[str, float | None], groups: dict[str, str]
+) -> None:
+    outcome = _outcome()
+    snapshot = replace(
+        outcome.feature_snapshot,
+        features=features,
+        feature_status={name: "unknown" for name in features},
+        correlation_groups=groups,
+    )
+    object.__setattr__(outcome, "feature_snapshot", snapshot)
+
+    assert "FEATURE_SCHEMA_MISMATCH" in _codes(_manifest((outcome,), (_lineage("episode"),)))
 
 
 def test_dataset_rejects_conflicting_lineage_and_cross_split_groups() -> None:
@@ -422,7 +504,9 @@ def test_build_assigns_supervised_and_shadow_splits_and_canonical_digest() -> No
         dataset_split="unassigned",
     )
     kwargs = {
-        "split_assignments": {"episode": "calibration"},
+        "split_assignments": assign_lineage_splits(
+            (_lineage("episode"),), salt="frozen-split-v1"
+        ),
         "memory_skill_version": "memory-v1",
         "robot_skill_version": "robot-v1",
         "prompt_version": "prompt-v1",
@@ -434,7 +518,10 @@ def test_build_assigns_supervised_and_shadow_splits_and_canonical_digest() -> No
     first = build_calibration_dataset((tier_a, tier_c), (_lineage("episode"),), **kwargs)
     second = build_calibration_dataset((tier_a, tier_c), (_lineage("episode"),), **kwargs)
 
-    assert [row.dataset_split for row in first.outcomes] == ["calibration", "shadow"]
+    assert [row.dataset_split for row in first.outcomes] == [
+        kwargs["split_assignments"]["episode"],
+        "shadow",
+    ]
     assert first == second
     assert first.dataset_schema_version == DATASET_SCHEMA_VERSION
     assert first.dataset_id == f"sha256:{first.manifest_sha256}"
@@ -442,3 +529,30 @@ def test_build_assigns_supervised_and_shadow_splits_and_canonical_digest() -> No
     encoded = json.dumps(first.to_dict(), ensure_ascii=True, sort_keys=True, separators=(",", ":"))
     assert encoded.isascii()
     assert audit_calibration_dataset(first).passed is True
+
+
+@pytest.mark.parametrize(
+    ("passed", "findings"),
+    [
+        (True, (LeakageFinding("LEAK", (), "must fail"),)),
+        (False, ()),
+    ],
+)
+def test_dataset_audit_rejects_inconsistent_passed_flag(
+    passed: bool, findings: tuple[LeakageFinding, ...]
+) -> None:
+    with pytest.raises(ValueError, match="passed must equal"):
+        DatasetAudit(passed=passed, findings=findings, tier_counts={}, split_counts={})
+
+
+def test_eligibility_gate_rejects_a_forged_passing_audit() -> None:
+    audit = DatasetAudit(
+        passed=False,
+        findings=(LeakageFinding("LEAK", (), "must fail"),),
+        tier_counts={},
+        split_counts={},
+    )
+    object.__setattr__(audit, "passed", True)
+
+    with pytest.raises(ValueError, match="inconsistent passed flag"):
+        assert_dataset_eligible(audit)

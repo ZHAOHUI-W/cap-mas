@@ -19,11 +19,21 @@ from capmas.contracts.calibration import (
     DatasetSplit,
     HorizonLabel,
 )
+from capmas.evaluation.feature_snapshots import FEATURE_GROUPS_V1
 
 _SUPERVISED_SPLITS = frozenset({"train", "calibration", "test"})
 _STALE_REJECTION_CODES = frozenset({"STALE_SCENE", "STALE_EVIDENCE"})
 _SAFETY_REJECTION_CODES = frozenset(
     {"GEOMETRY_GATE", "PERCEPTION_GATE", "SAFETY_GATE", "MISSING_EVIDENCE"}
+)
+_DECODER_SCHEMA_REJECTION_CODES = frozenset(
+    {
+        "JSON_INVALID",
+        "JSON_NOT_OBJECT",
+        "STRUCTURED_PAYLOAD_INVALID",
+        "REQUEST_ID_MISMATCH",
+        "MISSION_ID_MISMATCH",
+    }
 )
 _GRAPH_VALIDATION_PREFIXES = (
     "AMBIGUOUS_",
@@ -62,6 +72,8 @@ class DatasetAudit:
     split_counts: Mapping[str, int]
 
     def __post_init__(self) -> None:
+        if self.passed != (not self.findings):
+            raise ValueError("passed must equal the absence of findings")
         object.__setattr__(self, "tier_counts", MappingProxyType(dict(self.tier_counts)))
         object.__setattr__(self, "split_counts", MappingProxyType(dict(self.split_counts)))
 
@@ -152,7 +164,8 @@ def _rejection_status(code: str | None) -> str:
     if code in _SAFETY_REJECTION_CODES or "GEOMETRY" in code or "SAFETY" in code:
         return "rejected_safety"
     if (
-        "SCHEMA" in code
+        code in _DECODER_SCHEMA_REJECTION_CODES
+        or code.endswith("_SCHEMA_INVALID")
         or "GRAPH" in code
         or "SUBGRAPH" in code
         or code.startswith(_GRAPH_VALIDATION_PREFIXES)
@@ -212,6 +225,10 @@ def build_calibration_dataset(
 ) -> CalibrationDatasetManifest:
     """Build an immutable manifest and bind its ID to the canonical digest."""
 
+    expected_assignments = assign_lineage_splits(lineages, salt=split_salt)
+    if dict(split_assignments) != expected_assignments:
+        raise ValueError("split assignments must match the default lineage split")
+
     normalized_outcomes: list[CalibrationOutcome] = []
     for outcome in outcomes:
         if outcome.tier == "A":
@@ -268,6 +285,7 @@ def audit_calibration_dataset(manifest: CalibrationDatasetManifest) -> DatasetAu
     _audit_manifest_identity(manifest, findings)
     _audit_lineages(lineages_by_episode, findings)
     _audit_group_splits(manifest, lineages_by_episode, outcomes_by_episode, findings)
+    _audit_default_split_assignments(manifest, lineages_by_episode, findings)
     _audit_supervised_keys(manifest.outcomes, findings)
     _audit_outcomes(manifest, lineages_by_episode, findings)
 
@@ -386,6 +404,25 @@ def _audit_supervised_keys(
             )
 
 
+def _audit_default_split_assignments(
+    manifest: CalibrationDatasetManifest,
+    lineages_by_episode: Mapping[str, list[CalibrationLineage]],
+    findings: list[LeakageFinding],
+) -> None:
+    expected_assignments = assign_lineage_splits(manifest.lineages, salt=manifest.split_salt)
+    for outcome in manifest.outcomes:
+        if outcome.tier != "A":
+            continue
+        expected_split = expected_assignments.get(outcome.episode_id)
+        if expected_split is None or outcome.dataset_split != expected_split:
+            _add_finding(
+                findings,
+                "LINEAGE_SPLIT_ASSIGNMENT_MISMATCH",
+                (outcome.episode_id,),
+                "Tier A split does not match the default lineage split",
+            )
+
+
 def _audit_outcomes(
     manifest: CalibrationDatasetManifest,
     lineages_by_episode: Mapping[str, list[CalibrationLineage]],
@@ -421,11 +458,19 @@ def _audit_outcomes(
                 episode_ids,
                 "outcome and feature snapshot identities do not match",
             )
-        if (
-            snapshot.feature_schema_version != manifest.feature_schema_version
-            or set(snapshot.features) != set(snapshot.feature_status)
-            or set(snapshot.features) != set(snapshot.correlation_groups)
-        ):
+        schema_matches = (
+            snapshot.feature_schema_version == manifest.feature_schema_version
+            and set(snapshot.features) == set(snapshot.feature_status)
+            and set(snapshot.features) == set(snapshot.correlation_groups)
+        )
+        if manifest.feature_schema_version == FEATURE_SCHEMA_VERSION:
+            schema_matches = (
+                schema_matches
+                and set(snapshot.features) == set(FEATURE_GROUPS_V1)
+                and set(snapshot.feature_status) == set(FEATURE_GROUPS_V1)
+                and dict(snapshot.correlation_groups) == FEATURE_GROUPS_V1
+            )
+        if not schema_matches:
             _add_finding(
                 findings,
                 "FEATURE_SCHEMA_MISMATCH",
@@ -539,6 +584,8 @@ def _add_finding(
 
 
 def assert_dataset_eligible(audit: DatasetAudit) -> None:
+    if audit.passed != (not audit.findings):
+        raise ValueError("calibration dataset audit has an inconsistent passed flag")
     if audit.passed:
         return
     details = "; ".join(f"{finding.code}: {finding.detail}" for finding in audit.findings)
