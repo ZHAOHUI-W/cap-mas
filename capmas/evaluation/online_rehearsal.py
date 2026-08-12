@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-import time
 from typing import Literal
 
 from capmas.agents.arbiter import CandidateArbiter
@@ -21,7 +21,6 @@ from capmas.evaluation.evidence_cache import (
 )
 from capmas.evaluation.rehearsal_arbiter import merge_rehearsal_evidence
 from capmas.evaluation.rehearsal_evidence import RehearsalEvidence
-
 
 RehearsalMode = Literal["disabled", "shadow", "online_bounded"]
 RehearsalEvidenceProvider = Callable[
@@ -43,6 +42,7 @@ class RehearsalArbitrationReport:
     provider_latency_ms: float = 0.0
     fallback_reason: str | None = None
     cache_stats: EvidenceCacheStats | None = None
+    evidence_candidates: tuple[GraphCandidate, ...] = ()
 
     @property
     def would_change_selection(self) -> bool:
@@ -87,6 +87,7 @@ def select_with_rehearsal(
             evidence_aware=None,
             live=baseline,
             cache_stats=None,
+            evidence_candidates=live_candidates,
         )
 
     if provider is None:
@@ -98,6 +99,7 @@ def select_with_rehearsal(
             live=baseline,
             fallback_reason=fallback,
             cache_stats=evidence_cache.stats() if evidence_cache is not None else None,
+            evidence_candidates=live_candidates,
         )
 
     started = time.perf_counter()
@@ -106,7 +108,7 @@ def select_with_rehearsal(
         provided = effective_provider(live_candidates, scene)
         if not isinstance(provided, Mapping):
             raise TypeError("rehearsal provider must return a mapping")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return RehearsalArbitrationReport(
             mode=mode,
             baseline=baseline,
@@ -115,6 +117,7 @@ def select_with_rehearsal(
             provider_latency_ms=_elapsed_ms(started),
             fallback_reason=f"provider_error: {type(exc).__name__}: {exc}",
             cache_stats=evidence_cache.stats() if evidence_cache is not None else None,
+            evidence_candidates=live_candidates,
         )
 
     enriched: list[GraphCandidate] = []
@@ -134,7 +137,7 @@ def select_with_rehearsal(
                     include_in_arbiter=True,
                 )
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             rejections.append(f"{candidate.candidate_id}: {exc}")
             enriched.append(candidate)
         else:
@@ -168,6 +171,7 @@ def select_with_rehearsal(
         provider_latency_ms=_elapsed_ms(started),
         fallback_reason=fallback_reason,
         cache_stats=evidence_cache.stats() if evidence_cache is not None else None,
+        evidence_candidates=tuple(enriched),
     )
 
 

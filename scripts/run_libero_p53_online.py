@@ -17,6 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from capmas.agents.arbiter import CandidateArbiter
+from capmas.contracts.calibration import CalibrationCollectionContext, CandidateFeatureSnapshot
 from capmas.contracts.candidates import GraphCandidate, subgraph_fingerprint
 from capmas.contracts.graph import MissionGraph
 from capmas.contracts.scene import SceneSnapshot
@@ -26,6 +27,7 @@ from capmas.evaluation.candidate_identity import (
 )
 from capmas.evaluation.evidence_cache import VersionedEvidenceCache
 from capmas.evaluation.evidence_contracts import EvidenceRequestContext
+from capmas.evaluation.feature_snapshots import capture_feature_snapshot
 from capmas.evaluation.labels import extract_horizon
 from capmas.evaluation.libero_rehearsal import LiberoRehearsalConfig, LiberoRehearsalWorker
 from capmas.evaluation.online_rehearsal import (
@@ -61,6 +63,9 @@ class OnlineSelectionOutcome:
     physical_result: object | None
     provider_call_count: int
     selection_latency_ms: float
+    feature_snapshots: tuple[CandidateFeatureSnapshot, ...] = ()
+    decision_completed_at_ns: int | None = None
+    physical_execution_started_at_ns: int | None = None
 
 
 @dataclass(frozen=True)
@@ -123,6 +128,7 @@ def run_online_experiment(
     gpu: str = "5",
     run_fn: RehearsalRunFn = run_with_respawn,
     physical_executor: PhysicalExecutor | None = None,
+    calibration_context: CalibrationCollectionContext | None = None,
 ) -> OnlineSelectionOutcome:
     """Run rehearsal, select one live candidate, and execute it at most once."""
 
@@ -161,6 +167,12 @@ def run_online_experiment(
         "artifact_dir": str(run_dir.path),
         "provider_call_count": 0,
         "layout_variant": dict(layout_variant or {}),
+        "feature_schema_version": (
+            calibration_context.feature_schema_version if calibration_context is not None else None
+        ),
+        "feature_snapshot_count": 0,
+        "decision_completed_at_ns": None,
+        "physical_execution_started_at_ns": None,
     }
     run_dir.write_json("run_config.json", {**run_config, "status": "running"})
     rehearsal_results: list[RehearsalResult] = []
@@ -246,17 +258,34 @@ def run_online_experiment(
     assert report is not None
     run_config["provider_call_count"] = provider_call_count
 
+    decision_completed_at_ns = time.time_ns()
+    feature_snapshots: tuple[CandidateFeatureSnapshot, ...] = ()
+    if calibration_context is not None:
+        feature_snapshots = tuple(
+            capture_feature_snapshot(candidate, calibration_context)
+            for candidate in report.evidence_candidates
+        )
+        run_dir.write_json(
+            "evidence/calibration_feature_snapshots.json",
+            [snapshot.to_dict() for snapshot in feature_snapshots],
+        )
+    run_config["feature_snapshot_count"] = len(feature_snapshots)
+    run_config["decision_completed_at_ns"] = decision_completed_at_ns
+
     physical_candidate_id = (
         report.live.selected.candidate_id if report.live.selected is not None else None
     )
     physical_result = None
+    physical_execution_started_at_ns: int | None = None
     stage = "physical_execution"
     try:
         if physical_candidate_id is not None and physical_executor is not None:
             selected = report.live.selected
             assert selected is not None
+            physical_execution_started_at_ns = time.time_ns()
             physical_result = physical_executor(selected, typed.graphs[physical_candidate_id])
     except Exception as exc:
+        run_config["physical_execution_started_at_ns"] = physical_execution_started_at_ns
         _write_failure_artifacts(
             run_dir,
             run_config=run_config,
@@ -267,28 +296,10 @@ def run_online_experiment(
         )
         raise
 
-    run_dir.write_json(
-        "run_config.json",
-        {
-            "experiment": "P5.3.1_online_rehearsal_arbiter",
-            "config_path": str(Path(config_path).resolve()),
-            "candidate_ids": [candidate.candidate_id for candidate in candidates],
-            "scene_version": scene_version,
-            "seed": seed,
-            "mode": mode,
-            "cache_mode": cache_mode,
-            "selection_repeats": selection_repeats,
-            "max_workers": pool_config.max_workers,
-            "timeout_s": pool_config.timeout_s,
-            "max_restarts": pool_config.max_restarts,
-            "max_steps": max_steps,
-            "gpu": gpu,
-            "physical_execution_count": int(physical_candidate_id is not None),
-            "artifact_dir": str(run_dir.path),
-            "provider_call_count": provider_call_count,
-            "selection_latency_ms": selection_latency_ms,
-        },
-    )
+    run_config["physical_execution_started_at_ns"] = physical_execution_started_at_ns
+    run_config["physical_execution_count"] = int(physical_candidate_id is not None)
+    run_config["selection_latency_ms"] = selection_latency_ms
+    run_dir.write_json("run_config.json", run_config)
     run_dir.write_json("results/rehearsal.json", [asdict(item) for item in rehearsal_results])
     if evidence_cache is not None:
         run_dir.write_json(
@@ -316,6 +327,10 @@ def run_online_experiment(
                 f"physical_execution_count={int(physical_candidate_id is not None)}",
                 f"provider_call_count={provider_call_count}",
                 f"selection_latency_ms={selection_latency_ms:.3f}",
+                f"feature_schema_version={run_config['feature_schema_version']}",
+                f"feature_snapshot_count={len(feature_snapshots)}",
+                f"decision_completed_at_ns={decision_completed_at_ns}",
+                f"physical_execution_started_at_ns={physical_execution_started_at_ns}",
                 f"provider_latency_ms={report.provider_latency_ms:.3f}",
                 f"cache_hits={report.cache_stats.hits if report.cache_stats else 0}",
                 f"cache_stores={report.cache_stats.stores if report.cache_stats else 0}",
@@ -335,6 +350,10 @@ def run_online_experiment(
             "physical_execution_count": int(physical_candidate_id is not None),
             "provider_call_count": provider_call_count,
             "selection_latency_ms": selection_latency_ms,
+            "feature_schema_version": run_config["feature_schema_version"],
+            "feature_snapshot_count": len(feature_snapshots),
+            "decision_completed_at_ns": decision_completed_at_ns,
+            "physical_execution_started_at_ns": physical_execution_started_at_ns,
             "physical_result": physical_result,
             "selection": selection_payload,
         },
@@ -363,6 +382,9 @@ def run_online_experiment(
         physical_result=physical_result,
         provider_call_count=provider_call_count,
         selection_latency_ms=selection_latency_ms,
+        feature_snapshots=feature_snapshots,
+        decision_completed_at_ns=decision_completed_at_ns,
+        physical_execution_started_at_ns=physical_execution_started_at_ns,
     )
 
 

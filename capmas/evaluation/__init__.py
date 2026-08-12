@@ -55,6 +55,7 @@ from capmas.evaluation.online_rehearsal import (
     RehearsalMode,
     select_with_rehearsal,
 )
+from capmas.evaluation.feature_snapshots import FEATURE_GROUPS_V1, capture_feature_snapshot
 from capmas.evaluation.verifier_artifacts import (
     DynamicVerifierArtifact,
     collect_dynamic_verifier_artifacts,
@@ -119,6 +120,8 @@ __all__ = [  # noqa: RUF022
     "RehearsalEvidenceProvider",
     "RehearsalMode",
     "select_with_rehearsal",
+    "FEATURE_GROUPS_V1",
+    "capture_feature_snapshot",
     "DynamicVerifierArtifact",
     "collect_dynamic_verifier_artifacts",
     "static_verifier_artifacts_from_arbitrations",

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from capmas.contracts.action import SkillCall
+from capmas.contracts.calibration import CalibrationCollectionContext
 from capmas.contracts.core import SkillRef
 from capmas.contracts.graph import CheckpointSpec, MissionGraph, SubgraphNodeSpec, SubgraphSpec
 from capmas.contracts.scene import ObjectTrack, SceneSnapshot
@@ -87,6 +88,93 @@ def _artifact(tmp_path):
         encoding="utf-8",
     )
     return path
+
+
+def _calibration_context() -> CalibrationCollectionContext:
+    return CalibrationCollectionContext(
+        episode_id="online-episode",
+        episode_epoch=1,
+        family_id="online-family",
+        feature_schema_version="p56.feature.v1",
+        memory_skill_version="memory-v1",
+        robot_skill_version="robot-v1",
+    )
+
+
+def test_online_driver_writes_decision_snapshots_before_physical_execution(tmp_path) -> None:
+    candidates = load_online_candidates(_artifact(tmp_path))
+    observed_artifacts = []
+
+    def fake_run(jobs, worker_factory, pool_config):
+        del worker_factory, pool_config
+        return tuple(
+            RehearsalResult(
+                candidate_id=job.candidate_id,
+                seed=job.seed,
+                success=True,
+                latency_ms=1.0,
+                scene_version=job.scene_version,
+                candidate_fingerprint=job.candidate_fingerprint,
+                fingerprint_scope=job.fingerprint_scope,
+                arbiter_subgraph_id=job.arbiter_subgraph_id,
+                arbiter_fingerprint=job.arbiter_fingerprint,
+            )
+            for job in jobs
+        )
+
+    def physical(_candidate, _graph):
+        artifacts = list(tmp_path.rglob("evidence/calibration_feature_snapshots.json"))
+        observed_artifacts.append(artifacts)
+        return {"completed": True}
+
+    outcome = run_online_experiment(
+        config_path="libero.yaml",
+        candidates=candidates,
+        seed=1,
+        scene_version=4,
+        mode="online_bounded",
+        output_root=tmp_path / "runs",
+        pool_config=RehearsalPoolConfig(max_workers=1, timeout_s=1.0),
+        run_fn=fake_run,
+        calibration_context=_calibration_context(),
+        physical_executor=physical,
+    )
+
+    assert observed_artifacts and observed_artifacts[0]
+    snapshots = json.loads(observed_artifacts[0][0].read_text(encoding="utf-8"))
+    assert len(snapshots) == len(candidates)
+    assert outcome.feature_snapshots
+    assert outcome.decision_completed_at_ns is not None
+    assert outcome.physical_execution_started_at_ns is not None
+    assert outcome.decision_completed_at_ns <= outcome.physical_execution_started_at_ns
+    run_config = json.loads((outcome.run_dir.path / "run_config.json").read_text())
+    summary = json.loads((outcome.run_dir.path / "summary.json").read_text())
+    assert run_config["feature_snapshot_count"] == len(candidates)
+    assert run_config["feature_schema_version"] == "p56.feature.v1"
+    assert summary["decision_completed_at_ns"] == outcome.decision_completed_at_ns
+    assert "physical_execution_started_at_ns=" in (
+        outcome.run_dir.path / "logs" / "runner.log"
+    ).read_text()
+
+
+def test_online_driver_without_calibration_context_keeps_empty_snapshot_provenance(tmp_path) -> None:
+    candidates = load_online_candidates(_artifact(tmp_path))
+
+    outcome = run_online_experiment(
+        config_path="libero.yaml",
+        candidates=candidates,
+        seed=1,
+        scene_version=4,
+        mode="disabled",
+        output_root=tmp_path / "runs",
+        pool_config=RehearsalPoolConfig(max_workers=1, timeout_s=1.0),
+        physical_executor=lambda _candidate, _graph: {"completed": True},
+    )
+
+    assert outcome.feature_snapshots == ()
+    assert outcome.decision_completed_at_ns is not None
+    assert outcome.physical_execution_started_at_ns is not None
+    assert not (outcome.run_dir.path / "evidence/calibration_feature_snapshots.json").exists()
 
 
 def test_online_driver_rehearses_candidates_then_executes_one_winner(tmp_path) -> None:
