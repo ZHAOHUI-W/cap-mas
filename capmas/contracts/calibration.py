@@ -140,6 +140,17 @@ def _mapping_proxy(value: Mapping[str, _T], name: str) -> Mapping[str, _T]:
     return MappingProxyType(dict(_as_mapping(value, name)))
 
 
+def _string_mapping_proxy(value: Mapping[str, str], name: str) -> Mapping[str, str]:
+    raw = _as_mapping(value, name)
+    for key, item in raw.items():
+        normalized_key = key.lower().replace("-", "_")
+        if any(marker in normalized_key for marker in _SECRET_MARKERS):
+            raise ValueError(f"{name}.{key} must not contain secret material")
+        if not isinstance(item, str):
+            raise TypeError(f"{name} values must be strings")
+    return MappingProxyType(raw)
+
+
 def _plain(value: object) -> object:
     if hasattr(value, "to_dict") and callable(value.to_dict):
         return _plain(value.to_dict())
@@ -189,6 +200,11 @@ def _require_sha256(value: str, name: str) -> None:
 def _require_bool_or_none(value: object, name: str) -> None:
     if value is not None and not isinstance(value, bool):
         raise ValueError(f"{name} must be a boolean or None")
+
+
+def _require_string_or_none(value: object, name: str) -> None:
+    if value is not None and not isinstance(value, str):
+        raise ValueError(f"{name} must be a string or None")
 
 
 def _require_probability(value: float | None, name: str) -> None:
@@ -334,7 +350,7 @@ class CandidateFeatureSnapshot:
         object.__setattr__(
             self,
             "evidence_providers",
-            _mapping_proxy(self.evidence_providers, "evidence_providers"),
+            _string_mapping_proxy(self.evidence_providers, "evidence_providers"),
         )
         object.__setattr__(
             self, "rewrite_metadata", _deep_freeze(self.rewrite_metadata, "rewrite_metadata")
@@ -435,6 +451,7 @@ class CalibrationOutcome:
             raise ValueError("dataset_split is invalid")
         for name in ("task_success", "graph_completed", "verifier_success", "rehearsal_success"):
             _require_bool_or_none(getattr(self, name), name)
+        _require_string_or_none(self.failure_class, "failure_class")
         if not isinstance(self.horizon, HorizonLabel) or not isinstance(
             self.feature_snapshot, CandidateFeatureSnapshot
         ):
@@ -499,6 +516,7 @@ class CalibrationPrediction:
         _require_nonempty(self.reason, "reason")
         _require_nonempty(self.model_version, "model_version")
         _require_nonempty(self.feature_schema_version, "feature_schema_version")
+        _require_string_or_none(self.snapshot_id, "snapshot_id")
         _require_finite(self.rank_score, "rank_score")
         _require_probability(self.success_probability, "success_probability")
         _require_probability(self.uncertainty, "uncertainty")

@@ -155,6 +155,23 @@ def test_nested_metadata_sequences_are_immutable_and_json_safe() -> None:
         replace(_snapshot(), rewrite_metadata={"api_key": "must-not-be-recorded"})
 
 
+def test_snapshot_evidence_providers_are_immutable_string_mappings_without_secrets() -> None:
+    raw_providers = {"rehearsal": "libero_process_rehearsal"}
+    snapshot = replace(_snapshot(), evidence_providers=raw_providers)
+
+    raw_providers["physical"] = "robot_executor"
+
+    assert isinstance(snapshot.evidence_providers, MappingProxyType)
+    assert snapshot.evidence_providers == {"rehearsal": "libero_process_rehearsal"}
+    assert json.dumps(snapshot.to_dict())
+    with pytest.raises(TypeError):
+        snapshot.evidence_providers["physical"] = "robot_executor"  # type: ignore[index]
+    with pytest.raises(TypeError, match="evidence_providers"):
+        replace(_snapshot(), evidence_providers={"rehearsal": 1})
+    with pytest.raises(ValueError, match="secret"):
+        replace(_snapshot(), evidence_providers={"api_key": "must-not-be-recorded"})
+
+
 def test_public_contracts_are_json_safe_and_sorted() -> None:
     payloads = [
         _horizon().to_dict(),
@@ -274,3 +291,26 @@ def test_abstained_prediction_cannot_publish_score_or_probability() -> None:
             snapshot_id="snapshot-v1",
             eligible_family=True,
         )
+
+
+@pytest.mark.parametrize("snapshot_id", [{}, []])
+def test_prediction_rejects_non_string_snapshot_id(snapshot_id: object) -> None:
+    with pytest.raises(ValueError, match="snapshot_id"):
+        CalibrationPrediction(
+            candidate_id="candidate-a",
+            rank_score=None,
+            success_probability=None,
+            uncertainty=1.0,
+            abstained=True,
+            reason="unknown",
+            model_version="model-v1",
+            feature_schema_version="p56.feature.v1",
+            snapshot_id=snapshot_id,  # type: ignore[arg-type]
+            eligible_family=False,
+        )
+
+
+@pytest.mark.parametrize("failure_class", [{}, []])
+def test_outcome_rejects_non_string_failure_class(failure_class: object) -> None:
+    with pytest.raises(ValueError, match="failure_class"):
+        _outcome(failure_class=failure_class)
