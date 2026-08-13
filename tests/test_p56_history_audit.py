@@ -119,6 +119,7 @@ def _native_p56_case(
         ],
     )
     online = json.loads((case_dir / "evidence" / "ood_replay.json").read_text(encoding="utf-8"))
+    online["source_scene_version"] = 1
     online["execution_started_at_ns"] = execution_started_at_ns
     online["evaluator_observed_at_ns"] = evaluator_observed_at_ns
     _write_json(case_dir / "evidence" / "ood_replay.json", online)
@@ -249,6 +250,49 @@ def test_history_audit_accepts_only_timestamp_ordered_native_record(tmp_path: Pa
     assert audit.rows[0].admissible is True
 
 
+def test_history_audit_rejects_snapshot_from_different_source_scene(
+    tmp_path: Path,
+) -> None:
+    suite = _native_p56_case(
+        tmp_path,
+        feature_captured_at_ns=100,
+        execution_started_at_ns=200,
+        evaluator_observed_at_ns=300,
+    )
+    evidence = _load_case_evidence(suite)
+    evidence["source_scene_version"] = 2
+    _write_case_evidence(suite, evidence)
+
+    decision = audit_p55_history(suite, family_id="object-6").rows[0]
+
+    assert decision.admissible is False
+    assert "FEATURE_SNAPSHOT_IDENTITY_MISMATCH" in decision.reasons
+
+
+@pytest.mark.parametrize("source_scene_version", [None, "1", True])
+def test_history_audit_rejects_missing_or_malformed_source_scene_version(
+    tmp_path: Path,
+    source_scene_version: object,
+) -> None:
+    suite = _native_p56_case(
+        tmp_path,
+        feature_captured_at_ns=100,
+        execution_started_at_ns=200,
+        evaluator_observed_at_ns=300,
+    )
+    evidence = _load_case_evidence(suite)
+    if source_scene_version is None:
+        del evidence["source_scene_version"]
+    else:
+        evidence["source_scene_version"] = source_scene_version
+    _write_case_evidence(suite, evidence)
+
+    decision = audit_p55_history(suite, family_id="object-6").rows[0]
+
+    assert decision.admissible is False
+    assert "FEATURE_SNAPSHOT_IDENTITY_MISMATCH" in decision.reasons
+
+
 def test_history_audit_rejects_evaluator_observation_before_execution_start(
     tmp_path: Path,
 ) -> None:
@@ -282,6 +326,38 @@ def test_history_audit_rejects_missing_evaluator_observation_for_native_snapshot
 
     assert decision.admissible is False
     assert "MISSING_EVALUATOR_OBSERVATION_TIMESTAMP" in decision.reasons
+
+
+def test_history_audit_requires_native_top_level_lineage_timing_and_evaluator(
+    tmp_path: Path,
+) -> None:
+    suite = _native_p56_case(
+        tmp_path,
+        feature_captured_at_ns=100,
+        execution_started_at_ns=200,
+        evaluator_observed_at_ns=300,
+    )
+    evidence = _load_case_evidence(suite)
+    physical_result = {
+        "execution_started_at_ns": evidence.pop("execution_started_at_ns"),
+        "evaluator_observed_at_ns": evidence.pop("evaluator_observed_at_ns"),
+        "evaluator_success": evidence.pop("evaluator_success"),
+        "graph_events": evidence.pop("graph_events"),
+        "horizon": evidence.pop("horizon"),
+    }
+    evidence["physical_result"] = physical_result
+    _write_case_evidence(suite, evidence)
+
+    decision = audit_p55_history(suite, family_id="object-6").rows[0]
+
+    assert decision.admissible is False
+    assert {
+        "MISSING_EXECUTION_START_TIMESTAMP",
+        "MISSING_EVALUATOR_OBSERVATION_TIMESTAMP",
+        "INCONCLUSIVE_EVALUATOR",
+        "MISSING_GRAPH_EVENTS",
+        "MISSING_HORIZON_LINEAGE",
+    } <= set(decision.reasons)
 
 
 def test_history_audit_rejects_inconsistent_retained_evaluator_outcome(

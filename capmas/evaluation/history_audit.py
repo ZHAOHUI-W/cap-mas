@@ -242,6 +242,7 @@ def _audit_case(
             family_id=family_id,
             candidate_id=candidate_id,
             candidate_fingerprint=candidate_fingerprint,
+            source_scene_version=evidence.get("source_scene_version"),
         )
         reasons.extend(snapshot_reasons)
 
@@ -289,6 +290,7 @@ def _load_matching_snapshot(
     family_id: str,
     candidate_id: str | None,
     candidate_fingerprint: str | None,
+    source_scene_version: object,
 ) -> tuple[CandidateFeatureSnapshot | None, tuple[str, ...]]:
     reasons: list[str] = []
     try:
@@ -319,6 +321,7 @@ def _load_matching_snapshot(
         and matching_snapshot.family_id == family_id
         and matching_snapshot.candidate_id == candidate_id
         and matching_snapshot.candidate_fingerprint == candidate_fingerprint
+        and _scene_version_matches(matching_snapshot.scene_version, source_scene_version)
         and matching_snapshot.collection_lane == "physical"
     )
     if not identity_matches:
@@ -329,11 +332,7 @@ def _load_matching_snapshot(
 def _horizon_reasons(evidence: Mapping[str, object]) -> tuple[str, ...]:
     raw_horizon = evidence.get("horizon")
     if not isinstance(raw_horizon, Mapping):
-        physical_result = evidence.get("physical_result")
-        if isinstance(physical_result, Mapping) and isinstance(physical_result.get("horizon"), Mapping):
-            raw_horizon = physical_result["horizon"]
-        else:
-            return (MISSING_HORIZON_LINEAGE,)
+        return (MISSING_HORIZON_LINEAGE,)
     try:
         horizon = HorizonLabel.from_dict(raw_horizon)
     except (TypeError, ValueError):
@@ -350,10 +349,6 @@ def _horizon_reasons(evidence: Mapping[str, object]) -> tuple[str, ...]:
 
 def _graph_event_reasons(evidence: Mapping[str, object]) -> tuple[str, ...]:
     events = evidence.get("graph_events")
-    if not isinstance(events, list):
-        physical_result = evidence.get("physical_result")
-        if isinstance(physical_result, Mapping):
-            events = physical_result.get("graph_events")
     if not isinstance(events, list) or not events:
         return (MISSING_GRAPH_EVENTS,)
     if not all(_is_graph_event_record(event) for event in events):
@@ -397,20 +392,9 @@ def _evaluator_reasons(
 ) -> tuple[str, ...]:
     summary_outcome = summary.get("evaluator_success")
     evidence_outcome = evidence.get("evaluator_success")
-    physical_result = evidence.get("physical_result")
-    physical_outcome = (
-        physical_result.get("evaluator_success") if isinstance(physical_result, Mapping) else None
-    )
     if not isinstance(summary_outcome, bool) or not isinstance(evidence_outcome, bool):
         return (INCONCLUSIVE_EVALUATOR,)
-    retained_outcomes = [
-        outcome
-        for outcome in (summary_outcome, evidence_outcome, physical_outcome)
-        if outcome is not None
-    ]
-    if not all(isinstance(outcome, bool) for outcome in retained_outcomes):
-        return (INCONCLUSIVE_EVALUATOR,)
-    if len(set(retained_outcomes)) > 1:
+    if summary_outcome != evidence_outcome:
         return (EVALUATOR_OUTCOME_MISMATCH,)
     return ()
 
@@ -467,12 +451,6 @@ def _execution_started_at_ns(evidence: Mapping[str, object]) -> int | None:
         value = evidence.get(key)
         if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
             return value
-    physical_result = evidence.get("physical_result")
-    if isinstance(physical_result, Mapping):
-        for key in ("execution_started_at_ns", "started_at_ns"):
-            value = physical_result.get(key)
-            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
-                return value
     return None
 
 
@@ -481,12 +459,16 @@ def _evaluator_observed_at_ns(evidence: Mapping[str, object]) -> int | None:
         value = evidence.get(key)
         if _nonnegative_int(value):
             return value
-    physical_result = evidence.get("physical_result")
-    if isinstance(physical_result, Mapping):
-        value = physical_result.get("evaluator_observed_at_ns")
-        if _nonnegative_int(value):
-            return value
     return None
+
+
+def _scene_version_matches(snapshot_scene_version: int, source_scene_version: object) -> bool:
+    return (
+        isinstance(source_scene_version, int)
+        and not isinstance(source_scene_version, bool)
+        and source_scene_version >= 0
+        and snapshot_scene_version == source_scene_version
+    )
 
 
 def _audit_payload(audit: HistoricalCompatibilityAudit) -> dict[str, object]:
