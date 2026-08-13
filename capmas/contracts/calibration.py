@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
@@ -103,6 +105,34 @@ _DATASET_MANIFEST_FIELDS = {
     "environment_version",
     "code_revision",
     "split_salt",
+    "manifest_sha256",
+}
+_COLLECTION_CASE_FIELDS = {
+    "case_id",
+    "lineage_group_id",
+    "family_id",
+    "task_id",
+    "seed",
+    "split_identity",
+    "config_path",
+    "config_sha256",
+    "candidate_artifact",
+    "candidate_artifact_sha256",
+    "object_name",
+    "target_name",
+    "layout_family",
+    "layout_variant",
+}
+_COLLECTION_MANIFEST_FIELDS = {
+    "manifest_id",
+    "schema_version",
+    "cases",
+    "feature_schema_version",
+    "memory_skill_version",
+    "robot_skill_version",
+    "prompt_version",
+    "environment_version",
+    "code_revision",
     "manifest_sha256",
 }
 _PREDICTION_FIELDS = {
@@ -621,6 +651,155 @@ class CalibrationDatasetManifest:
 
 
 @dataclass(frozen=True)
+class CalibrationCollectionCase:
+    case_id: str
+    lineage_group_id: str
+    family_id: str
+    task_id: str
+    seed: int
+    split_identity: Literal["id"]
+    config_path: str
+    config_sha256: str
+    candidate_artifact: str
+    candidate_artifact_sha256: str
+    object_name: str
+    target_name: str
+    layout_family: str
+    layout_variant: Mapping[str, object]
+
+    def __post_init__(self) -> None:
+        for name in (
+            "case_id",
+            "lineage_group_id",
+            "family_id",
+            "task_id",
+            "config_path",
+            "config_sha256",
+            "candidate_artifact",
+            "candidate_artifact_sha256",
+            "object_name",
+            "target_name",
+            "layout_family",
+        ):
+            _require_nonempty(getattr(self, name), name)
+        if self.lineage_group_id != self.case_id:
+            raise ValueError("lineage_group_id must equal case_id for collection manifests")
+        _require_nonnegative(self.seed, "seed")
+        if self.split_identity != "id":
+            raise ValueError("collection split_identity must be id")
+        _require_sha256(self.config_sha256, "config_sha256")
+        _require_sha256(self.candidate_artifact_sha256, "candidate_artifact_sha256")
+        object.__setattr__(
+            self, "layout_variant", _deep_freeze(self.layout_variant, "layout_variant")
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return _sorted_dict(self)
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, object]) -> CalibrationCollectionCase:
+        _require_fields(raw, _COLLECTION_CASE_FIELDS, "collection case")
+        data = dict(raw)
+        data["layout_variant"] = _as_mapping(data["layout_variant"], "layout_variant")
+        return cls(**cast(dict[str, Any], data))
+
+
+@dataclass(frozen=True)
+class CalibrationCollectionManifest:
+    manifest_id: str
+    schema_version: str
+    cases: tuple[CalibrationCollectionCase, ...]
+    feature_schema_version: str
+    memory_skill_version: str
+    robot_skill_version: str
+    prompt_version: str
+    environment_version: str
+    code_revision: str
+    manifest_sha256: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.cases, tuple) or any(
+            not isinstance(case, CalibrationCollectionCase) for case in self.cases
+        ):
+            raise TypeError("cases must be a tuple of CalibrationCollectionCase values")
+        if not self.cases:
+            raise ValueError("collection manifest must contain at least one case")
+        for name in (
+            "schema_version",
+            "feature_schema_version",
+            "memory_skill_version",
+            "robot_skill_version",
+            "prompt_version",
+            "environment_version",
+            "code_revision",
+        ):
+            _require_nonempty(getattr(self, name), name)
+        if self.schema_version != COLLECTION_SCHEMA_VERSION:
+            raise ValueError("collection manifest schema_version is unsupported")
+        case_ids = [case.case_id for case in self.cases]
+        duplicate_case_ids = sorted(
+            {case_id for case_id in case_ids if case_ids.count(case_id) > 1}
+        )
+        if duplicate_case_ids:
+            raise ValueError(f"duplicate collection case ids: {duplicate_case_ids}")
+        lineage_ids = [case.lineage_group_id for case in self.cases]
+        duplicate_lineages = sorted(
+            {lineage_id for lineage_id in lineage_ids if lineage_ids.count(lineage_id) > 1}
+        )
+        if duplicate_lineages:
+            raise ValueError(f"duplicate collection lineage groups: {duplicate_lineages}")
+        if self.manifest_sha256:
+            _require_sha256(self.manifest_sha256, "manifest_sha256")
+        if self.manifest_id:
+            if not self.manifest_id.startswith("sha256:"):
+                raise ValueError("manifest_id must use the sha256: prefix")
+            _require_sha256(self.manifest_id.removeprefix("sha256:"), "manifest_id digest")
+            if self.manifest_sha256 and self.manifest_id != f"sha256:{self.manifest_sha256}":
+                raise ValueError("manifest_id must match manifest_sha256")
+
+    def to_dict(self) -> dict[str, object]:
+        return _sorted_dict(self)
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, object]) -> CalibrationCollectionManifest:
+        _require_fields(raw, _COLLECTION_MANIFEST_FIELDS, "collection manifest")
+        data = dict(raw)
+        cases = data["cases"]
+        if not isinstance(cases, (tuple, list)):
+            raise TypeError("collection manifest cases must be a sequence")
+        data["cases"] = tuple(
+            CalibrationCollectionCase.from_dict(cast(Mapping[str, object], case))
+            for case in cases
+        )
+        manifest = cls(**cast(dict[str, Any], data))
+        expected_digest = collection_manifest_sha256(manifest)
+        if manifest.manifest_sha256 and manifest.manifest_sha256 != expected_digest:
+            raise ValueError("collection manifest digest mismatch")
+        if manifest.manifest_id and manifest.manifest_id != f"sha256:{expected_digest}":
+            raise ValueError("collection manifest_id digest mismatch")
+        return manifest
+
+
+def collection_manifest_payload(manifest: CalibrationCollectionManifest) -> dict[str, object]:
+    """Return the canonical collection manifest payload without self references."""
+
+    payload = manifest.to_dict()
+    payload["manifest_id"] = ""
+    payload["manifest_sha256"] = ""
+    return payload
+
+
+def collection_manifest_sha256(manifest: CalibrationCollectionManifest) -> str:
+    encoded = json.dumps(
+        collection_manifest_payload(manifest),
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("ascii")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+@dataclass(frozen=True)
 class CalibrationPrediction:
     candidate_id: str
     rank_score: float | None
@@ -684,7 +863,9 @@ __all__ = [
     "DATASET_SCHEMA_VERSION",
     "FEATURE_SCHEMA_VERSION",
     "HORIZON_SCHEMA_VERSION",
+    "CalibrationCollectionCase",
     "CalibrationCollectionContext",
+    "CalibrationCollectionManifest",
     "CalibrationDatasetManifest",
     "CalibrationLineage",
     "CalibrationOutcome",
@@ -695,5 +876,7 @@ __all__ = [
     "ExecutionStatus",
     "FeatureStatus",
     "HorizonLabel",
+    "collection_manifest_payload",
+    "collection_manifest_sha256",
     "horizon_bucket",
 ]
