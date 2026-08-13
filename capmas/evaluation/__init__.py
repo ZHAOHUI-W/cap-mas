@@ -13,6 +13,15 @@ from capmas.evaluation.candidate_identity import (
     candidate_identity_from_raw_graph,
     raw_graph_fingerprint,
 )
+from capmas.evaluation.capability import (
+    CapabilityCase,
+    CapabilityDiagnosticReport,
+    CapabilityRunResult,
+    TaskFamilyRepairHandoff,
+    diagnose_family_capability,
+    load_p55_capability_cases,
+    run_capability_diagnosis,
+)
 
 from capmas.evaluation.rehearsal import (
     ProcessRehearsalPool,
@@ -95,6 +104,13 @@ __all__ = [  # noqa: RUF022
     "CandidateIdentity",
     "candidate_identity_from_raw_graph",
     "raw_graph_fingerprint",
+    "CapabilityCase",
+    "CapabilityDiagnosticReport",
+    "CapabilityRunResult",
+    "TaskFamilyRepairHandoff",
+    "diagnose_family_capability",
+    "load_p55_capability_cases",
+    "run_capability_diagnosis",
     "NormalizedEpisode",
     "ParityComparison",
     "compare_artifacts",
