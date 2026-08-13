@@ -259,3 +259,30 @@ The report did not preserve a numeric RED test count; no count is inferred here.
   `pytest -q tests/test_p56_dataset.py -k 'decoder_schema_rejection_code_set_covers_scene_and_enrichment_contracts or rejection_codes_map_to_unlabeled_statuses'`
 - Output:
   `32 passed, 34 deselected in 0.25s`
+
+### Mechanical Final Task 4 Review-Fix: Remove Stale Safety Gate Code
+
+#### RED
+
+- Command:
+  `pytest -q tests/test_p56_dataset.py -k 'safety_rejection_code_set_is_exact_arbiter_contract or rejection_codes_map_to_unlabeled_statuses'`
+- Output:
+  `2 failed, 32 passed, 34 deselected in 0.34s`
+- Expected failures showed stale `SAFETY_GATE` still mapped to
+  `rejected_safety`, and `_SAFETY_REJECTION_CODES` contained one extra code not
+  emitted by the current Arbiter hard-gate literals. The current Arbiter safety
+  hard gates are derived from `CandidateRejection` literals as exactly
+  `GEOMETRY_GATE`, `PERCEPTION_GATE`, and `MISSING_EVIDENCE`; stale codes remain
+  covered separately.
+
+#### GREEN
+
+- Removed `SAFETY_GATE` from `_SAFETY_REJECTION_CODES` while preserving stale,
+  decoder/schema, and graph-validation mappings.
+- Added focused coverage that `SAFETY_GATE` remains `not_selected` and the
+  safety allowlist exactly matches current Arbiter hard-gate literals excluding
+  stale rejection codes.
+- Command:
+  `pytest -q tests/test_p56_dataset.py -k 'safety_rejection_code_set_is_exact_arbiter_contract or rejection_codes_map_to_unlabeled_statuses'`
+- Output:
+  `34 passed, 34 deselected in 0.26s`

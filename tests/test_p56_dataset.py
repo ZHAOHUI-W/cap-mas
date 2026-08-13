@@ -228,6 +228,8 @@ def test_inconclusive_executed_candidate_is_tier_c_without_physical_labels() -> 
         ("STALE_EVIDENCE", "stale"),
         ("GEOMETRY_GATE", "rejected_safety"),
         ("PERCEPTION_GATE", "rejected_safety"),
+        ("MISSING_EVIDENCE", "rejected_safety"),
+        ("SAFETY_GATE", "not_selected"),
         ("GRAPH_SCHEMA_INVALID", "rejected_schema"),
         ("JSON_INVALID", "rejected_schema"),
         ("JSON_NOT_OBJECT", "rejected_schema"),
@@ -308,12 +310,25 @@ def test_decoder_schema_rejection_code_set_covers_scene_and_enrichment_contracts
 
 
 def test_safety_rejection_code_set_is_exact_arbiter_contract() -> None:
-    assert dataset_module._SAFETY_REJECTION_CODES == {
+    arbiter_source = Path("capmas/agents/arbiter.py").read_text(encoding="utf-8")
+    arbiter_hard_gate_codes = set(
+        re.findall(
+            r'CandidateRejection\(\s*candidate\.candidate_id,\s*"([A-Z0-9_]+)"',
+            arbiter_source,
+        )
+    )
+    current_safety_codes = {
+        code
+        for code in arbiter_hard_gate_codes
+        if code.endswith("_GATE") or code == "MISSING_EVIDENCE"
+    } - dataset_module._STALE_REJECTION_CODES
+
+    assert current_safety_codes == {
         "GEOMETRY_GATE",
         "PERCEPTION_GATE",
-        "SAFETY_GATE",
         "MISSING_EVIDENCE",
     }
+    assert dataset_module._SAFETY_REJECTION_CODES == current_safety_codes
 
 
 def test_graph_validator_rejection_code_set_covers_validator_contract() -> None:

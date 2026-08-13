@@ -24,7 +24,7 @@ from capmas.evaluation.feature_snapshots import FEATURE_GROUPS_V1
 _SUPERVISED_SPLITS = frozenset({"train", "calibration", "test"})
 _STALE_REJECTION_CODES = frozenset({"STALE_SCENE", "STALE_EVIDENCE"})
 _SAFETY_REJECTION_CODES = frozenset(
-    {"GEOMETRY_GATE", "PERCEPTION_GATE", "SAFETY_GATE", "MISSING_EVIDENCE"}
+    {"GEOMETRY_GATE", "PERCEPTION_GATE", "MISSING_EVIDENCE"}
 )
 _DECODER_SCHEMA_REJECTION_CODES = frozenset(
     {
