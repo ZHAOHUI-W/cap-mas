@@ -248,6 +248,7 @@ def test_inconclusive_executed_candidate_is_tier_c_without_physical_labels() -> 
         ("UNBOUNDED_CYCLE", "rejected_schema"),
         ("UNRECOGNIZED_REJECTION", "not_selected"),
         ("DANGLING_REVIEWER_UNKNOWN", "not_selected"),
+        ("FUTURE_SCHEMA_INVALID", "not_selected"),
     ],
 )
 def test_rejection_codes_map_to_unlabeled_statuses(code: str, status: str) -> None:
@@ -397,6 +398,18 @@ def test_dataset_rejects_tier_b_or_c_as_supervised_label() -> None:
 
     with pytest.raises(ValueError, match="Tier B"):
         assert_dataset_eligible(audit_calibration_dataset(manifest))
+
+
+def test_dataset_rejects_unknown_tier_even_when_shadow_split_is_consistent() -> None:
+    outcome = _outcome()
+    manifest = _manifest((outcome,), (_lineage("episode"),))
+    object.__setattr__(manifest.outcomes[0], "tier", "D")
+    object.__setattr__(manifest.outcomes[0], "dataset_split", "shadow")
+
+    audit = audit_calibration_dataset(manifest)
+
+    assert audit.passed is False
+    assert "INVALID_TIER" in {finding.code for finding in audit.findings}
 
 
 @pytest.mark.parametrize(

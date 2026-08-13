@@ -36,6 +36,7 @@ _DECODER_SCHEMA_REJECTION_CODES = frozenset(
         "EMPTY_RESPONSE",
         "SUBGRAPH_ID_MISMATCH",
         "SUBGOAL_ID_MISMATCH",
+        "GRAPH_SCHEMA_INVALID",
     }
 )
 _GRAPH_VALIDATION_REJECTION_CODES = frozenset(
@@ -201,11 +202,7 @@ def _rejection_status(code: str | None) -> str:
         return "stale"
     if code in _SAFETY_REJECTION_CODES or "GEOMETRY" in code or "SAFETY" in code:
         return "rejected_safety"
-    if (
-        code in _DECODER_SCHEMA_REJECTION_CODES
-        or code in _GRAPH_VALIDATION_REJECTION_CODES
-        or code.endswith("_SCHEMA_INVALID")
-    ):
+    if code in _DECODER_SCHEMA_REJECTION_CODES or code in _GRAPH_VALIDATION_REJECTION_CODES:
         return "rejected_schema"
     return "not_selected"
 
@@ -468,6 +465,13 @@ def _audit_outcomes(
         episode_ids = (outcome.episode_id,)
         snapshot = outcome.feature_snapshot
         lineages = lineages_by_episode.get(outcome.episode_id, ())
+        if outcome.tier not in {"A", "B", "C"}:
+            _add_finding(
+                findings,
+                "INVALID_TIER",
+                episode_ids,
+                f"tier must be one of A, B, or C; got {outcome.tier!r}",
+            )
         if not lineages:
             _add_finding(findings, "MISSING_PROVENANCE", episode_ids, "missing episode lineage")
         elif any(snapshot.captured_at_ns > lineage.decision_boundary_ns for lineage in lineages):

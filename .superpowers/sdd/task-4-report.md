@@ -118,4 +118,60 @@ The report did not preserve a numeric RED test count; no count is inferred here.
 
 #### Commit
 
+- Committed as `fix: fail closed P56 dataset review findings`; final hash
+  recorded in handoff.
+
+### Task 4 Second Review-Fix: Fail-Closed Tier Audit and Explicit Schema Rejections
+
+#### RED
+
+- Command:
+  `pytest -q tests/test_p56_dataset.py::test_dataset_rejects_unknown_tier_even_when_shadow_split_is_consistent tests/test_p56_dataset.py::test_rejection_codes_map_to_unlabeled_statuses`
+- Output:
+  `2 failed, 25 passed in 0.42s`
+- Expected failures showed an internally consistent manifest tampered to
+  `tier="D"` and `dataset_split="shadow"` only produced
+  `MANIFEST_DIGEST_MISMATCH`, without a stable tier finding code, and
+  `FUTURE_SCHEMA_INVALID` was misclassified as `rejected_schema`.
+
+#### GREEN
+
+- Added explicit audit finding code `INVALID_TIER` for any outcome tier outside
+  exactly `A`, `B`, or `C`.
+- Added `GRAPH_SCHEMA_INVALID` to the explicit known decoder/schema rejection
+  code set.
+- Removed broad `_SCHEMA_INVALID` suffix classification so unknown future codes
+  remain `not_selected`.
+
+#### Verification
+
+- Command:
+  `pytest -q tests/test_p56_dataset.py::test_dataset_rejects_unknown_tier_even_when_shadow_split_is_consistent tests/test_p56_dataset.py::test_rejection_codes_map_to_unlabeled_statuses`
+- Output:
+  `26 passed in 0.34s`
+- Command:
+  `pytest -q tests/test_p56_dataset.py tests/test_p56_contracts.py`
+- Output:
+  `81 passed in 0.29s`
+- Command:
+  `ruff check capmas/evaluation/dataset.py tests/test_p56_dataset.py`
+- Output:
+  `All checks passed!`
+- Command:
+  `python -m compileall -q capmas/evaluation/dataset.py`
+- Output:
+  passed with exit code 0.
+- Command:
+  `git diff --check`
+- Output:
+  passed with exit code 0.
+
+#### Files Changed
+
+- `capmas/evaluation/dataset.py`
+- `tests/test_p56_dataset.py`
+- `.superpowers/sdd/task-4-report.md`
+
+#### Commit
+
 - Pending until commit is created.
