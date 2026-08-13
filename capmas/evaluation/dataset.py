@@ -38,16 +38,51 @@ _DECODER_SCHEMA_REJECTION_CODES = frozenset(
         "SUBGOAL_ID_MISMATCH",
     }
 )
-_GRAPH_VALIDATION_PREFIXES = (
-    "AMBIGUOUS_",
-    "DANGLING_",
-    "DUPLICATE_",
-    "EMPTY_",
-    "INVALID_",
-    "MISSING_",
-    "UNDECLARED_",
-    "UNKNOWN_",
-    "UNREACHABLE_",
+_GRAPH_VALIDATION_REJECTION_CODES = frozenset(
+    {
+        "ACTION_WITHOUT_POSTCONDITION",
+        "ACTION_WITHOUT_SKILL",
+        "AMBIGUOUS_MISSION_TRANSITION",
+        "DANGLING_BINDING",
+        "DANGLING_EDGE",
+        "DANGLING_MISSION_BINDING",
+        "DANGLING_MISSION_EDGE",
+        "DANGLING_OUTPUT_BINDING",
+        "DUPLICATE_LOOP_ENTRY",
+        "DUPLICATE_NODE",
+        "DUPLICATE_PORT",
+        "DUPLICATE_RESOURCE",
+        "DUPLICATE_SUBGRAPH",
+        "EMPTY_MISSION",
+        "EMPTY_SUBGRAPH",
+        "INVALID_LOOP_BUDGET",
+        "INVALID_MISSION_BINDING_ORDER",
+        "MISSING_FAILURE_NODE",
+        "MISSING_LOOP_EXIT",
+        "MISSING_MISSION_TERMINAL",
+        "MISSING_SUCCESS_NODE",
+        "MISSING_VALID_CHECKPOINT",
+        "MISSION_BINDING_SOURCE_NOT_PREDECESSOR",
+        "MULTIPLE_MISSION_INPUT_BINDINGS",
+        "PARALLEL_RESOURCE_CONFLICT",
+        "PORT_TYPE_MISMATCH",
+        "UNBOUNDED_CYCLE",
+        "UNBOUND_INPUT",
+        "UNBOUND_MISSION_INPUT",
+        "UNBOUND_OUTPUT",
+        "UNESTABLISHED_PRECONDITION",
+        "UNKNOWN_ENTRY",
+        "UNKNOWN_ENTRY_NODE",
+        "UNKNOWN_LOOP_ENTRY",
+        "UNKNOWN_MISSION_PORT",
+        "UNKNOWN_MISSION_TERMINAL",
+        "UNKNOWN_OUTPUT_PORT",
+        "UNKNOWN_PORT",
+        "UNKNOWN_TERMINAL_NODE",
+        "UNREACHABLE_BINDING_SOURCE",
+        "UNREACHABLE_NODE",
+        "UNREACHABLE_SUBGRAPH",
+    }
 )
 _EVALUATOR_FEATURE_MARKERS = (
     "evaluator",
@@ -168,10 +203,8 @@ def _rejection_status(code: str | None) -> str:
         return "rejected_safety"
     if (
         code in _DECODER_SCHEMA_REJECTION_CODES
+        or code in _GRAPH_VALIDATION_REJECTION_CODES
         or code.endswith("_SCHEMA_INVALID")
-        or "GRAPH" in code
-        or "SUBGRAPH" in code
-        or code.startswith(_GRAPH_VALIDATION_PREFIXES)
     ):
         return "rejected_schema"
     return "not_selected"

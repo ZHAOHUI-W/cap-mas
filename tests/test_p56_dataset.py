@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
+import capmas.evaluation.dataset as dataset_module
 from capmas.contracts.calibration import (
     DATASET_SCHEMA_VERSION,
     FEATURE_SCHEMA_VERSION,
@@ -237,7 +240,14 @@ def test_inconclusive_executed_candidate_is_tier_c_without_physical_labels() -> 
         ("UNREACHABLE_SUBGRAPH", "rejected_schema"),
         ("DUPLICATE_NODE", "rejected_schema"),
         ("DANGLING_EDGE", "rejected_schema"),
+        ("PORT_TYPE_MISMATCH", "rejected_schema"),
+        ("ACTION_WITHOUT_SKILL", "rejected_schema"),
+        ("UNBOUND_INPUT", "rejected_schema"),
+        ("PARALLEL_RESOURCE_CONFLICT", "rejected_schema"),
+        ("UNESTABLISHED_PRECONDITION", "rejected_schema"),
+        ("UNBOUNDED_CYCLE", "rejected_schema"),
         ("UNRECOGNIZED_REJECTION", "not_selected"),
+        ("DANGLING_REVIEWER_UNKNOWN", "not_selected"),
     ],
 )
 def test_rejection_codes_map_to_unlabeled_statuses(code: str, status: str) -> None:
@@ -254,6 +264,16 @@ def test_rejection_codes_map_to_unlabeled_statuses(code: str, status: str) -> No
     )
 
     assert (outcome.execution_status, outcome.tier, outcome.task_success) == (status, "C", None)
+
+
+def test_graph_validator_rejection_code_set_covers_validator_contract() -> None:
+    validator_source = Path("capmas/graph/validator.py").read_text(encoding="utf-8")
+    validator_codes = set(
+        re.findall(r'GraphDiagnostic\(\s*"([A-Z0-9_]+)"', validator_source)
+    )
+
+    assert validator_codes
+    assert validator_codes == dataset_module._GRAPH_VALIDATION_REJECTION_CODES
 
 
 def test_only_rehearsal_lane_with_conclusive_label_becomes_tier_b() -> None:
