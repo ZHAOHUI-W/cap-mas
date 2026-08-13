@@ -226,3 +226,36 @@ The report did not preserve a numeric RED test count; no count is inferred here.
 #### Commit
 
 - Pending until commit is created.
+
+### Final Task 4 Review-Fix: Decoder Scene and Enrichment Schema Rejections
+
+#### RED
+
+- Command:
+  `pytest -q tests/test_p56_dataset.py -k 'decoder_schema_rejection_code_set_covers_scene_and_enrichment_contracts or rejection_codes_map_to_unlabeled_statuses'`
+- Output:
+  `3 failed, 29 passed, 34 deselected in 0.40s`
+- Expected failures showed actual `graph_decoder.py` and `staged_decoder.py`
+  `MISSING_PARENT_SCENE` mapped to `not_selected`, and actual
+  `staged_decoder.py` `SUBGRAPH_CONDITION_ENRICHMENT_FAILED` mapped to
+  `not_selected`; the source-contract coverage test also showed both codes
+  absent from `_DECODER_SCHEMA_REJECTION_CODES`.
+
+#### GREEN
+
+- Added focused regressions for `MISSING_PARENT_SCENE` and
+  `SUBGRAPH_CONDITION_ENRICHMENT_FAILED` mapping to `rejected_schema`.
+- Added source-contract coverage that extracts the actual graph and staged
+  decoder rejection-code literals, keeps `STALE_SCENE` in the stale allowlist,
+  and requires the scene/enrichment schema rejection codes in the decoder schema
+  set.
+- Added only the two missing concrete decoder-generated codes to
+  `_DECODER_SCHEMA_REJECTION_CODES`; exact safety allowlist and unknown
+  lookalike behavior remain unchanged.
+
+#### Verification
+
+- Command:
+  `pytest -q tests/test_p56_dataset.py -k 'decoder_schema_rejection_code_set_covers_scene_and_enrichment_contracts or rejection_codes_map_to_unlabeled_statuses'`
+- Output:
+  `32 passed, 34 deselected in 0.25s`

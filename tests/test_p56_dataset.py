@@ -234,11 +234,13 @@ def test_inconclusive_executed_candidate_is_tier_c_without_physical_labels() -> 
         ("STRUCTURED_PAYLOAD_INVALID", "rejected_schema"),
         ("REQUEST_ID_MISMATCH", "rejected_schema"),
         ("MISSION_ID_MISMATCH", "rejected_schema"),
+        ("MISSING_PARENT_SCENE", "rejected_schema"),
         ("EMPTY_RESPONSE", "rejected_schema"),
         ("SUBGRAPH_ID_MISMATCH", "rejected_schema"),
         ("SUBGOAL_ID_MISMATCH", "rejected_schema"),
         ("TOPOLOGY_SCHEMA_INVALID", "rejected_schema"),
         ("SUBGRAPH_SCHEMA_INVALID", "rejected_schema"),
+        ("SUBGRAPH_CONDITION_ENRICHMENT_FAILED", "rejected_schema"),
         ("UNREACHABLE_SUBGRAPH", "rejected_schema"),
         ("DUPLICATE_NODE", "rejected_schema"),
         ("DANGLING_EDGE", "rejected_schema"),
@@ -282,6 +284,27 @@ def test_decoder_schema_rejection_code_set_covers_staged_decoder_contract() -> N
         "SUBGRAPH_SCHEMA_INVALID",
     }
     assert staged_schema_codes <= dataset_module._DECODER_SCHEMA_REJECTION_CODES
+
+
+def test_decoder_schema_rejection_code_set_covers_scene_and_enrichment_contracts() -> None:
+    graph_source = Path("capmas/llm/graph_decoder.py").read_text(encoding="utf-8")
+    staged_source = Path("capmas/llm/staged_decoder.py").read_text(encoding="utf-8")
+    graph_decoder_codes = set(
+        re.findall(r'GraphDecodeRejection\(\s*"([A-Z0-9_]+)"', graph_source)
+    )
+    staged_decoder_codes = set(
+        re.findall(r'StagedDecodeRejection\(\s*"([A-Z0-9_]+)"', staged_source)
+    )
+
+    assert "STALE_SCENE" in graph_decoder_codes | staged_decoder_codes
+    assert "STALE_SCENE" in dataset_module._STALE_REJECTION_CODES
+    assert {"MISSING_PARENT_SCENE", "SUBGRAPH_CONDITION_ENRICHMENT_FAILED"} <= (
+        graph_decoder_codes | staged_decoder_codes
+    )
+    assert {
+        "MISSING_PARENT_SCENE",
+        "SUBGRAPH_CONDITION_ENRICHMENT_FAILED",
+    } <= dataset_module._DECODER_SCHEMA_REJECTION_CODES
 
 
 def test_safety_rejection_code_set_is_exact_arbiter_contract() -> None:
