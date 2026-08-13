@@ -174,4 +174,55 @@ The report did not preserve a numeric RED test count; no count is inferred here.
 
 #### Commit
 
+- Committed as `fix: tighten P56 rejection code mapping`; final hash recorded
+  in handoff.
+
+### Task 4 Third Review-Fix: Explicit Staged Schema Codes and Narrow Safety Classification
+
+#### RED
+
+- Command:
+  `pytest -q tests/test_p56_dataset.py -k 'schema_rejection_code_set_covers_staged_decoder_contract or safety_rejection_code_set_is_exact_arbiter_contract or rejection_codes_map_to_unlabeled_statuses'`
+- Output:
+  `5 failed, 26 passed, 32 deselected in 0.42s`
+- Expected failures showed `TOPOLOGY_SCHEMA_INVALID` and `SUBGRAPH_SCHEMA_INVALID`
+  still mapped to `not_selected`, `FUTURE_GEOMETRY_GATE` and
+  `REVIEWER_SAFETY_GATE` were over-classified as `rejected_safety`, and the
+  staged decoder schema-code set was not covered by the dataset contract set.
+
+#### GREEN
+
+- Added exact staged decoder schema rejection codes to
+  `_DECODER_SCHEMA_REJECTION_CODES`.
+- Removed broad `"GEOMETRY" in code` / `"SAFETY" in code` classification and
+  kept only the explicit Arbiter safety contract codes.
+- Added regression coverage for the staged decoder schema codes, the explicit
+  safety contract set, and the unknown lookalike safety codes remaining
+  `not_selected`.
+
+#### Verification
+
+- Command:
+  `pytest -q tests/test_p56_dataset.py -k 'schema_rejection_code_set_covers_staged_decoder_contract or safety_rejection_code_set_is_exact_arbiter_contract or rejection_codes_map_to_unlabeled_statuses'`
+- Output:
+  `31 passed, 32 deselected in 0.29s`
+- Command:
+  `pytest -q tests/test_p56_dataset.py tests/test_p56_contracts.py`
+- Output:
+  `87 passed in 0.33s`
+- Command:
+  `ruff check capmas/evaluation/dataset.py tests/test_p56_dataset.py`
+- Output:
+  `All checks passed!`
+- Command:
+  `python -m compileall -q capmas/evaluation/dataset.py`
+- Output:
+  passed with exit code 0.
+- Command:
+  `git diff --check`
+- Output:
+  passed with exit code 0.
+
+#### Commit
+
 - Pending until commit is created.

@@ -237,6 +237,8 @@ def test_inconclusive_executed_candidate_is_tier_c_without_physical_labels() -> 
         ("EMPTY_RESPONSE", "rejected_schema"),
         ("SUBGRAPH_ID_MISMATCH", "rejected_schema"),
         ("SUBGOAL_ID_MISMATCH", "rejected_schema"),
+        ("TOPOLOGY_SCHEMA_INVALID", "rejected_schema"),
+        ("SUBGRAPH_SCHEMA_INVALID", "rejected_schema"),
         ("UNREACHABLE_SUBGRAPH", "rejected_schema"),
         ("DUPLICATE_NODE", "rejected_schema"),
         ("DANGLING_EDGE", "rejected_schema"),
@@ -249,6 +251,8 @@ def test_inconclusive_executed_candidate_is_tier_c_without_physical_labels() -> 
         ("UNRECOGNIZED_REJECTION", "not_selected"),
         ("DANGLING_REVIEWER_UNKNOWN", "not_selected"),
         ("FUTURE_SCHEMA_INVALID", "not_selected"),
+        ("FUTURE_GEOMETRY_GATE", "not_selected"),
+        ("REVIEWER_SAFETY_GATE", "not_selected"),
     ],
 )
 def test_rejection_codes_map_to_unlabeled_statuses(code: str, status: str) -> None:
@@ -265,6 +269,28 @@ def test_rejection_codes_map_to_unlabeled_statuses(code: str, status: str) -> No
     )
 
     assert (outcome.execution_status, outcome.tier, outcome.task_success) == (status, "C", None)
+
+
+def test_decoder_schema_rejection_code_set_covers_staged_decoder_contract() -> None:
+    staged_source = Path("capmas/llm/staged_decoder.py").read_text(encoding="utf-8")
+    staged_schema_codes = set(
+        re.findall(r'StagedDecodeRejection\(\s*"([A-Z0-9_]*SCHEMA_INVALID)"', staged_source)
+    )
+
+    assert staged_schema_codes == {
+        "TOPOLOGY_SCHEMA_INVALID",
+        "SUBGRAPH_SCHEMA_INVALID",
+    }
+    assert staged_schema_codes <= dataset_module._DECODER_SCHEMA_REJECTION_CODES
+
+
+def test_safety_rejection_code_set_is_exact_arbiter_contract() -> None:
+    assert dataset_module._SAFETY_REJECTION_CODES == {
+        "GEOMETRY_GATE",
+        "PERCEPTION_GATE",
+        "SAFETY_GATE",
+        "MISSING_EVIDENCE",
+    }
 
 
 def test_graph_validator_rejection_code_set_covers_validator_contract() -> None:

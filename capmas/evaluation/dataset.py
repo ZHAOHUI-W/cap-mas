@@ -37,6 +37,8 @@ _DECODER_SCHEMA_REJECTION_CODES = frozenset(
         "SUBGRAPH_ID_MISMATCH",
         "SUBGOAL_ID_MISMATCH",
         "GRAPH_SCHEMA_INVALID",
+        "TOPOLOGY_SCHEMA_INVALID",
+        "SUBGRAPH_SCHEMA_INVALID",
     }
 )
 _GRAPH_VALIDATION_REJECTION_CODES = frozenset(
@@ -200,7 +202,7 @@ def _rejection_status(code: str | None) -> str:
         return "not_selected"
     if code in _STALE_REJECTION_CODES:
         return "stale"
-    if code in _SAFETY_REJECTION_CODES or "GEOMETRY" in code or "SAFETY" in code:
+    if code in _SAFETY_REJECTION_CODES:
         return "rejected_safety"
     if code in _DECODER_SCHEMA_REJECTION_CODES or code in _GRAPH_VALIDATION_REJECTION_CODES:
         return "rejected_schema"
