@@ -250,6 +250,42 @@ def test_history_audit_accepts_only_timestamp_ordered_native_record(tmp_path: Pa
     assert audit.rows[0].admissible is True
 
 
+@pytest.mark.parametrize(
+    "missing_count_field",
+    [
+        "planned_critical_path_actions",
+        "planned_critical_path_subgoals",
+        "planned_checkpoint_subgraphs",
+        "attempted_actions",
+        "completed_actions",
+        "attempted_subgoals",
+        "completed_subgoals",
+        "attempted_checkpoints",
+        "completed_checkpoints",
+    ],
+)
+def test_history_audit_rejects_incomplete_horizon_lineage_counts(
+    tmp_path: Path,
+    missing_count_field: str,
+) -> None:
+    suite = _native_p56_case(
+        tmp_path,
+        feature_captured_at_ns=100,
+        execution_started_at_ns=200,
+        evaluator_observed_at_ns=300,
+    )
+    evidence = _load_case_evidence(suite)
+    horizon = evidence["horizon"]
+    assert isinstance(horizon, dict)
+    horizon[missing_count_field] = None
+    _write_case_evidence(suite, evidence)
+
+    decision = audit_p55_history(suite, family_id="object-6").rows[0]
+
+    assert decision.admissible is False
+    assert decision.reasons == ("INVALID_HORIZON_LINEAGE",)
+
+
 def test_history_audit_rejects_snapshot_from_different_source_scene(
     tmp_path: Path,
 ) -> None:

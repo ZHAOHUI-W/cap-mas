@@ -342,9 +342,27 @@ def _horizon_reasons(evidence: Mapping[str, object]) -> tuple[str, ...]:
         or horizon.realized_source != "execution_trace"
         or not horizon.planned_valid
         or not horizon.realized_valid
+        or not _has_complete_horizon_counts(horizon)
     ):
         return (INVALID_HORIZON_LINEAGE,)
     return ()
+
+
+def _has_complete_horizon_counts(horizon: HorizonLabel) -> bool:
+    return all(
+        getattr(horizon, field_name) is not None
+        for field_name in (
+            "planned_critical_path_actions",
+            "planned_critical_path_subgoals",
+            "planned_checkpoint_subgraphs",
+            "attempted_actions",
+            "completed_actions",
+            "attempted_subgoals",
+            "completed_subgoals",
+            "attempted_checkpoints",
+            "completed_checkpoints",
+        )
+    )
 
 
 def _graph_event_reasons(evidence: Mapping[str, object]) -> tuple[str, ...]:
