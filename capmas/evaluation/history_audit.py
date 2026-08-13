@@ -464,7 +464,6 @@ def _execution_started_at_ns(evidence: Mapping[str, object]) -> int | None:
     for key in (
         "execution_started_at_ns",
         "physical_execution_started_at_ns",
-        "decision_boundary_ns",
     ):
         value = evidence.get(key)
         if isinstance(value, int) and not isinstance(value, bool) and value >= 0:

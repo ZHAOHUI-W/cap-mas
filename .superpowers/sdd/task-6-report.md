@@ -137,6 +137,112 @@ Scope:
 
 - Worktree: `/data/MLLM/wzh/agent/paper/infiAgent/workspace/cap-mas/.worktrees/p56a-data-foundation`
 - Branch: `feature/p56a-data-foundation`
+- Starting HEAD: `3ee70c81e5cdd616c1f644db32959b2525a64d21`
+- Fixed reviewer finding in:
+  - `capmas/evaluation/history_audit.py`
+  - `tests/test_p56_history_audit.py`
+
+TDD RED - `decision_boundary_ns` must not backfill execution start:
+
+```text
+$ python -m pytest -q tests/test_p56_history_audit.py::test_history_audit_rejects_decision_boundary_as_execution_start
+F                                                                        [100%]
+FAILED tests/test_p56_history_audit.py::test_history_audit_rejects_decision_boundary_as_execution_start
+AssertionError: assert True is False
+```
+
+GREEN - `_execution_started_at_ns()` now accepts only explicit top-level
+physical execution-start fields: `execution_started_at_ns` or
+`physical_execution_started_at_ns`.
+
+```text
+$ python -m pytest -q tests/test_p56_history_audit.py::test_history_audit_rejects_decision_boundary_as_execution_start
+.                                                                        [100%]
+1 passed in 0.32s
+```
+
+Focused/full Task 6 and related P56 verification:
+
+```text
+$ python -m pytest -q tests/test_p56_history_audit.py
+...........................                                              [100%]
+27 passed in 0.32s
+
+$ python -m pytest -q tests/test_p56_capability.py tests/test_p56_contracts.py tests/test_p56_dataset.py tests/test_p56_feature_snapshots.py tests/test_p56_horizon.py tests/test_p56_history_audit.py
+........................................................................ [ 49%]
+........................................................................ [ 99%]
+.                                                                        [100%]
+145 passed in 0.53s
+```
+
+CLI help, Ruff, compileall, and diff checks:
+
+```text
+$ python scripts/audit_p56_history.py --help
+usage: audit_p56_history.py [-h] --suite-dir SUITE_DIR --family FAMILY
+                            --output-root OUTPUT_ROOT
+
+Audit retained P5.5 family rows for native P5.6 Tier-A history compatibility.
+
+options:
+  -h, --help            show this help message and exit
+  --suite-dir SUITE_DIR
+                        Retained P5.5 frozen replay suite
+  --family FAMILY       Task family to audit
+  --output-root OUTPUT_ROOT
+                        Phase 5 output root
+
+$ python -m ruff check capmas/evaluation/history_audit.py tests/test_p56_history_audit.py
+All checks passed!
+
+$ python -m compileall -q capmas/evaluation/history_audit.py tests/test_p56_history_audit.py
+
+$ git diff --check -- capmas/evaluation/history_audit.py tests/test_p56_history_audit.py .superpowers/sdd/task-6-report.md
+```
+
+Real frozen-suite audit in canonical `outputs/phase5`:
+
+```text
+$ python scripts/audit_p56_history.py --suite-dir outputs/phase5/P5.5_matched_provenance_10seed_retry2_20260807/P5.5_frozen_ood_replay/20260807_024842_suite_20674432 --family object-6 --output-root outputs/phase5
+outputs/phase5/P5.6.2a_object6_history_audit/20260813_103434_history_a6bc49b1
+object-6: examined=20 admissible_tier_a=0 rejected=20
+rejection_counts={'MISSING_GRAPH_EVENTS': 20, 'MISSING_HORIZON_LINEAGE': 20, 'MISSING_PREEXECUTION_FEATURE_SNAPSHOT': 20}
+```
+
+Real audit artifact verification:
+
+```text
+run_dir=outputs/phase5/P5.6.2a_object6_history_audit/20260813_103434_history_a6bc49b1
+manifest_entries=5
+errors=[]
+examined_count=20
+admissible_tier_a_count=0
+rejected_count=20
+rejection_counts={'MISSING_GRAPH_EVENTS': 20, 'MISSING_HORIZON_LINEAGE': 20, 'MISSING_PREEXECUTION_FEATURE_SNAPSHOT': 20}
+admissible_rows=0
+logs/runner.log	size=497	sha256=0bf0d19402cd92102e6d3928fbc127e22861a17ca27e8b6ace2b095658384e6a
+results/admissible_rows.json	size=3	sha256=37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570
+results/history_audit.json	size=13266	sha256=cbabf566d5f2007332e539acf3bdf2ca6b07462912a2a36a414672df2335b980
+run_config.json	size=362	sha256=269df757f28147cd5e42a9e6b02baa20791e8fdcba24b68520a2a646b67c2fa3
+summary.md	size=386	sha256=4448460e8d2b4b9eed1896f6ef5e765b7e6e782a26dc2699cbc54ae18ef7274d
+```
+
+Source tree digest before and after real audit:
+
+```text
+source_suite=outputs/phase5/P5.5_matched_provenance_10seed_retry2_20260807/P5.5_frozen_ood_replay/20260807_024842_suite_20674432
+files=1028
+before_source_tree_sha256=d25a367e6b7e00cc63bbd254801a529053c331fc4ee74dd6e301335284101248
+after_source_tree_sha256=d25a367e6b7e00cc63bbd254801a529053c331fc4ee74dd6e301335284101248
+source_byte_identical=True
+```
+
+## Task 6 mechanical final review-fix evidence - 2026-08-13
+
+Scope:
+
+- Worktree: `/data/MLLM/wzh/agent/paper/infiAgent/workspace/cap-mas/.worktrees/p56a-data-foundation`
+- Branch: `feature/p56a-data-foundation`
 - Starting HEAD: `29346a1`
 - Fixed reviewer finding in:
   - `capmas/evaluation/history_audit.py`

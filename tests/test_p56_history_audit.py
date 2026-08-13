@@ -364,6 +364,26 @@ def test_history_audit_rejects_missing_evaluator_observation_for_native_snapshot
     assert "MISSING_EVALUATOR_OBSERVATION_TIMESTAMP" in decision.reasons
 
 
+def test_history_audit_rejects_decision_boundary_as_execution_start(
+    tmp_path: Path,
+) -> None:
+    suite = _native_p56_case(
+        tmp_path,
+        feature_captured_at_ns=100,
+        execution_started_at_ns=200,
+        evaluator_observed_at_ns=300,
+    )
+    evidence = _load_case_evidence(suite)
+    del evidence["execution_started_at_ns"]
+    evidence["decision_boundary_ns"] = 200
+    _write_case_evidence(suite, evidence)
+
+    decision = audit_p55_history(suite, family_id="object-6").rows[0]
+
+    assert decision.admissible is False
+    assert decision.reasons == ("MISSING_EXECUTION_START_TIMESTAMP",)
+
+
 def test_history_audit_requires_native_top_level_lineage_timing_and_evaluator(
     tmp_path: Path,
 ) -> None:
