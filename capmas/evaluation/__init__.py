@@ -22,6 +22,13 @@ from capmas.evaluation.capability import (
     load_p55_capability_cases,
     run_capability_diagnosis,
 )
+from capmas.evaluation.history_audit import (
+    HistoricalAuditRunResult,
+    HistoricalCompatibilityAudit,
+    HistoricalRowDecision,
+    audit_p55_history,
+    run_history_audit,
+)
 
 from capmas.evaluation.rehearsal import (
     ProcessRehearsalPool,
@@ -111,6 +118,11 @@ __all__ = [  # noqa: RUF022
     "diagnose_family_capability",
     "load_p55_capability_cases",
     "run_capability_diagnosis",
+    "HistoricalAuditRunResult",
+    "HistoricalCompatibilityAudit",
+    "HistoricalRowDecision",
+    "audit_p55_history",
+    "run_history_audit",
     "NormalizedEpisode",
     "ParityComparison",
     "compare_artifacts",
