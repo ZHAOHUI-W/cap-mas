@@ -87,9 +87,19 @@ def _tree_digest(root: Path) -> str:
     return digest.hexdigest()
 
 
+def _latest_run_dir(output_root: Path) -> Path:
+    runs_root = output_root / "P5.6.0_capability_diagnosis"
+    return max((path for path in runs_root.iterdir() if path.is_dir()), key=lambda path: path.name)
+
+
 def test_capability_gate_requires_execution_reach_and_one_success() -> None:
     cases = tuple(
-        _capability_case(seed, reached=seed <= 8, success=seed == 1)
+        _capability_case(
+            seed,
+            reached=seed <= 8,
+            success=seed == 1,
+            failure=None if seed == 1 else "POSTCONDITION_FAILED",
+        )
         for seed in range(1, 11)
     )
 
@@ -102,6 +112,28 @@ def test_capability_gate_requires_execution_reach_and_one_success() -> None:
     assert report.eligible is True
     assert report.execution_reach_rate == 0.8
     assert handoff is None
+
+
+def test_capability_gate_rejects_mixed_success_with_untyped_failure() -> None:
+    cases = tuple(
+        _capability_case(
+            seed,
+            reached=True,
+            success=seed == 1,
+            failure=None if seed in {1, 2} else "POSTCONDITION_FAILED",
+        )
+        for seed in range(1, 11)
+    )
+
+    report, handoff = diagnose_family_capability(
+        cases,
+        family_id="object-6",
+        source_manifest_sha256="a" * 64,
+    )
+
+    assert report.eligible is False
+    assert report.gate_failures == ("UNTYPED_FAILURE",)
+    assert handoff is not None
 
 
 def test_zero_success_family_emits_typed_p53_2_handoff() -> None:
@@ -180,3 +212,120 @@ def test_loader_fails_closed_for_incomplete_source(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="ood_replay.json"):
         load_p55_capability_cases(suite, "spatial-0")
+
+
+def test_loader_fails_closed_when_summary_winner_mismatches_evidence_candidate(
+    tmp_path: Path,
+) -> None:
+    suite = _write_p55_suite_fixture(tmp_path / "source")
+    _write_json(
+        suite
+        / "cases"
+        / "20260807_000001_id-spatial-0-seed1"
+        / "evidence"
+        / "ood_replay.json",
+        {
+            "case_id": "id-spatial-0-seed1",
+            "split": "id",
+            "candidate_id": "different-policy:1",
+            "evaluator_success": False,
+            "failure_class": "POSTCONDITION_FAILED",
+        },
+    )
+
+    with pytest.raises(ValueError, match="primary_winner.*candidate_id"):
+        load_p55_capability_cases(suite, "spatial-0")
+
+
+def test_loader_treats_coherent_no_selection_as_no_physical_execution(
+    tmp_path: Path,
+) -> None:
+    suite = _write_p55_suite_fixture(tmp_path / "source")
+    case_dir = suite / "cases" / "20260807_000001_id-spatial-0-seed1"
+    _write_json(
+        case_dir / "summary.json",
+        {
+            "case_id": "id-spatial-0-seed1",
+            "status": "completed",
+            "primary_winner": None,
+            "evaluator_success": False,
+        },
+    )
+    _write_json(
+        case_dir / "evidence" / "ood_replay.json",
+        {
+            "case_id": "id-spatial-0-seed1",
+            "split": "id",
+            "candidate_id": "unselected",
+            "evaluator_success": False,
+            "failure_class": "POSTCONDITION_FAILED",
+        },
+    )
+
+    cases = load_p55_capability_cases(suite, "spatial-0")
+
+    seed_one = next(case for case in cases if case.seed == 1)
+    assert seed_one.reached_physical_execution is False
+
+
+def test_run_rejects_output_root_inside_suite_before_creating_output(
+    tmp_path: Path,
+) -> None:
+    suite = _write_p55_suite_fixture(tmp_path / "source")
+    suite_link = tmp_path / "source-link"
+    suite_link.symlink_to(suite, target_is_directory=True)
+    before = _tree_digest(suite)
+
+    with pytest.raises(ValueError, match="output_root.*suite_dir"):
+        run_capability_diagnosis(
+            suite_dir=suite,
+            families=("spatial-0",),
+            output_root=suite_link / "outputs",
+        )
+
+    assert _tree_digest(suite) == before
+    assert not (suite / "outputs").exists()
+
+
+def test_run_finalizes_failed_artifacts_after_malformed_case_json(
+    tmp_path: Path,
+) -> None:
+    suite = _write_p55_suite_fixture(tmp_path / "source")
+    output_root = tmp_path / "outputs"
+    (
+        suite / "cases" / "20260807_000001_id-spatial-0-seed1" / "evidence" / "ood_replay.json"
+    ).write_text("{malformed json", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="malformed JSON"):
+        run_capability_diagnosis(
+            suite_dir=suite,
+            families=("spatial-0",),
+            output_root=output_root,
+        )
+
+    run_dir = _latest_run_dir(output_root)
+    run_config = json.loads((run_dir / "run_config.json").read_text(encoding="utf-8"))
+    runner_log = (run_dir / "logs" / "runner.log").read_text(encoding="utf-8")
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    manifest_paths = {entry["path"] for entry in manifest["files"]}
+
+    assert run_config["status"] == "failed"
+    assert run_config["error_type"] == "ValueError"
+    assert "malformed JSON" in run_config["error"]
+    assert "api_key" not in run_config["error"]
+    assert "status=failed" in runner_log
+    assert {"run_config.json", "logs/runner.log"}.issubset(manifest_paths)
+
+
+def test_run_rejects_duplicate_families_before_creating_run_dir(tmp_path: Path) -> None:
+    suite = _write_p55_suite_fixture(tmp_path / "source")
+    output_root = tmp_path / "outputs"
+
+    with pytest.raises(ValueError, match="duplicate family"):
+        run_capability_diagnosis(
+            suite_dir=suite,
+            families=("spatial-0", "spatial-0"),
+            output_root=output_root,
+        )
+
+    assert not output_root.exists()

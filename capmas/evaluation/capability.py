@@ -160,7 +160,7 @@ def diagnose_family_capability(
     gate_failures: list[str] = []
     if infrastructure_unknown_count:
         gate_failures.append(GATE_INFRASTRUCTURE_UNKNOWN)
-    if evaluator_success_count == 0 and any(
+    if any(
         case.evaluator_success is False and case.failure_class is None for case in cases
     ):
         gate_failures.append(GATE_UNTYPED_FAILURE)
@@ -209,24 +209,30 @@ def run_capability_diagnosis(
 
     if not families:
         raise ValueError("at least one family is required")
-    source_manifest_sha256 = _load_source_manifest_sha256(Path(suite_dir))
+    family_tuple = tuple(families)
+    duplicate_families = sorted(
+        family_id for family_id, count in Counter(family_tuple).items() if count > 1
+    )
+    if duplicate_families:
+        raise ValueError(f"duplicate family arguments are not allowed: {duplicate_families}")
+    suite_path = Path(suite_dir)
+    output_path = Path(output_root)
+    _reject_output_inside_suite(suite_path, output_path)
+    source_manifest_sha256 = _load_source_manifest_sha256(suite_path)
     run_dir = Phase5RunDirectory.create(
-        output_root,
+        output_path,
         "P5.6.0_capability_diagnosis",
         f"capability_{uuid4().hex[:8]}",
     )
-    family_tuple = tuple(families)
     run_dir.write_json(
         "run_config.json",
-        {
-            "experiment": "P5.6.0_capability_diagnosis",
-            "suite_dir": str(Path(suite_dir)),
-            "families": family_tuple,
-            "split": split,
-            "source_manifest_sha256": source_manifest_sha256,
-            "status": "running",
-            "read_only_source": True,
-        },
+        _run_config_payload(
+            suite_dir=suite_path,
+            families=family_tuple,
+            split=split,
+            source_manifest_sha256=source_manifest_sha256,
+            status="running",
+        ),
     )
 
     reports: list[CapabilityDiagnosticReport] = []
@@ -279,20 +285,30 @@ def run_capability_diagnosis(
         )
         run_dir.write_json(
             "run_config.json",
-            {
-                "experiment": "P5.6.0_capability_diagnosis",
-                "suite_dir": str(Path(suite_dir)),
-                "families": family_tuple,
-                "split": split,
-                "source_manifest_sha256": source_manifest_sha256,
-                "status": "completed",
-                "read_only_source": True,
-            },
+            _run_config_payload(
+                suite_dir=suite_path,
+                families=family_tuple,
+                split=split,
+                source_manifest_sha256=source_manifest_sha256,
+                status="completed",
+            ),
         )
         log_lines.extend(["status=completed", ""])
         run_dir.write_text("logs/runner.log", "\n".join(log_lines))
         run_dir.finalize_manifest()
-    except BaseException:
+    except BaseException as error:
+        run_dir.write_json(
+            "run_config.json",
+            _run_config_payload(
+                suite_dir=suite_path,
+                families=family_tuple,
+                split=split,
+                source_manifest_sha256=source_manifest_sha256,
+                status="failed",
+                error_type=type(error).__name__,
+                error=str(error),
+            ),
+        )
         log_lines.extend(["status=failed", ""])
         run_dir.write_text("logs/runner.log", "\n".join(log_lines))
         run_dir.finalize_manifest()
@@ -342,8 +358,10 @@ def _case_from_payloads(
 
     primary_winner = _optional_non_empty_str(summary.get("primary_winner"))
     candidate_id = _optional_non_empty_str(evidence.get("candidate_id"))
-    reached_physical_execution = bool(
-        primary_winner and candidate_id and candidate_id != "unselected"
+    reached_physical_execution = _reached_physical_execution(
+        case_id=case_id,
+        primary_winner=primary_winner,
+        candidate_id=candidate_id,
     )
 
     return CapabilityCase(
@@ -430,6 +448,57 @@ def _suspected_owner(report: CapabilityDiagnosticReport) -> str:
         if failure_class in _ORDINARY_TASK_FAILURE_CLASSES:
             return "task_mapping_or_motion"
     return "task_mapping_or_motion"
+
+
+def _run_config_payload(
+    *,
+    suite_dir: Path,
+    families: tuple[str, ...],
+    split: Split,
+    source_manifest_sha256: str,
+    status: str,
+    error_type: str | None = None,
+    error: str | None = None,
+) -> Mapping[str, object]:
+    payload: dict[str, object] = {
+        "experiment": "P5.6.0_capability_diagnosis",
+        "suite_dir": str(suite_dir),
+        "families": families,
+        "split": split,
+        "source_manifest_sha256": source_manifest_sha256,
+        "status": status,
+        "read_only_source": True,
+    }
+    if error_type is not None:
+        payload["error_type"] = error_type
+    if error is not None:
+        payload["error"] = error
+    return payload
+
+
+def _reject_output_inside_suite(suite_dir: Path, output_root: Path) -> None:
+    suite_resolved = suite_dir.resolve()
+    output_resolved = output_root.resolve(strict=False)
+    if output_resolved == suite_resolved or suite_resolved in output_resolved.parents:
+        raise ValueError("output_root must not be equal to or nested inside suite_dir")
+
+
+def _reached_physical_execution(
+    *,
+    case_id: str,
+    primary_winner: str | None,
+    candidate_id: str | None,
+) -> bool:
+    summary_claims_selection = primary_winner is not None
+    evidence_claims_selection = candidate_id is not None and candidate_id != "unselected"
+    if summary_claims_selection or evidence_claims_selection:
+        if primary_winner != candidate_id:
+            raise ValueError(
+                f"case {case_id} primary_winner must match evidence candidate_id when "
+                "physical selection is claimed"
+            )
+        return True
+    return False
 
 
 def _load_source_manifest_sha256(suite_dir: Path) -> str:
