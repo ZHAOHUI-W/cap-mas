@@ -286,6 +286,82 @@ def test_collection_captures_all_candidates_but_labels_only_selected(tmp_path) -
     assert (case_dirs[0] / "evidence" / "horizon.json").exists()
 
 
+@pytest.mark.parametrize("evaluator_success", [None, "true"])
+def test_collection_never_uses_generic_success_as_evaluator_label(
+    tmp_path, evaluator_success: object
+) -> None:
+    def fake_runner(**kwargs: object) -> dict[str, object]:
+        outcome = _online_outcome(
+            success=True,
+            episode_id=kwargs["calibration_context"].episode_id,
+        )
+        physical_result = outcome["physical_result"]
+        assert isinstance(physical_result, dict)
+        if evaluator_success is None:
+            physical_result.pop("evaluator_success")
+        else:
+            physical_result["evaluator_success"] = evaluator_success
+        physical_result["success"] = True
+        return outcome
+
+    report = run_collection(
+        _collection_manifest(),
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(),
+        online_runner=fake_runner,
+        executor_factory=lambda **kwargs: object(),
+    )
+
+    selected = next(
+        row
+        for row in json.loads((report.suite_dir / "results" / "outcomes.json").read_text())
+        if row["candidate_id"] == "candidate-a"
+    )
+    assert selected["execution_status"] == "selected_executed"
+    assert selected["tier"] == "C"
+    assert selected["task_success"] is None
+
+
+def test_post_runner_failure_preserves_all_raw_evidence(tmp_path) -> None:
+    def fake_runner(**kwargs: object) -> dict[str, object]:
+        outcome = _online_outcome(
+            success=True,
+            episode_id=kwargs["calibration_context"].episode_id,
+        )
+        physical_result = outcome["physical_result"]
+        assert isinstance(physical_result, dict)
+        physical_result["horizon"] = {"raw_horizon": "not-a-horizon-contract"}
+        return outcome
+
+    report = run_collection(
+        _collection_manifest(),
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(),
+        online_runner=fake_runner,
+        executor_factory=lambda **kwargs: object(),
+    )
+
+    assert report.failed_cases == 1
+    case_dir = report.cases[0].case_dir
+    online = json.loads((case_dir / "results" / "online.json").read_text())
+    snapshots = json.loads((case_dir / "evidence" / "decision_snapshots.json").read_text())
+    physical = json.loads((case_dir / "evidence" / "physical_payload.json").read_text())
+    horizon = json.loads((case_dir / "evidence" / "horizon.json").read_text())
+    graph_events = json.loads((case_dir / "evidence" / "graph_events.json").read_text())
+    failure = json.loads((case_dir / "failure.json").read_text())
+
+    assert online["physical_candidate_id"] == "candidate-a"
+    assert [snapshot["candidate_id"] for snapshot in snapshots] == [
+        "candidate-a",
+        "candidate-b",
+    ]
+    assert physical["success"] is True
+    assert horizon == {"raw_horizon": "not-a-horizon-contract"}
+    assert graph_events == physical["graph_events"]
+    assert failure["stage"] == "normalization"
+    assert failure["error_type"] == "ValueError"
+
+
 def test_collection_runs_whole_block_without_adaptive_stopping(tmp_path) -> None:
     calls = []
 
@@ -337,7 +413,70 @@ def test_collection_retains_typed_failure_and_continues_unless_fail_fast(tmp_pat
     assert len(failures) == 1
     failure = json.loads(failures[0].read_text())
     assert failure["error_type"] == "RuntimeError"
-    assert failure["stage"] == "online_collection"
+    assert failure["stage"] == "online_runner"
+
+
+def test_fail_fast_continues_after_non_infrastructure_failure(tmp_path) -> None:
+    calls = []
+
+    def fake_runner(**kwargs: object) -> dict[str, object]:
+        calls.append(kwargs["seed"])
+        episode_id = kwargs["calibration_context"].episode_id
+        if kwargs["seed"] == 12:
+            episode_id = "wrong-episode"
+        return _online_outcome(success=False, episode_id=episode_id)
+
+    report = run_collection(
+        _collection_manifest(seeds=(11, 12, 13)),
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(fail_fast=True),
+        online_runner=fake_runner,
+        executor_factory=lambda **kwargs: object(),
+    )
+
+    assert calls == [11, 12, 13]
+    assert report.completed_cases == 2
+    assert report.failed_cases == 1
+    assert report.negative_count == 2
+    failure = json.loads((report.cases[1].case_dir / "failure.json").read_text())
+    assert failure["stage"] == "validation"
+
+
+@pytest.mark.parametrize("failure_source", ["executor", "runner"])
+def test_fail_fast_stops_after_infrastructure_exception(tmp_path, failure_source: str) -> None:
+    constructed = []
+    calls = []
+
+    def executor_factory(**kwargs: object) -> object:
+        constructed.append(kwargs["seed"])
+        if failure_source == "executor" and kwargs["seed"] == 12:
+            raise RuntimeError("executor construction failed")
+        return object()
+
+    def fake_runner(**kwargs: object) -> dict[str, object]:
+        calls.append(kwargs["seed"])
+        if failure_source == "runner" and kwargs["seed"] == 12:
+            raise RuntimeError("online runner failed")
+        return _online_outcome(
+            success=False,
+            episode_id=kwargs["calibration_context"].episode_id,
+        )
+
+    with pytest.raises(RuntimeError, match="P5.6 collection case failed"):
+        run_collection(
+            _collection_manifest(seeds=(11, 12, 13)),
+            output_root=tmp_path,
+            run_config=CollectionRunConfig(fail_fast=True),
+            online_runner=fake_runner,
+            executor_factory=executor_factory,
+        )
+
+    assert constructed == [11, 12]
+    assert calls == ([11] if failure_source == "executor" else [11, 12])
+    failure_path = next(tmp_path.rglob("failure.json"))
+    failure = json.loads(failure_path.read_text())
+    expected_stage = "executor_construction" if failure_source == "executor" else "online_runner"
+    assert failure["stage"] == expected_stage
 
 
 def test_collection_preflight_rejects_candidate_digest_before_runtime(tmp_path) -> None:
@@ -394,3 +533,26 @@ def test_summary_combines_sources_and_rejects_duplicates(tmp_path) -> None:
     assert summary.eligible_20_5_5 is False
     with pytest.raises(ValueError, match="duplicate case"):
         summarize_collection((first.suite_dir, first.suite_dir))
+
+
+def test_summary_rejects_duplicate_identity_for_failed_cases_without_lineages(tmp_path) -> None:
+    def failing_runner(**kwargs: object) -> dict[str, object]:
+        raise RuntimeError(f"runner unavailable for seed {kwargs['seed']}")
+
+    first = run_collection(
+        _collection_manifest(seeds=(11,)),
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(),
+        online_runner=failing_runner,
+        executor_factory=lambda **kwargs: object(),
+    )
+    duplicate_case = run_collection(
+        _collection_manifest(seeds=(11,)),
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(),
+        online_runner=failing_runner,
+        executor_factory=lambda **kwargs: object(),
+    )
+
+    with pytest.raises(ValueError, match="duplicate case"):
+        summarize_collection((first.suite_dir, duplicate_case.suite_dir))

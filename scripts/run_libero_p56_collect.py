@@ -32,6 +32,7 @@ from capmas.evaluation.phase5_artifacts import Phase5RunDirectory
 from capmas.evaluation.rehearsal_evidence import RehearsalPoolConfig
 
 EXPERIMENT_NAME = "P5.6.2a_object6_collection"
+_INFRASTRUCTURE_STAGES = frozenset({"executor_construction", "online_runner"})
 OnlineRunner = Callable[..., object]
 ExecutorFactory = Callable[..., object]
 
@@ -204,7 +205,16 @@ def _write_case_failure(
     case: CalibrationCollectionCase,
     stage: str,
     error: Exception,
+    payload: Mapping[str, object] | None = None,
 ) -> None:
+    if payload is None:
+        case_dir.write_json("results/outcomes.json", [])
+        case_dir.write_json("evidence/decision_snapshots.json", [])
+        case_dir.write_json("evidence/physical_payload.json", {})
+        case_dir.write_json("evidence/horizon.json", _unknown_horizon().to_dict())
+        case_dir.write_json("evidence/graph_events.json", [])
+    else:
+        _write_raw_artifacts(case_dir, payload=payload)
     case_dir.write_json(
         "failure.json",
         {
@@ -217,10 +227,6 @@ def _write_case_failure(
         },
     )
     case_dir.write_json("results/outcomes.json", [])
-    case_dir.write_json("evidence/decision_snapshots.json", [])
-    case_dir.write_json("evidence/physical_payload.json", {})
-    case_dir.write_json("evidence/horizon.json", _unknown_horizon().to_dict())
-    case_dir.write_json("evidence/graph_events.json", [])
     case_dir.write_json(
         "summary.json",
         {
@@ -254,11 +260,36 @@ def _mapping(value: object) -> Mapping[str, object]:
 
 
 def _json_plain(value: object) -> object:
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        try:
+            return _json_plain(to_dict())
+        except Exception:  # noqa: BLE001
+            return repr(value)
     if isinstance(value, Mapping):
         return {str(key): _json_plain(item) for key, item in value.items()}
     if isinstance(value, (tuple, list)):
         return [_json_plain(item) for item in value]
     return value
+
+
+def _write_raw_artifacts(
+    case_dir: Phase5RunDirectory,
+    *,
+    payload: Mapping[str, object],
+) -> None:
+    physical_payload = payload.get("physical_result")
+    physical_mapping = physical_payload if isinstance(physical_payload, Mapping) else {}
+    raw_horizon = physical_mapping.get("horizon", _unknown_horizon())
+    raw_graph_events = physical_mapping.get("graph_events", [])
+    case_dir.write_json("results/online.json", _json_plain(payload))
+    case_dir.write_json(
+        "evidence/decision_snapshots.json",
+        _json_plain(payload.get("feature_snapshots", [])),
+    )
+    case_dir.write_json("evidence/physical_payload.json", _json_plain(physical_payload or {}))
+    case_dir.write_json("evidence/horizon.json", _json_plain(raw_horizon))
+    case_dir.write_json("evidence/graph_events.json", _json_plain(raw_graph_events))
 
 
 def _outcome_payload(outcome: object) -> dict[str, object]:
@@ -367,7 +398,7 @@ def _normalize_outcomes(
         and isinstance(physical_started_at_ns, int)
         and not isinstance(physical_started_at_ns, bool)
     )
-    task_success = _bool_value(physical_payload, "evaluator_success", "success")
+    task_success = _bool_value(physical_payload, "evaluator_success")
     graph_completed = _bool_value(physical_payload, "graph_completed", "completed")
     verifier_success = _bool_value(physical_payload, "verifier_success")
     failure_class = _string_or_none(physical_payload.get("failure_class"))
@@ -417,18 +448,7 @@ def _write_case_success(
     lineage: CalibrationLineage,
 ) -> None:
     physical_payload = _mapping(payload.get("physical_result"))
-    online_payload = dict(payload)
-    online_payload["feature_snapshots"] = [item.to_dict() for item in snapshots]
-    case_dir.write_json("results/online.json", online_payload)
     case_dir.write_json("results/outcomes.json", [outcome.to_dict() for outcome in outcomes])
-    case_dir.write_json("evidence/decision_snapshots.json", [item.to_dict() for item in snapshots])
-    case_dir.write_json("evidence/physical_payload.json", dict(physical_payload))
-    case_dir.write_json("evidence/horizon.json", _horizon_from_payload(physical_payload).to_dict())
-    graph_events = physical_payload.get("graph_events")
-    case_dir.write_json(
-        "evidence/graph_events.json",
-        graph_events if isinstance(graph_events, list) else [],
-    )
     case_dir.write_json("evidence/lineage.json", lineage.to_dict())
     tier_a = tuple(outcome for outcome in outcomes if outcome.tier == "A")
     task_success = tier_a[0].task_success if tier_a else None
@@ -499,6 +519,7 @@ def run_collection_case(
         },
     )
     stage = "candidate_validation"
+    payload: Mapping[str, object] | None = None
     try:
         candidate_path = _resolve_project_path(case.candidate_artifact)
         config_path = _resolve_project_path(case.config_path)
@@ -511,7 +532,7 @@ def run_collection_case(
         layout_variant = _json_plain(case.layout_variant)
         if not isinstance(layout_variant, Mapping):
             raise TypeError("collection layout_variant must be a mapping")
-        stage = "executor_factory"
+        stage = "executor_construction"
         physical_executor = executor_factory(
             config_path=str(config_path),
             object_name=case.object_name,
@@ -520,7 +541,7 @@ def run_collection_case(
             seed=case.seed,
             layout_variant=layout_variant,
         )
-        stage = "online_collection"
+        stage = "online_runner"
         context = CalibrationCollectionContext(
             episode_id=case.case_id,
             episode_epoch=1,
@@ -552,15 +573,22 @@ def run_collection_case(
             physical_executor=physical_executor,
             calibration_context=context,
         )
+        stage = "validation"
         payload = _outcome_payload(outcome)
+        stage = "persistence"
+        _write_raw_artifacts(case_dir, payload=payload)
+        stage = "validation"
         snapshots = _snapshot_tuple(payload.get("feature_snapshots"))
         if not snapshots:
             raise ValueError(
                 f"online runner returned no decision-time snapshots for {case.case_id}"
             )
         _validate_snapshots(snapshots, case=case, manifest=manifest)
+        stage = "normalization"
         outcomes = _normalize_outcomes(snapshots=snapshots, payload=payload)
+        stage = "validation"
         lineage = _lineage_from_case(case, payload=payload)
+        stage = "persistence"
         _write_case_success(
             case_dir,
             case=case,
@@ -586,7 +614,13 @@ def run_collection_case(
             outcomes=outcomes,
         )
     except Exception as error:  # noqa: BLE001
-        _write_case_failure(case_dir, case=case, stage=stage, error=error)
+        _write_case_failure(
+            case_dir,
+            case=case,
+            stage=stage,
+            error=error,
+            payload=payload,
+        )
         case_dir.write_json(
             "run_config.json",
             {
@@ -611,6 +645,16 @@ def run_collection_case(
     finally:
         case_dir.finalize_manifest()
     return result, lineage
+
+
+def _is_infrastructure_failure(result: CollectionCaseResult) -> bool:
+    if result.status != "failed":
+        return False
+    try:
+        failure = json.loads((result.case_dir / "failure.json").read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError):
+        return False
+    return isinstance(failure, Mapping) and failure.get("stage") in _INFRASTRUCTURE_STAGES
 
 
 def _suite_summary_payload(
@@ -680,7 +724,7 @@ def run_collection(
         results.append(result)
         if lineage is not None:
             lineages.append(lineage)
-        if result.status == "failed" and run_config.fail_fast:
+        if run_config.fail_fast and _is_infrastructure_failure(result):
             stop_error = RuntimeError(
                 f"P5.6 collection case failed: {case.case_id}: {result.error}"
             )
@@ -789,6 +833,29 @@ def _register_case(
     seen_lineages.add(lineage_group_id)
 
 
+def _suite_case_identities(
+    suite_path: Path,
+) -> tuple[CalibrationCollectionCase, ...]:
+    cases: list[CalibrationCollectionCase] = []
+    for row in _read_sequence_json(suite_path / "results" / "cases.json"):
+        if not isinstance(row, Mapping):
+            raise TypeError(f"collection case result must be a mapping: {suite_path}")
+        case_id = row.get("case_id")
+        case_dir_value = row.get("case_dir")
+        if not isinstance(case_id, str) or not case_id:
+            raise ValueError(f"collection case result lacks case_id: {suite_path}")
+        if not isinstance(case_dir_value, str) or not case_dir_value:
+            raise ValueError(f"collection case result lacks case_dir: {suite_path}")
+        case_dir = Path(case_dir_value)
+        if not case_dir.is_absolute():
+            case_dir = suite_path / case_dir
+        case = CalibrationCollectionCase.from_dict(_read_mapping_json(case_dir / "case.json"))
+        if case.case_id != case_id:
+            raise ValueError(f"persisted collection case identity mismatch: {case_id}")
+        cases.append(case)
+    return tuple(cases)
+
+
 def _history_audit_path(path: str | Path) -> Path:
     raw = Path(path)
     if raw.is_dir():
@@ -841,20 +908,27 @@ def summarize_collection(
     negative_count = 0
     for suite_dir in suite_dirs:
         suite_path = Path(suite_dir)
+        suite_cases = _suite_case_identities(suite_path)
+        suite_identities: dict[str, str] = {}
+        for case in suite_cases:
+            _register_case(
+                case_id=case.case_id,
+                lineage_group_id=case.lineage_group_id,
+                seen_cases=seen_cases,
+                seen_lineages=seen_lineages,
+            )
+            suite_identities[case.case_id] = case.lineage_group_id
         lineages = tuple(
             CalibrationLineage.from_dict(lineage)
             for lineage in _read_sequence_json(suite_path / "results" / "lineages.json")
             if isinstance(lineage, Mapping)
         )
-        suite_case_ids: set[str] = set()
         for lineage in lineages:
-            _register_case(
-                case_id=lineage.episode_id,
-                lineage_group_id=lineage.lineage_group_id,
-                seen_cases=seen_cases,
-                seen_lineages=seen_lineages,
-            )
-            suite_case_ids.add(lineage.episode_id)
+            expected_group = suite_identities.get(lineage.episode_id)
+            if expected_group is None:
+                raise ValueError(f"lineage lacks persisted case: {lineage.episode_id}")
+            if lineage.lineage_group_id != expected_group:
+                raise ValueError(f"persisted lineage identity mismatch: {lineage.episode_id}")
         outcomes = tuple(
             CalibrationOutcome.from_dict(outcome)
             for outcome in _read_sequence_json(suite_path / "results" / "outcomes.json")
@@ -863,7 +937,7 @@ def summarize_collection(
         for outcome in outcomes:
             if outcome.tier != "A" or outcome.task_success is None:
                 continue
-            if outcome.episode_id not in suite_case_ids:
+            if outcome.episode_id not in suite_identities:
                 raise ValueError(f"Tier A outcome lacks lineage: {outcome.episode_id}")
             if outcome.task_success:
                 positive_count += 1
