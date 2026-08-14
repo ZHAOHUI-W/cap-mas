@@ -52,7 +52,7 @@ from capmas.contracts.scene import (
     SpatialRelation,
     VisualEvidence,
 )
-from capmas.contracts.trace import ExecutionTrace, GraphExecutionEvent, SkillTrace
+from capmas.contracts.trace import ExecutionTrace, SkillTrace
 from capmas.contracts.verification import PredicateReport, VerificationResult
 
 __all__ = [
@@ -75,7 +75,6 @@ __all__ = [
     "EvidenceDimension",
     "GraphEdge",
     "GraphCandidate",
-    "GraphExecutionEvent",
     "GeometryEvidence",
     "PerceptionEvidence",
     "VerifierEvidence",
