@@ -201,3 +201,35 @@ All checks passed!
 ....................................                                     [100%]
 36 passed in 3.66s
 ```
+
+## Persistence-boundary remediation
+
+The follow-up review found that a raw-artifact retry could obscure its original
+typed failure, case-manifest finalization could escape the case boundary, and
+context or pool construction was classified as an online-runner failure. The
+runner now records raw-artifact retry failures alongside the original failure,
+converts finalization failures to non-infrastructure persistence failures, and
+sets the infrastructure stage only immediately before the runner invocation.
+New regressions cover raw-artifact persistence, finalization, context and pool
+preparation, and normalization under `fail_fast=True`.
+
+The requested distinct-case/shared-lineage scenario cannot occur in a valid
+P5.6 collection manifest because the binding contract requires
+`lineage_group_id == case_id`. The summary decoder rejects a deliberately
+malformed persisted identity before aggregation; the valid failed-case duplicate
+case regression remains covered.
+
+Controller verification:
+
+```text
+ruff check scripts/run_libero_p56_collect.py tests/test_libero_p56_collection.py
+All checks passed!
+
+/data/MLLM/wzh/agent/paper/infiAgent/workspace/cap-x/.venv-libero/bin/python -m pytest -q tests/test_libero_p56_collection.py tests/test_libero_p53_online.py tests/test_libero_p55_ood.py
+..........................................                               [100%]
+42 passed in 4.23s
+
+python scripts/create_p56_object6_manifests.py --project-root . --check
+validated p56_object6_id_seeds_11_20.json sha256=7104dee4da0a59e3aa4f3dbb11f65924c2b3242423d895aff3c9fe355282726b
+validated p56_object6_id_seeds_21_30.json sha256=97ba76e1918fb4f087ce522d79599be6da8b1333026e0292da7cb807b3f6ca1b
+```

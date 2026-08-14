@@ -207,6 +207,7 @@ def _write_case_failure(
     error: Exception,
     payload: Mapping[str, object] | None = None,
 ) -> None:
+    raw_artifact_error: Exception | None = None
     if payload is None:
         case_dir.write_json("results/outcomes.json", [])
         case_dir.write_json("evidence/decision_snapshots.json", [])
@@ -214,17 +215,28 @@ def _write_case_failure(
         case_dir.write_json("evidence/horizon.json", _unknown_horizon().to_dict())
         case_dir.write_json("evidence/graph_events.json", [])
     else:
-        _write_raw_artifacts(case_dir, payload=payload)
+        try:
+            _write_raw_artifacts(case_dir, payload=payload)
+        except Exception as persistence_error:  # noqa: BLE001
+            raw_artifact_error = persistence_error
+    failure_payload: dict[str, object] = {
+        "status": "failed",
+        "case_id": case.case_id,
+        "seed": case.seed,
+        "stage": stage,
+        "error_type": type(error).__name__,
+        "error": str(error),
+    }
+    if raw_artifact_error is not None:
+        failure_payload.update(
+            {
+                "raw_artifact_persistence_error_type": type(raw_artifact_error).__name__,
+                "raw_artifact_persistence_error": str(raw_artifact_error),
+            }
+        )
     case_dir.write_json(
         "failure.json",
-        {
-            "status": "failed",
-            "case_id": case.case_id,
-            "seed": case.seed,
-            "stage": stage,
-            "error_type": type(error).__name__,
-            "error": str(error),
-        },
+        failure_payload,
     )
     case_dir.write_json("results/outcomes.json", [])
     case_dir.write_json(
@@ -540,7 +552,7 @@ def run_collection_case(
             seed=case.seed,
             layout_variant=layout_variant,
         )
-        stage = "online_runner"
+        stage = "validation"
         context = CalibrationCollectionContext(
             episode_id=case.case_id,
             episode_epoch=1,
@@ -550,6 +562,12 @@ def run_collection_case(
             robot_skill_version=manifest.robot_skill_version,
             collection_lane="physical",
         )
+        pool_config = RehearsalPoolConfig(
+            max_workers=1,
+            timeout_s=run_config.timeout_s,
+            max_restarts=run_config.max_restarts,
+        )
+        stage = "online_runner"
         outcome = online_runner(
             config_path=str(config_path),
             candidates=candidates,
@@ -559,11 +577,7 @@ def run_collection_case(
             cache_mode="disabled",
             selection_repeats=1,
             output_root=case_dir.path / "online",
-            pool_config=RehearsalPoolConfig(
-                max_workers=1,
-                timeout_s=run_config.timeout_s,
-                max_restarts=run_config.max_restarts,
-            ),
+            pool_config=pool_config,
             max_steps=run_config.max_steps,
             object_name=case.object_name,
             target_name=case.target_name,
@@ -641,8 +655,34 @@ def run_collection_case(
             error=str(error),
         )
         lineage = None
-    finally:
+    try:
         case_dir.finalize_manifest()
+    except Exception as finalization_error:  # noqa: BLE001
+        failure_write_error: Exception | None = None
+        if result.status == "completed":
+            try:
+                _write_case_failure(
+                    case_dir,
+                    case=case,
+                    stage="persistence",
+                    error=finalization_error,
+                    payload=payload,
+                )
+            except Exception as write_error:  # noqa: BLE001
+                failure_write_error = write_error
+            result = CollectionCaseResult(
+                case_id=case.case_id,
+                seed=case.seed,
+                status="failed",
+                case_dir=case_dir.path,
+                outcomes=(),
+                error=(
+                    str(finalization_error)
+                    if failure_write_error is None
+                    else f"{finalization_error}; typed failure write also failed: {failure_write_error}"
+                ),
+            )
+            lineage = None
     return result, lineage
 
 

@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import scripts.run_libero_p56_collect as collection_module
 from capmas.contracts.calibration import (
     FEATURE_SCHEMA_VERSION,
     CalibrationCollectionCase,
@@ -362,6 +363,156 @@ def test_post_runner_failure_preserves_all_raw_evidence(tmp_path) -> None:
     assert failure["error_type"] == "ValueError"
 
 
+def test_raw_artifact_persistence_retry_keeps_original_failure_typed(
+    tmp_path, monkeypatch
+) -> None:
+    persistence_errors = iter(
+        [OSError("initial raw artifact write failed"), RuntimeError("retry obscured error")]
+    )
+
+    def failing_raw_writer(*args: object, **kwargs: object) -> None:
+        raise next(persistence_errors)
+
+    monkeypatch.setattr(collection_module, "_write_raw_artifacts", failing_raw_writer)
+
+    report = run_collection(
+        _collection_manifest(),
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(),
+        online_runner=lambda **kwargs: _online_outcome(
+            success=True,
+            episode_id=kwargs["calibration_context"].episode_id,
+        ),
+        executor_factory=lambda **kwargs: object(),
+    )
+
+    assert report.failed_cases == 1
+    failure = json.loads((report.cases[0].case_dir / "failure.json").read_text())
+    assert failure["stage"] == "persistence"
+    assert failure["error_type"] == "OSError"
+    assert failure["error"] == "initial raw artifact write failed"
+    assert failure["raw_artifact_persistence_error_type"] == "RuntimeError"
+    assert failure["raw_artifact_persistence_error"] == "retry obscured error"
+
+
+def test_case_finalization_failure_is_typed_and_fail_fast_continues(
+    tmp_path, monkeypatch
+) -> None:
+    original_finalize = collection_module.Phase5RunDirectory.finalize_manifest
+
+    def failing_case_finalize(run_dir: object) -> object:
+        path = run_dir.path
+        if path.parent.name == "cases" and path.name.endswith("seed12"):
+            raise OSError("case manifest persistence failed")
+        return original_finalize(run_dir)
+
+    monkeypatch.setattr(
+        collection_module.Phase5RunDirectory,
+        "finalize_manifest",
+        failing_case_finalize,
+    )
+
+    report = run_collection(
+        _collection_manifest(seeds=(11, 12, 13)),
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(fail_fast=True),
+        online_runner=lambda **kwargs: _online_outcome(
+            success=kwargs["seed"] == 11,
+            episode_id=kwargs["calibration_context"].episode_id,
+        ),
+        executor_factory=lambda **kwargs: object(),
+    )
+
+    assert [case.seed for case in report.cases] == [11, 12, 13]
+    assert report.completed_cases == 2
+    assert report.failed_cases == 1
+    assert report.positive_count == 1
+    assert report.negative_count == 1
+    failure = json.loads((report.cases[1].case_dir / "failure.json").read_text())
+    assert failure["stage"] == "persistence"
+    assert failure["error_type"] == "OSError"
+
+
+@pytest.mark.parametrize("preparation_failure", ["context", "pool"])
+def test_fail_fast_continues_after_online_preparation_failure(
+    tmp_path, monkeypatch, preparation_failure: str
+) -> None:
+    calls = []
+    if preparation_failure == "context":
+        original_context = collection_module.CalibrationCollectionContext
+
+        def failing_context(**kwargs: object) -> object:
+            if kwargs["episode_id"] == "object-6-id-seed12":
+                raise ValueError("context construction failed")
+            return original_context(**kwargs)
+
+        monkeypatch.setattr(collection_module, "CalibrationCollectionContext", failing_context)
+    else:
+        original_pool_config = collection_module.RehearsalPoolConfig
+        pool_calls = 0
+
+        def failing_pool_config(**kwargs: object) -> object:
+            nonlocal pool_calls
+            pool_calls += 1
+            if pool_calls == 2:
+                raise ValueError("online call argument preparation failed")
+            return original_pool_config(**kwargs)
+
+        monkeypatch.setattr(collection_module, "RehearsalPoolConfig", failing_pool_config)
+
+    def fake_runner(**kwargs: object) -> dict[str, object]:
+        calls.append(kwargs["seed"])
+        return _online_outcome(
+            success=False,
+            episode_id=kwargs["calibration_context"].episode_id,
+        )
+
+    report = run_collection(
+        _collection_manifest(seeds=(11, 12, 13)),
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(fail_fast=True),
+        online_runner=fake_runner,
+        executor_factory=lambda **kwargs: object(),
+    )
+
+    assert calls == [11, 13]
+    assert [case.seed for case in report.cases] == [11, 12, 13]
+    assert report.completed_cases == 2
+    assert report.failed_cases == 1
+    failure = json.loads((report.cases[1].case_dir / "failure.json").read_text())
+    assert failure["stage"] == "validation"
+
+
+def test_fail_fast_continues_after_normalization_failure(tmp_path) -> None:
+    calls = []
+
+    def fake_runner(**kwargs: object) -> dict[str, object]:
+        calls.append(kwargs["seed"])
+        outcome = _online_outcome(
+            success=False,
+            episode_id=kwargs["calibration_context"].episode_id,
+        )
+        if kwargs["seed"] == 12:
+            physical_result = outcome["physical_result"]
+            assert isinstance(physical_result, dict)
+            physical_result["horizon"] = {"invalid": True}
+        return outcome
+
+    report = run_collection(
+        _collection_manifest(seeds=(11, 12, 13)),
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(fail_fast=True),
+        online_runner=fake_runner,
+        executor_factory=lambda **kwargs: object(),
+    )
+
+    assert calls == [11, 12, 13]
+    assert report.completed_cases == 2
+    assert report.failed_cases == 1
+    failure = json.loads((report.cases[1].case_dir / "failure.json").read_text())
+    assert failure["stage"] == "normalization"
+
+
 def test_collection_runs_whole_block_without_adaptive_stopping(tmp_path) -> None:
     calls = []
 
@@ -556,3 +707,43 @@ def test_summary_rejects_duplicate_identity_for_failed_cases_without_lineages(tm
 
     with pytest.raises(ValueError, match="duplicate case"):
         summarize_collection((first.suite_dir, duplicate_case.suite_dir))
+
+
+def test_summary_rejects_malformed_distinct_case_lineage_identity(tmp_path) -> None:
+    def failing_runner(**kwargs: object) -> dict[str, object]:
+        raise RuntimeError(f"runner unavailable for seed {kwargs['seed']}")
+
+    first = run_collection(
+        _collection_manifest(),
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(),
+        online_runner=failing_runner,
+        executor_factory=lambda **kwargs: object(),
+    )
+    second = run_collection(
+        _collection_manifest(seeds=(12,)),
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(),
+        online_runner=failing_runner,
+        executor_factory=lambda **kwargs: object(),
+    )
+
+    assert first.cases[0].status == "failed"
+    assert second.cases[0].status == "failed"
+
+    for report, case_id in (
+        (first, "object-6-id-seed11-first"),
+        (second, "object-6-id-seed12-second"),
+    ):
+        case_path = report.cases[0].case_dir / "case.json"
+        case_payload = json.loads(case_path.read_text())
+        case_payload["case_id"] = case_id
+        case_payload["lineage_group_id"] = "shared-failed-lineage"
+        case_path.write_text(json.dumps(case_payload, indent=2, sort_keys=True) + "\n")
+        cases_path = report.suite_dir / "results" / "cases.json"
+        cases_payload = json.loads(cases_path.read_text())
+        cases_payload[0]["case_id"] = case_id
+        cases_path.write_text(json.dumps(cases_payload, indent=2, sort_keys=True) + "\n")
+
+    with pytest.raises(ValueError, match="lineage_group_id must equal case_id"):
+        summarize_collection((first.suite_dir, second.suite_dir))
