@@ -1,9 +1,31 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 from capmas.contracts.core import ArtifactRef
-from capmas.contracts.verification import PredicateReport, VerificationResult
+from capmas.contracts.verification import VerificationResult
+
+GraphEventKind = Literal[
+    "subgraph_started",
+    "subgraph_completed",
+    "subgraph_failed",
+    "node_started",
+    "node_completed",
+    "node_failed",
+]
+
+
+@dataclass(frozen=True)
+class GraphExecutionEvent:
+    sequence: int
+    kind: GraphEventKind
+    subgraph_id: str
+    node_id: str | None
+    node_type: Literal["action", "checkpoint", "router"] | None
+    attempt: int
+    outcome: str | None
+    occurred_at_ns: int
 
 
 @dataclass(frozen=True)

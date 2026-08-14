@@ -6,15 +6,16 @@ from pathlib import Path
 import pytest
 
 from capmas.contracts.action import SkillCall
+from capmas.contracts.calibration import CalibrationCollectionContext
 from capmas.contracts.core import SkillRef
 from capmas.contracts.graph import CheckpointSpec, MissionGraph, SubgraphNodeSpec, SubgraphSpec
 from capmas.contracts.scene import ObjectTrack, SceneSnapshot
 from capmas.evaluation.rehearsal import RehearsalResult
 from capmas.evaluation.rehearsal_evidence import RehearsalPoolConfig
-from scripts.run_libero_p53_online import _physical_result_payload, _scene_debug_payload
-from capmas.evaluation.evidence_cache import VersionedEvidenceCache
 from capmas.graph.serialization import mission_graph_to_dict
 from scripts.run_libero_p53_online import (
+    _physical_result_payload,
+    _scene_debug_payload,
     _setup_capx_paths,
     load_online_candidates,
     run_online_experiment,
@@ -87,6 +88,93 @@ def _artifact(tmp_path):
         encoding="utf-8",
     )
     return path
+
+
+def _calibration_context() -> CalibrationCollectionContext:
+    return CalibrationCollectionContext(
+        episode_id="online-episode",
+        episode_epoch=1,
+        family_id="online-family",
+        feature_schema_version="p56.feature.v1",
+        memory_skill_version="memory-v1",
+        robot_skill_version="robot-v1",
+    )
+
+
+def test_online_driver_writes_decision_snapshots_before_physical_execution(tmp_path) -> None:
+    candidates = load_online_candidates(_artifact(tmp_path))
+    observed_artifacts = []
+
+    def fake_run(jobs, worker_factory, pool_config):
+        del worker_factory, pool_config
+        return tuple(
+            RehearsalResult(
+                candidate_id=job.candidate_id,
+                seed=job.seed,
+                success=True,
+                latency_ms=1.0,
+                scene_version=job.scene_version,
+                candidate_fingerprint=job.candidate_fingerprint,
+                fingerprint_scope=job.fingerprint_scope,
+                arbiter_subgraph_id=job.arbiter_subgraph_id,
+                arbiter_fingerprint=job.arbiter_fingerprint,
+            )
+            for job in jobs
+        )
+
+    def physical(_candidate, _graph):
+        artifacts = list(tmp_path.rglob("evidence/calibration_feature_snapshots.json"))
+        observed_artifacts.append(artifacts)
+        return {"completed": True}
+
+    outcome = run_online_experiment(
+        config_path="libero.yaml",
+        candidates=candidates,
+        seed=1,
+        scene_version=4,
+        mode="online_bounded",
+        output_root=tmp_path / "runs",
+        pool_config=RehearsalPoolConfig(max_workers=1, timeout_s=1.0),
+        run_fn=fake_run,
+        calibration_context=_calibration_context(),
+        physical_executor=physical,
+    )
+
+    assert observed_artifacts and observed_artifacts[0]
+    snapshots = json.loads(observed_artifacts[0][0].read_text(encoding="utf-8"))
+    assert len(snapshots) == len(candidates)
+    assert outcome.feature_snapshots
+    assert outcome.decision_completed_at_ns is not None
+    assert outcome.physical_execution_started_at_ns is not None
+    assert outcome.decision_completed_at_ns <= outcome.physical_execution_started_at_ns
+    run_config = json.loads((outcome.run_dir.path / "run_config.json").read_text())
+    summary = json.loads((outcome.run_dir.path / "summary.json").read_text())
+    assert run_config["feature_snapshot_count"] == len(candidates)
+    assert run_config["feature_schema_version"] == "p56.feature.v1"
+    assert summary["decision_completed_at_ns"] == outcome.decision_completed_at_ns
+    assert "physical_execution_started_at_ns=" in (
+        outcome.run_dir.path / "logs" / "runner.log"
+    ).read_text()
+
+
+def test_online_driver_without_calibration_context_keeps_empty_snapshot_provenance(tmp_path) -> None:
+    candidates = load_online_candidates(_artifact(tmp_path))
+
+    outcome = run_online_experiment(
+        config_path="libero.yaml",
+        candidates=candidates,
+        seed=1,
+        scene_version=4,
+        mode="disabled",
+        output_root=tmp_path / "runs",
+        pool_config=RehearsalPoolConfig(max_workers=1, timeout_s=1.0),
+        physical_executor=lambda _candidate, _graph: {"completed": True},
+    )
+
+    assert outcome.feature_snapshots == ()
+    assert outcome.decision_completed_at_ns is not None
+    assert outcome.physical_execution_started_at_ns is not None
+    assert not (outcome.run_dir.path / "evidence/calibration_feature_snapshots.json").exists()
 
 
 def test_online_driver_rehearses_candidates_then_executes_one_winner(tmp_path) -> None:
@@ -169,6 +257,54 @@ def test_physical_payload_preserves_graph_failure_metadata() -> None:
     assert payload["failure"]["node_id"] == "pick-action"
     assert payload["failure"]["subgraph_id"] == "pick"
     assert payload["trace_count"] == 1
+    assert payload["horizon"]["planned_valid"] is False
+
+
+def test_physical_payload_persists_graph_events_and_horizon() -> None:
+    from types import SimpleNamespace
+
+    from capmas.contracts.trace import GraphExecutionEvent
+    from capmas.graph.serialization import mission_graph_from_dict
+
+    graph = mission_graph_from_dict(_graph_payload("telemetry"))
+    event = GraphExecutionEvent(
+        sequence=0,
+        kind="subgraph_started",
+        subgraph_id="sg_pick",
+        node_id=None,
+        node_type=None,
+        attempt=1,
+        outcome=None,
+        occurred_at_ns=1,
+    )
+    result = SimpleNamespace(
+        completed=True,
+        traces=(),
+        failure=None,
+        terminal_subgraph="sg_pick",
+        next_subgraph=None,
+        events=(event,),
+    )
+
+    payload = _physical_result_payload(
+        result,
+        evaluator_success=True,
+        graph=graph,
+    )
+
+    assert payload["graph_events"] == [
+        {
+            "sequence": 0,
+            "kind": "subgraph_started",
+            "subgraph_id": "sg_pick",
+            "node_id": None,
+            "node_type": None,
+            "attempt": 1,
+            "outcome": None,
+            "occurred_at_ns": 1,
+        }
+    ]
+    assert payload["horizon"]["planned_valid"] is True
 
 
 def test_scene_debug_payload_includes_placement_pose() -> None:
@@ -449,6 +585,7 @@ def test_online_driver_persists_failure_artifacts_before_reraising(tmp_path) -> 
             output_root=tmp_path / "runs",
             pool_config=RehearsalPoolConfig(max_workers=1, timeout_s=1.0),
             run_fn=successful_run,
+            calibration_context=_calibration_context(),
             physical_executor=failing_physical_executor,
         )
 
@@ -461,6 +598,18 @@ def test_online_driver_persists_failure_artifacts_before_reraising(tmp_path) -> 
     assert failure["error"] == "physical executor unavailable"
     assert (run_dir / "logs" / "runner.log").exists()
     assert (run_dir / "manifest.json").exists()
+    run_config = json.loads((run_dir / "run_config.json").read_text(encoding="utf-8"))
+    summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+    log = (run_dir / "logs" / "runner.log").read_text(encoding="utf-8")
+    for artifact in (run_config, summary):
+        assert artifact["feature_schema_version"] == "p56.feature.v1"
+        assert artifact["feature_snapshot_count"] == len(candidates)
+        assert artifact["decision_completed_at_ns"] is not None
+        assert artifact["physical_execution_started_at_ns"] is not None
+    assert "feature_schema_version=p56.feature.v1" in log
+    assert "feature_snapshot_count=2" in log
+    assert "decision_completed_at_ns=" in log
+    assert "physical_execution_started_at_ns=" in log
 
 
 def test_online_capx_paths_prefer_libero_robosuite(monkeypatch) -> None:

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass, replace
 import os
-from pathlib import Path
 import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import asdict, dataclass, replace
+from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
@@ -17,7 +17,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from capmas.agents.arbiter import CandidateArbiter
-from capmas.contracts.candidates import GraphCandidate, subgraph_fingerprint
+from capmas.contracts.calibration import CalibrationCollectionContext, CandidateFeatureSnapshot
+from capmas.contracts.candidates import GraphCandidate, rewrite_report_for, subgraph_fingerprint
 from capmas.contracts.graph import MissionGraph
 from capmas.contracts.scene import SceneSnapshot
 from capmas.evaluation.candidate_identity import (
@@ -26,11 +27,13 @@ from capmas.evaluation.candidate_identity import (
 )
 from capmas.evaluation.evidence_cache import VersionedEvidenceCache
 from capmas.evaluation.evidence_contracts import EvidenceRequestContext
+from capmas.evaluation.feature_snapshots import capture_feature_snapshot
+from capmas.evaluation.labels import extract_horizon
 from capmas.evaluation.libero_rehearsal import LiberoRehearsalConfig, LiberoRehearsalWorker
 from capmas.evaluation.online_rehearsal import (
     RehearsalArbitrationReport,
-    RehearsalMode,
     RehearsalEvidenceProvider,
+    RehearsalMode,
     select_with_rehearsal,
 )
 from capmas.evaluation.phase5_artifacts import Phase5RunDirectory
@@ -47,7 +50,6 @@ from scripts.run_libero_p53_rehearsal import (
     parse_candidate_mapping,
 )
 
-
 PhysicalExecutor = Callable[[GraphCandidate, MissionGraph], object]
 RehearsalRunFn = Callable[..., tuple[RehearsalResult, ...]]
 
@@ -61,6 +63,9 @@ class OnlineSelectionOutcome:
     physical_result: object | None
     provider_call_count: int
     selection_latency_ms: float
+    feature_snapshots: tuple[CandidateFeatureSnapshot, ...] = ()
+    decision_completed_at_ns: int | None = None
+    physical_execution_started_at_ns: int | None = None
 
 
 @dataclass(frozen=True)
@@ -123,6 +128,7 @@ def run_online_experiment(
     gpu: str = "5",
     run_fn: RehearsalRunFn = run_with_respawn,
     physical_executor: PhysicalExecutor | None = None,
+    calibration_context: CalibrationCollectionContext | None = None,
 ) -> OnlineSelectionOutcome:
     """Run rehearsal, select one live candidate, and execute it at most once."""
 
@@ -161,6 +167,12 @@ def run_online_experiment(
         "artifact_dir": str(run_dir.path),
         "provider_call_count": 0,
         "layout_variant": dict(layout_variant or {}),
+        "feature_schema_version": (
+            calibration_context.feature_schema_version if calibration_context is not None else None
+        ),
+        "feature_snapshot_count": 0,
+        "decision_completed_at_ns": None,
+        "physical_execution_started_at_ns": None,
     }
     run_dir.write_json("run_config.json", {**run_config, "status": "running"})
     rehearsal_results: list[RehearsalResult] = []
@@ -246,17 +258,34 @@ def run_online_experiment(
     assert report is not None
     run_config["provider_call_count"] = provider_call_count
 
+    decision_completed_at_ns = time.time_ns()
+    feature_snapshots: tuple[CandidateFeatureSnapshot, ...] = ()
+    if calibration_context is not None:
+        feature_snapshots = tuple(
+            capture_feature_snapshot(candidate, calibration_context)
+            for candidate in report.evidence_candidates
+        )
+        run_dir.write_json(
+            "evidence/calibration_feature_snapshots.json",
+            [snapshot.to_dict() for snapshot in feature_snapshots],
+        )
+    run_config["feature_snapshot_count"] = len(feature_snapshots)
+    run_config["decision_completed_at_ns"] = decision_completed_at_ns
+
     physical_candidate_id = (
         report.live.selected.candidate_id if report.live.selected is not None else None
     )
     physical_result = None
+    physical_execution_started_at_ns: int | None = None
     stage = "physical_execution"
     try:
         if physical_candidate_id is not None and physical_executor is not None:
             selected = report.live.selected
             assert selected is not None
+            physical_execution_started_at_ns = time.time_ns()
             physical_result = physical_executor(selected, typed.graphs[physical_candidate_id])
     except Exception as exc:
+        run_config["physical_execution_started_at_ns"] = physical_execution_started_at_ns
         _write_failure_artifacts(
             run_dir,
             run_config=run_config,
@@ -267,28 +296,10 @@ def run_online_experiment(
         )
         raise
 
-    run_dir.write_json(
-        "run_config.json",
-        {
-            "experiment": "P5.3.1_online_rehearsal_arbiter",
-            "config_path": str(Path(config_path).resolve()),
-            "candidate_ids": [candidate.candidate_id for candidate in candidates],
-            "scene_version": scene_version,
-            "seed": seed,
-            "mode": mode,
-            "cache_mode": cache_mode,
-            "selection_repeats": selection_repeats,
-            "max_workers": pool_config.max_workers,
-            "timeout_s": pool_config.timeout_s,
-            "max_restarts": pool_config.max_restarts,
-            "max_steps": max_steps,
-            "gpu": gpu,
-            "physical_execution_count": int(physical_candidate_id is not None),
-            "artifact_dir": str(run_dir.path),
-            "provider_call_count": provider_call_count,
-            "selection_latency_ms": selection_latency_ms,
-        },
-    )
+    run_config["physical_execution_started_at_ns"] = physical_execution_started_at_ns
+    run_config["physical_execution_count"] = int(physical_candidate_id is not None)
+    run_config["selection_latency_ms"] = selection_latency_ms
+    run_dir.write_json("run_config.json", run_config)
     run_dir.write_json("results/rehearsal.json", [asdict(item) for item in rehearsal_results])
     if evidence_cache is not None:
         run_dir.write_json(
@@ -316,6 +327,10 @@ def run_online_experiment(
                 f"physical_execution_count={int(physical_candidate_id is not None)}",
                 f"provider_call_count={provider_call_count}",
                 f"selection_latency_ms={selection_latency_ms:.3f}",
+                f"feature_schema_version={run_config['feature_schema_version']}",
+                f"feature_snapshot_count={len(feature_snapshots)}",
+                f"decision_completed_at_ns={decision_completed_at_ns}",
+                f"physical_execution_started_at_ns={physical_execution_started_at_ns}",
                 f"provider_latency_ms={report.provider_latency_ms:.3f}",
                 f"cache_hits={report.cache_stats.hits if report.cache_stats else 0}",
                 f"cache_stores={report.cache_stats.stores if report.cache_stats else 0}",
@@ -335,6 +350,10 @@ def run_online_experiment(
             "physical_execution_count": int(physical_candidate_id is not None),
             "provider_call_count": provider_call_count,
             "selection_latency_ms": selection_latency_ms,
+            "feature_schema_version": run_config["feature_schema_version"],
+            "feature_snapshot_count": len(feature_snapshots),
+            "decision_completed_at_ns": decision_completed_at_ns,
+            "physical_execution_started_at_ns": physical_execution_started_at_ns,
             "physical_result": physical_result,
             "selection": selection_payload,
         },
@@ -363,6 +382,9 @@ def run_online_experiment(
         physical_result=physical_result,
         provider_call_count=provider_call_count,
         selection_latency_ms=selection_latency_ms,
+        feature_snapshots=feature_snapshots,
+        decision_completed_at_ns=decision_completed_at_ns,
+        physical_execution_started_at_ns=physical_execution_started_at_ns,
     )
 
 
@@ -391,6 +413,21 @@ def _write_failure_artifacts(
         )
         run_dir.write_json("failure.json", failure)
         run_dir.write_json(
+            "summary.json",
+            {
+                "status": "failed",
+                "stage": stage,
+                "error_type": type(error).__name__,
+                "error": str(error),
+                "feature_schema_version": run_config["feature_schema_version"],
+                "feature_snapshot_count": run_config["feature_snapshot_count"],
+                "decision_completed_at_ns": run_config["decision_completed_at_ns"],
+                "physical_execution_started_at_ns": run_config[
+                    "physical_execution_started_at_ns"
+                ],
+            },
+        )
+        run_dir.write_json(
             "results/rehearsal.json", [asdict(item) for item in rehearsal_results]
         )
         if evidence_cache is not None:
@@ -407,12 +444,16 @@ def _write_failure_artifacts(
                     f"error_type={type(error).__name__}",
                     f"error={error}",
                     f"rehearsal_results={len(rehearsal_results)}",
+                    f"feature_schema_version={run_config['feature_schema_version']}",
+                    f"feature_snapshot_count={run_config['feature_snapshot_count']}",
+                    f"decision_completed_at_ns={run_config['decision_completed_at_ns']}",
+                    f"physical_execution_started_at_ns={run_config['physical_execution_started_at_ns']}",
                     "",
                 ]
             ),
         )
         run_dir.finalize_manifest()
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         # Failure reporting must not replace the exception that caused the run
         # to fail. The run directory itself remains available for inspection.
         pass
@@ -454,6 +495,7 @@ def _typed_candidates(
                 parent_scene_version=scene_version,
                 producer_agent="rehearsal-artifact",
                 raw_subgraph=local,
+                rewrite_report=rewrite_report_for(local, local),
             )
         )
         graphs[spec.candidate_id] = graph
@@ -524,6 +566,7 @@ def _physical_result_payload(
     evaluator_success: bool,
     layout_report: object | None = None,
     scene_diagnostics: Mapping[str, object] | None = None,
+    graph: MissionGraph | None = None,
 ) -> dict[str, object]:
     """Serialize graph execution failure context at the physical boundary."""
     failure = getattr(result, "failure", None)
@@ -548,7 +591,7 @@ def _physical_result_payload(
     completed = bool(getattr(result, "completed", False))
     failure_class = failure_payload.get("failure_class") if failure_payload else None
     failure_reason = failure_payload.get("message") if failure_payload else None
-    return {
+    payload = {
         "completed": completed,
         "evaluator_success": bool(evaluator_success),
         "success": bool(completed and evaluator_success),
@@ -566,6 +609,39 @@ def _physical_result_payload(
         "layout_application": layout_report,
         "scene_diagnostics": dict(scene_diagnostics or {}),
     }
+    if graph is not None:
+        events = tuple(getattr(result, "events", ()))
+        payload["graph_events"] = [
+            {
+                "sequence": event.sequence,
+                "kind": event.kind,
+                "subgraph_id": event.subgraph_id,
+                "node_id": event.node_id,
+                "node_type": event.node_type,
+                "attempt": event.attempt,
+                "outcome": event.outcome,
+                "occurred_at_ns": event.occurred_at_ns,
+            }
+            for event in events
+        ]
+        payload["horizon"] = extract_horizon(graph, events).to_dict()
+    else:
+        payload["horizon"] = {
+            "planned_critical_path_actions": None,
+            "planned_critical_path_subgoals": None,
+            "planned_checkpoint_subgraphs": None,
+            "attempted_actions": None,
+            "completed_actions": None,
+            "attempted_subgoals": None,
+            "completed_subgoals": None,
+            "attempted_checkpoints": None,
+            "completed_checkpoints": None,
+            "planned_source": "unknown",
+            "realized_source": "unknown",
+            "planned_valid": False,
+            "realized_valid": False,
+        }
+    return payload
 
 
 def _scene_debug_payload(
@@ -652,7 +728,7 @@ def _physical_sim_debug_payload(
         body_names = [
             model.body_id2name(index) for index in range(int(model.nbody))
         ]
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return {
             "available": False,
             "reason": f"MuJoCo pose inspection failed: {type(exc).__name__}: {exc}",
@@ -724,7 +800,7 @@ def _setup_capx_paths() -> None:
     try:
         import importlib
 
-        import robosuite
+        import robosuite  # noqa: F401
 
         capx_robosuite = capx_root / "capx" / "third_party" / "robosuite" / "robosuite"
         for subpackage in ("controllers", "utils"):
@@ -747,6 +823,7 @@ def _build_live_executor(
     layout_variant: Mapping[str, object] | None = None,
 ) -> PhysicalExecutor:
     from capmas.backends.capx_libero_factory import build_capx_runtime_from_yaml
+    from capmas.evaluation.layout_variants import LayoutResetHook
     from capmas.runtime.action_lease import ActionLeaseManager
     from capmas.runtime.artifact_bus import ArtifactStore
     from capmas.runtime.graph_interpreter import FixedGraphInterpreter
@@ -757,7 +834,6 @@ def _build_live_executor(
         LiberoObservableVerifier,
         ground_libero_mission_graph,
     )
-    from capmas.evaluation.layout_variants import LayoutResetHook
 
     def execute(_candidate: GraphCandidate, graph: MissionGraph) -> object:
         bundle = build_capx_runtime_from_yaml(
@@ -801,6 +877,7 @@ def _build_live_executor(
             return _physical_result_payload(
                 result,
                 evaluator_success=evaluator_success,
+                graph=graph,
                 layout_report=getattr(
                     bundle.low_level_environment,
                     "_capmas_layout_report",

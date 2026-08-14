@@ -1,28 +1,26 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-import time
 from uuid import uuid4
 
+from capmas.contracts.action import SkillCall
 from capmas.contracts.agent import AgentContext, CycleHistory
 from capmas.contracts.candidates import subgraph_fingerprint
 from capmas.contracts.failures import FailureArtifact, FailureClass
-from capmas.contracts.action import SkillCall
 from capmas.contracts.graph import (
-    MissionBinding,
     MissionGraph,
-    PortBinding,
     SubgraphNodeSpec,
     SubgraphSpec,
 )
 from capmas.contracts.scene import SceneSnapshot
-from capmas.contracts.trace import ExecutionTrace
+from capmas.contracts.trace import ExecutionTrace, GraphEventKind, GraphExecutionEvent
 from capmas.graph.validator import GraphValidator, scene_initial_facts
-from capmas.runtime.orchestrator import CycleResult
-from capmas.runtime.scheduler import Scheduler
 from capmas.runtime.artifact_bus import ArtifactEnvelope, ArtifactStore, EventBus, RuntimeEvent
+from capmas.runtime.orchestrator import CycleResult
 from capmas.runtime.recovery import RecoverySelector
+from capmas.runtime.scheduler import Scheduler
 
 
 class GraphExecutionError(RuntimeError):
@@ -39,6 +37,7 @@ class GraphExecutionResult:
     failure: FailureArtifact | None = None
     outputs: dict[str, dict[str, object]] | None = None
     next_subgraph: str | None = None
+    events: tuple[GraphExecutionEvent, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -75,6 +74,7 @@ class FixedGraphInterpreter:
         event_bus: EventBus | None = None,
         recovery_selector: RecoverySelector | None = None,
         max_steps: int = 100,
+        clock: Callable[[], int] = time.time_ns,
     ) -> None:
         if max_steps <= 0:
             raise ValueError("max_steps must be positive")
@@ -86,6 +86,7 @@ class FixedGraphInterpreter:
         self.event_bus = event_bus
         self.recovery_selector = recovery_selector
         self.max_steps = max_steps
+        self.clock = clock
 
     def run(
         self,
@@ -115,7 +116,9 @@ class FixedGraphInterpreter:
 
         current_id = graph.entry_subgraph
         visits: dict[str, int] = {}
+        node_event_visits: dict[tuple[str, str], int] = {}
         traces: list[ExecutionTrace] = []
+        events: list[GraphExecutionEvent] = []
         mission_outputs: dict[str, dict[str, object]] = {
             subgraph_id: dict(outputs)
             for subgraph_id, outputs in (initial_outputs or {}).items()
@@ -134,7 +137,7 @@ class FixedGraphInterpreter:
                 self._publish_failure(failure)
                 return GraphExecutionResult(
                     False, context.scene, context, current_id, tuple(traces), failure,
-                    mission_outputs,
+                    mission_outputs, events=tuple(events),
                 )
             if loop is None and visits[current_id] > 1:
                 failure = self._failure(
@@ -146,12 +149,23 @@ class FixedGraphInterpreter:
                 self._publish_failure(failure)
                 return GraphExecutionResult(
                     False, context.scene, context, current_id, tuple(traces), failure,
-                    mission_outputs,
+                    mission_outputs, events=tuple(events),
                 )
 
             external_inputs = _mission_inputs(graph, current_id, mission_outputs)
+            self._emit_event(
+                events,
+                "subgraph_started",
+                current_id,
+                attempt=visits[current_id],
+            )
             subgraph_result = self._run_subgraph(
-                graph.subgraph(current_id), context, external_inputs
+                graph.subgraph(current_id),
+                context,
+                external_inputs,
+                events,
+                visits[current_id],
+                node_event_visits,
             )
             context = subgraph_result.context
             traces.extend(subgraph_result.traces)
@@ -174,6 +188,7 @@ class FixedGraphInterpreter:
                     current_id,
                     tuple(traces),
                     outputs=mission_outputs,
+                    events=tuple(events),
                 )
             if not subgraph_result.success and current_id in graph.failure_subgraphs:
                 return GraphExecutionResult(
@@ -184,6 +199,7 @@ class FixedGraphInterpreter:
                     tuple(traces),
                     subgraph_result.failure,
                     mission_outputs,
+                    events=tuple(events),
                 )
 
             next_id = _select_transition(
@@ -201,7 +217,7 @@ class FixedGraphInterpreter:
                 )
                 return GraphExecutionResult(
                     False, context.scene, context, current_id, tuple(traces), failure,
-                    mission_outputs,
+                    mission_outputs, events=tuple(events),
                 )
             if stop_after_subgraph:
                 return GraphExecutionResult(
@@ -212,6 +228,7 @@ class FixedGraphInterpreter:
                     tuple(traces),
                     outputs=mission_outputs,
                     next_subgraph=next_id,
+                    events=tuple(events),
                 )
             current_id = next_id
 
@@ -223,7 +240,7 @@ class FixedGraphInterpreter:
         self._publish_failure(failure)
         return GraphExecutionResult(
             False, context.scene, context, current_id, tuple(traces), failure,
-            mission_outputs,
+            mission_outputs, events=tuple(events),
         )
 
     def _run_subgraph(
@@ -231,6 +248,9 @@ class FixedGraphInterpreter:
         subgraph: SubgraphSpec,
         context: AgentContext,
         external_inputs: dict[str, object] | None = None,
+        events: list[GraphExecutionEvent] | None = None,
+        subgraph_attempt: int = 1,
+        node_event_visits: dict[tuple[str, str], int] | None = None,
     ) -> _SubgraphResult:
         current_id = subgraph.entry_node
         visits: dict[str, int] = {}
@@ -239,6 +259,18 @@ class FixedGraphInterpreter:
         external_inputs = dict(external_inputs or {})
         node_outputs: dict[str, dict[str, object]] = {}
         pending_failure: tuple[str, dict[str, object]] | None = None
+        events = events if events is not None else []
+        node_event_visits = node_event_visits if node_event_visits is not None else {}
+
+        def finish(result: _SubgraphResult) -> _SubgraphResult:
+            self._emit_event(
+                events,
+                "subgraph_completed" if result.success else "subgraph_failed",
+                subgraph.subgraph_id,
+                attempt=subgraph_attempt,
+                outcome=result.outcome,
+            )
+            return result
 
         while True:
             visits[current_id] = visits.get(current_id, 0) + 1
@@ -253,10 +285,10 @@ class FixedGraphInterpreter:
                         node_id=current_id,
                         subgraph_id=subgraph.subgraph_id,
                     )
-                    return _SubgraphResult(
+                    return finish(_SubgraphResult(
                     False, context, "failure", tuple(traces), failure,
                     _bind_subgraph_outputs(subgraph, node_outputs, external_inputs),
-                )
+                ))
                 if loop.max_duration_ms and (
                     (time.monotonic() - loop_started[current_id]) * 1000 > loop.max_duration_ms
                 ):
@@ -267,7 +299,7 @@ class FixedGraphInterpreter:
                         node_id=current_id,
                         subgraph_id=subgraph.subgraph_id,
                     )
-                    return _SubgraphResult(False, context, "failure", tuple(traces), failure)
+                    return finish(_SubgraphResult(False, context, "failure", tuple(traces), failure))
             elif visits[current_id] > 1:
                 failure = self._failure(
                     FailureClass.EXECUTION_ERROR,
@@ -276,12 +308,23 @@ class FixedGraphInterpreter:
                     node_id=current_id,
                     subgraph_id=subgraph.subgraph_id,
                 )
-                return _SubgraphResult(
+                return finish(_SubgraphResult(
                     False, context, "failure", tuple(traces), failure,
                     _bind_subgraph_outputs(subgraph, node_outputs, external_inputs),
-                )
+                ))
 
             node = subgraph.node(current_id)
+            node_key = (subgraph.subgraph_id, current_id)
+            node_event_visits[node_key] = node_event_visits.get(node_key, 0) + 1
+            node_attempt = node_event_visits[node_key]
+            self._emit_event(
+                events,
+                "node_started",
+                subgraph.subgraph_id,
+                node_id=current_id,
+                node_type=node.node_type,
+                attempt=node_attempt,
+            )
             if pending_failure is not None and current_id in subgraph.failure_nodes:
                 failure_class, metadata = pending_failure
                 failure = self._failure(
@@ -293,14 +336,23 @@ class FixedGraphInterpreter:
                     subgraph_id=subgraph.subgraph_id,
                     metadata=metadata,
                 )
-                return _SubgraphResult(
+                self._emit_event(
+                    events,
+                    "node_failed",
+                    subgraph.subgraph_id,
+                    node_id=current_id,
+                    node_type=node.node_type,
+                    attempt=node_attempt,
+                    outcome=failure_class,
+                )
+                return finish(_SubgraphResult(
                     False,
                     context,
                     failure_class,
                     tuple(traces),
                     failure,
                     _bind_subgraph_outputs(subgraph, node_outputs, external_inputs),
-                )
+                ))
             cycle: CycleResult | None = None
             if node.node_type == "action":
                 resolved_inputs = _resolve_node_inputs(
@@ -356,19 +408,38 @@ class FixedGraphInterpreter:
                     node_id=current_id,
                     subgraph_id=subgraph.subgraph_id,
                 )
-                return _SubgraphResult(
+                self._emit_event(
+                    events,
+                    "node_failed",
+                    subgraph.subgraph_id,
+                    node_id=current_id,
+                    node_type=node.node_type,
+                    attempt=node_attempt,
+                    outcome="failure",
+                )
+                return finish(_SubgraphResult(
                     False, context, "failure", tuple(traces), failure,
                     _bind_subgraph_outputs(subgraph, node_outputs, external_inputs),
-                )
+                ))
+
+            self._emit_event(
+                events,
+                "node_completed" if outcome == "success" else "node_failed",
+                subgraph.subgraph_id,
+                node_id=current_id,
+                node_type=node.node_type,
+                attempt=node_attempt,
+                outcome=outcome,
+            )
 
             if outcome == "success" and current_id in subgraph.success_nodes:
-                return _SubgraphResult(
+                return finish(_SubgraphResult(
                     True,
                     context,
                     outcome,
                     tuple(traces),
                     outputs=_bind_subgraph_outputs(subgraph, node_outputs, external_inputs),
-                )
+                ))
             if outcome != "success" and current_id in subgraph.failure_nodes:
                 failure = self._failure(
                     _failure_class_for_outcome(outcome),
@@ -378,14 +449,14 @@ class FixedGraphInterpreter:
                     subgraph_id=subgraph.subgraph_id,
                     metadata=_cycle_failure_metadata(cycle),
                 )
-                return _SubgraphResult(
+                return finish(_SubgraphResult(
                     False,
                     context,
                     outcome,
                     tuple(traces),
                     failure,
                     _bind_subgraph_outputs(subgraph, node_outputs, external_inputs),
-                )
+                ))
 
             next_id = _select_transition(subgraph.edges, current_id, outcome)
             if next_id is None:
@@ -397,14 +468,14 @@ class FixedGraphInterpreter:
                     subgraph_id=subgraph.subgraph_id,
                     metadata=_cycle_failure_metadata(cycle),
                 )
-                return _SubgraphResult(
+                return finish(_SubgraphResult(
                     False,
                     context,
                     outcome,
                     tuple(traces),
                     failure,
                     _bind_subgraph_outputs(subgraph, node_outputs, external_inputs),
-                )
+                ))
             if outcome != "success" and next_id in subgraph.failure_nodes:
                 pending_failure = (
                     _failure_class_for_outcome(outcome),
@@ -425,7 +496,7 @@ class FixedGraphInterpreter:
         recovery_policy: str = "replan",
         evidence_refs: tuple[str, ...] = (),
         metadata: Mapping[str, object] | None = None,
-    ) -> FailureArtifact:
+        ) -> FailureArtifact:
         return FailureArtifact(
             failure_id=str(uuid4()),
             failure_class=failure_class,
@@ -436,6 +507,30 @@ class FixedGraphInterpreter:
             recovery_policy=recovery_policy,
             evidence_refs=evidence_refs,
             metadata=dict(metadata or {}),
+        )
+
+    def _emit_event(
+        self,
+        events: list[GraphExecutionEvent],
+        kind: GraphEventKind,
+        subgraph_id: str,
+        *,
+        attempt: int,
+        node_id: str | None = None,
+        node_type: str | None = None,
+        outcome: str | None = None,
+    ) -> None:
+        events.append(
+            GraphExecutionEvent(
+                sequence=len(events),
+                kind=kind,
+                subgraph_id=subgraph_id,
+                node_id=node_id,
+                node_type=node_type,  # type: ignore[arg-type]
+                attempt=attempt,
+                outcome=outcome,
+                occurred_at_ns=self.clock(),
+            )
         )
 
     def _publish_failure(self, failure: FailureArtifact) -> None:

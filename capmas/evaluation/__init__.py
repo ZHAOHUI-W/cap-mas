@@ -1,5 +1,6 @@
 """Benchmark and learning metrics."""
 
+# ruff: noqa: I001
 from capmas.evaluation.parity import (
     NormalizedEpisode,
     ParityComparison,
@@ -11,6 +12,22 @@ from capmas.evaluation.candidate_identity import (
     CandidateIdentity,
     candidate_identity_from_raw_graph,
     raw_graph_fingerprint,
+)
+from capmas.evaluation.capability import (
+    CapabilityCase,
+    CapabilityDiagnosticReport,
+    CapabilityRunResult,
+    TaskFamilyRepairHandoff,
+    diagnose_family_capability,
+    load_p55_capability_cases,
+    run_capability_diagnosis,
+)
+from capmas.evaluation.history_audit import (
+    HistoricalAuditRunResult,
+    HistoricalCompatibilityAudit,
+    HistoricalRowDecision,
+    audit_p55_history,
+    run_history_audit,
 )
 
 from capmas.evaluation.rehearsal import (
@@ -31,6 +48,7 @@ from capmas.evaluation.evidence_cache import (
     EvidenceCacheStats,
     VersionedEvidenceCache,
 )
+from capmas.evaluation.labels import extract_horizon, planned_horizon, realized_horizon
 from capmas.evaluation.libero_rehearsal import (
     LiberoRehearsalConfig,
     LiberoRehearsalWorker,
@@ -52,6 +70,16 @@ from capmas.evaluation.online_rehearsal import (
     RehearsalEvidenceProvider,
     RehearsalMode,
     select_with_rehearsal,
+)
+from capmas.evaluation.feature_snapshots import FEATURE_GROUPS_V1, capture_feature_snapshot
+from capmas.evaluation.dataset import (
+    DatasetAudit,
+    LeakageFinding,
+    assert_dataset_eligible,
+    assign_lineage_splits,
+    audit_calibration_dataset,
+    build_calibration_dataset,
+    normalize_physical_outcomes,
 )
 from capmas.evaluation.verifier_artifacts import (
     DynamicVerifierArtifact,
@@ -79,10 +107,22 @@ from capmas.evaluation.ood_statistics import (
     wilson_interval,
 )
 
-__all__ = [
+__all__ = [  # noqa: RUF022
     "CandidateIdentity",
     "candidate_identity_from_raw_graph",
     "raw_graph_fingerprint",
+    "CapabilityCase",
+    "CapabilityDiagnosticReport",
+    "CapabilityRunResult",
+    "TaskFamilyRepairHandoff",
+    "diagnose_family_capability",
+    "load_p55_capability_cases",
+    "run_capability_diagnosis",
+    "HistoricalAuditRunResult",
+    "HistoricalCompatibilityAudit",
+    "HistoricalRowDecision",
+    "audit_p55_history",
+    "run_history_audit",
     "NormalizedEpisode",
     "ParityComparison",
     "compare_artifacts",
@@ -100,6 +140,9 @@ __all__ = [
     "EvidenceCacheKey",
     "EvidenceCacheStats",
     "VersionedEvidenceCache",
+    "extract_horizon",
+    "planned_horizon",
+    "realized_horizon",
     "LiberoRehearsalConfig",
     "LiberoRehearsalWorker",
     "run_libero_rehearsal_job",
@@ -114,6 +157,15 @@ __all__ = [
     "RehearsalEvidenceProvider",
     "RehearsalMode",
     "select_with_rehearsal",
+    "FEATURE_GROUPS_V1",
+    "capture_feature_snapshot",
+    "DatasetAudit",
+    "LeakageFinding",
+    "assert_dataset_eligible",
+    "assign_lineage_splits",
+    "audit_calibration_dataset",
+    "build_calibration_dataset",
+    "normalize_physical_outcomes",
     "DynamicVerifierArtifact",
     "collect_dynamic_verifier_artifacts",
     "static_verifier_artifacts_from_arbitrations",

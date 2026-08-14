@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from capmas.agents.arbiter import CandidateArbiter
 from capmas.contracts.action import SkillCall
+from capmas.contracts.candidates import GraphCandidate, subgraph_fingerprint
 from capmas.contracts.core import SkillRef
 from capmas.contracts.graph import CheckpointSpec, SubgraphNodeSpec, SubgraphSpec
 from capmas.contracts.scene import SceneSnapshot
-from capmas.contracts.candidates import GraphCandidate, subgraph_fingerprint
-from capmas.evaluation.rehearsal_evidence import RehearsalEvidence
 from capmas.evaluation.evidence_cache import VersionedEvidenceCache
 from capmas.evaluation.online_rehearsal import select_with_rehearsal
+from capmas.evaluation.rehearsal_evidence import RehearsalEvidence
 
 
 def _scene() -> SceneSnapshot:
@@ -75,6 +75,36 @@ def test_disabled_mode_does_not_call_provider() -> None:
     assert calls == 0
     assert report.evidence_aware is None
     assert report.live == report.baseline
+
+
+def test_report_preserves_evidence_candidates_across_all_provider_paths() -> None:
+    candidates = (_candidate("candidate-a", "a"), _candidate("candidate-b", "b"))
+    arbiter = CandidateArbiter()
+
+    disabled = select_with_rehearsal(candidates, _scene(), arbiter, mode="disabled")
+    missing = select_with_rehearsal(candidates, _scene(), arbiter, mode="shadow")
+    errored = select_with_rehearsal(
+        candidates,
+        _scene(),
+        arbiter,
+        mode="online_bounded",
+        provider=lambda _items, _scene: (_ for _ in ()).throw(RuntimeError("unavailable")),
+    )
+    successful = select_with_rehearsal(
+        candidates,
+        _scene(),
+        arbiter,
+        mode="online_bounded",
+        provider=lambda items, _scene: {
+            candidate.candidate_id: _evidence(candidate, 1.0) for candidate in items
+        },
+    )
+
+    assert disabled.evidence_candidates == candidates
+    assert missing.evidence_candidates == candidates
+    assert errored.evidence_candidates == candidates
+    assert successful.evidence_candidates != candidates
+    assert successful.evidence_candidates[0].evidence is not None
 
 
 def test_shadow_mode_keeps_baseline_live_and_reports_hypothetical_change() -> None:
