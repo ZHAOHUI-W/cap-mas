@@ -6,6 +6,7 @@ import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -252,6 +253,27 @@ def test_generator_is_byte_identical_and_check_validates_committed_manifests(tmp
         cwd=ROOT,
         check=True,
     )
+
+
+def test_capx_api_server_loader_receives_a_string_path(tmp_path, monkeypatch) -> None:
+    loaded_paths = []
+
+    class FakeDictLoader:
+        @staticmethod
+        def load(path: object) -> dict[str, object]:
+            loaded_paths.append(path)
+            return {"api_servers": []}
+
+    loader_module = ModuleType("capx.envs.configs.loader")
+    loader_module.DictLoader = FakeDictLoader
+    runner_module = ModuleType("capx.envs.runner")
+    runner_module._start_api_servers = lambda _: []
+    monkeypatch.setitem(sys.modules, "capx.envs.configs.loader", loader_module)
+    monkeypatch.setitem(sys.modules, "capx.envs.runner", runner_module)
+
+    config_path = tmp_path / "object6.yaml"
+    assert collection_module._start_capx_api_servers(config_path) == []
+    assert loaded_paths == [str(config_path)]
 
 
 def test_collection_captures_all_candidates_but_labels_only_selected(tmp_path) -> None:

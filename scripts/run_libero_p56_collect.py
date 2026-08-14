@@ -129,7 +129,7 @@ def _start_capx_api_servers(config_path: str | Path) -> list[object]:
     from capx.envs.configs.loader import DictLoader
     from capx.envs.runner import _start_api_servers
 
-    config = DictLoader.load(config_path)
+    config = DictLoader.load(str(config_path))
     return list(_start_api_servers(config.get("api_servers")))
 
 

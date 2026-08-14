@@ -234,6 +234,22 @@ validated p56_object6_id_seeds_11_20.json sha256=7104dee4da0a59e3aa4f3dbb11f6592
 validated p56_object6_id_seeds_21_30.json sha256=97ba76e1918fb4f087ce522d79599be6da8b1333026e0292da7cb807b3f6ca1b
 ```
 
+## CAP-X loader boundary fix
+
+The first real collection launch failed before a suite directory was allocated:
+the CAP-X `DictLoader` rejects `Path` objects. The collection entrypoint now
+passes `str(config_path)`, with an isolated loader-boundary regression that
+does not import simulator modules or start API servers.
+
+```text
+/data/MLLM/wzh/agent/paper/infiAgent/workspace/cap-x/.venv-libero/bin/python -m pytest -q tests/test_libero_p56_collection.py tests/test_libero_p53_online.py tests/test_libero_p55_ood.py
+.............................................                            [100%]
+45 passed in 4.50s
+
+ruff check scripts/run_libero_p56_collect.py tests/test_libero_p56_collection.py
+All checks passed!
+```
+
 ## Best-effort persistence remediation
 
 The final task review found that raw evidence writes still stopped at the first
