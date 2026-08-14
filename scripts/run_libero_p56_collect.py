@@ -45,6 +45,10 @@ class RawArtifactPersistenceError(RuntimeError):
         super().__init__(f"raw artifact persistence failed for {len(self.errors)} artifact(s)")
 
 
+class ExternalProcessInterruptionError(RuntimeError):
+    """Records a case whose collection process ended outside Python handling."""
+
+
 @dataclass(frozen=True)
 class CollectionRunConfig:
     max_workers: int = 1
@@ -597,6 +601,196 @@ def _write_case_success(
     )
 
 
+def _read_optional_mapping(path: Path) -> Mapping[str, object]:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError):
+        return {}
+    return payload if isinstance(payload, Mapping) else {}
+
+
+def _physical_execution_started_at_ns(case_dir: Path) -> int | None:
+    paths = [case_dir / "results" / "online.json"]
+    online_dir = case_dir / "online"
+    if online_dir.is_dir():
+        paths.extend(sorted(online_dir.rglob("run_config.json")))
+    started_at = []
+    for path in paths:
+        value = _read_optional_mapping(path).get("physical_execution_started_at_ns")
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            started_at.append(value)
+    return min(started_at) if started_at else None
+
+
+def _case_status(case_dir: Path) -> str:
+    summary_status = _read_optional_mapping(case_dir / "summary.json").get("status")
+    if isinstance(summary_status, str):
+        return summary_status
+    run_status = _read_optional_mapping(case_dir / "run_config.json").get("status")
+    return run_status if isinstance(run_status, str) else "unknown"
+
+
+def _restore_completed_case(
+    case_dir: Path,
+    *,
+    case: CalibrationCollectionCase,
+) -> tuple[CollectionCaseResult, CalibrationLineage]:
+    outcomes_payload = json.loads((case_dir / "results" / "outcomes.json").read_text(encoding="utf-8"))
+    if not isinstance(outcomes_payload, list):
+        raise TypeError(f"completed case outcomes must be a list: {case_dir}")
+    outcomes = tuple(
+        CalibrationOutcome.from_dict(item)
+        for item in outcomes_payload
+        if isinstance(item, Mapping)
+    )
+    lineage = CalibrationLineage.from_dict(
+        _read_mapping_json(case_dir / "evidence" / "lineage.json")
+    )
+    if lineage.episode_id != case.case_id or lineage.lineage_group_id != case.lineage_group_id:
+        raise ValueError(f"completed case lineage mismatch: {case.case_id}")
+    return (
+        CollectionCaseResult(
+            case_id=case.case_id,
+            seed=case.seed,
+            status="completed",
+            case_dir=case_dir,
+            outcomes=outcomes,
+        ),
+        lineage,
+    )
+
+
+def _restore_failed_case(
+    case_dir: Path,
+    *,
+    case: CalibrationCollectionCase,
+) -> CollectionCaseResult:
+    failure = _read_optional_mapping(case_dir / "failure.json")
+    error = failure.get("error")
+    return CollectionCaseResult(
+        case_id=case.case_id,
+        seed=case.seed,
+        status="failed",
+        case_dir=case_dir,
+        outcomes=(),
+        error=error if isinstance(error, str) else "collection case failed",
+    )
+
+
+def _mark_interrupted_case(
+    case_dir: Phase5RunDirectory,
+    *,
+    case: CalibrationCollectionCase,
+    physical_execution_started_at_ns: int | None,
+) -> None:
+    error = ExternalProcessInterruptionError(
+        "collection process ended before the online runner completed"
+    )
+    _write_case_failure(
+        case_dir,
+        case=case,
+        stage="online_runner",
+        error=error,
+    )
+    prior_config = _read_optional_mapping(case_dir.path / "run_config.json")
+    case_dir.write_json(
+        "run_config.json",
+        {
+            **prior_config,
+            "status": "failed",
+            "stage": "online_runner",
+            "error_type": type(error).__name__,
+            "error": str(error),
+        },
+    )
+    failure = dict(_read_optional_mapping(case_dir.path / "failure.json"))
+    failure["physical_execution_started_at_ns"] = physical_execution_started_at_ns
+    case_dir.write_json("failure.json", failure)
+    case_dir.finalize_manifest()
+
+
+def _suite_report(
+    suite_dir: Phase5RunDirectory,
+    *,
+    manifest: CalibrationCollectionManifest,
+    run_config: CollectionRunConfig,
+    results: Sequence[CollectionCaseResult],
+    lineages: Sequence[CalibrationLineage],
+) -> CollectionSuiteReport:
+    outcomes = tuple(outcome for result in results for outcome in result.outcomes)
+    tier_a = tuple(outcome for outcome in outcomes if outcome.tier == "A")
+    positives = sum(outcome.task_success is True for outcome in tier_a)
+    negatives = sum(outcome.task_success is False for outcome in tier_a)
+    report = CollectionSuiteReport(
+        suite_dir=suite_dir.path,
+        cases=tuple(results),
+        completed_cases=sum(result.status == "completed" for result in results),
+        failed_cases=sum(result.status == "failed" for result in results),
+        tier_a_count=len(tier_a),
+        positive_count=positives,
+        negative_count=negatives,
+        eligible_20_5_5=len(tier_a) >= 20 and positives >= 5 and negatives >= 5,
+    )
+    summary_payload = _suite_summary_payload(
+        manifest=manifest,
+        results=results,
+        lineages=lineages,
+    )
+    suite_dir.write_json("results/outcomes.json", [outcome.to_dict() for outcome in outcomes])
+    suite_dir.write_json("results/lineages.json", [lineage.to_dict() for lineage in lineages])
+    suite_dir.write_json(
+        "results/cases.json",
+        [
+            {
+                "case_id": result.case_id,
+                "seed": result.seed,
+                "status": result.status,
+                "case_dir": str(result.case_dir),
+                "outcome_count": len(result.outcomes),
+                "error": result.error,
+            }
+            for result in results
+        ],
+    )
+    suite_dir.write_json("summary.json", summary_payload)
+    suite_dir.write_json(
+        "run_config.json",
+        {**summary_payload, **asdict(run_config), "status": "completed"},
+    )
+    suite_dir.write_text(
+        "summary.md",
+        "# CAP-MAS P5.6 object-6 collection suite\n\n"
+        f"- case_count: {len(results)}\n"
+        f"- completed_cases: {report.completed_cases}\n"
+        f"- failed_cases: {report.failed_cases}\n"
+        f"- tier_a_count: {report.tier_a_count}\n"
+        f"- positive_count: {report.positive_count}\n"
+        f"- negative_count: {report.negative_count}\n"
+        f"- eligible_20_5_5: {report.eligible_20_5_5}\n",
+    )
+    suite_dir.write_text(
+        "logs/runner.log",
+        "\n".join(
+            [
+                f"experiment={EXPERIMENT_NAME}",
+                f"manifest_sha256={manifest.manifest_sha256}",
+                f"case_count={len(results)}",
+                f"completed_cases={report.completed_cases}",
+                f"failed_cases={report.failed_cases}",
+                f"tier_a_count={report.tier_a_count}",
+                f"positive_count={report.positive_count}",
+                f"negative_count={report.negative_count}",
+                f"eligible_20_5_5={report.eligible_20_5_5}",
+                "",
+            ]
+        ),
+    )
+    suite_dir.finalize_manifest()
+    return report
+
+
 def run_collection_case(
     case: CalibrationCollectionCase,
     *,
@@ -866,75 +1060,164 @@ def run_collection(
             )
             break
 
-    outcomes = tuple(outcome for result in results for outcome in result.outcomes)
-    tier_a = tuple(outcome for outcome in outcomes if outcome.tier == "A")
-    positives = sum(outcome.task_success is True for outcome in tier_a)
-    negatives = sum(outcome.task_success is False for outcome in tier_a)
-    report = CollectionSuiteReport(
-        suite_dir=suite_dir.path,
-        cases=tuple(results),
-        completed_cases=sum(result.status == "completed" for result in results),
-        failed_cases=sum(result.status == "failed" for result in results),
-        tier_a_count=len(tier_a),
-        positive_count=positives,
-        negative_count=negatives,
-        eligible_20_5_5=len(tier_a) >= 20 and positives >= 5 and negatives >= 5,
-    )
-    summary_payload = _suite_summary_payload(
+    report = _suite_report(
+        suite_dir,
         manifest=finalized,
+        run_config=run_config,
         results=results,
         lineages=lineages,
     )
-    suite_dir.write_json("results/outcomes.json", [outcome.to_dict() for outcome in outcomes])
-    suite_dir.write_json("results/lineages.json", [lineage.to_dict() for lineage in lineages])
-    suite_dir.write_json(
-        "results/cases.json",
-        [
-            {
-                "case_id": result.case_id,
-                "seed": result.seed,
-                "status": result.status,
-                "case_dir": str(result.case_dir),
-                "outcome_count": len(result.outcomes),
-                "error": result.error,
-            }
-            for result in results
-        ],
-    )
-    suite_dir.write_json("summary.json", summary_payload)
-    suite_dir.write_json(
+    if stop_error is not None:
+        raise stop_error
+    return report
+
+
+def _load_persisted_manifest(path: Path) -> CalibrationCollectionManifest:
+    return CalibrationCollectionManifest.from_dict(_read_mapping_json(path / "suite_manifest.json"))
+
+
+def _existing_case_attempts(
+    suite_path: Path,
+    *,
+    manifest: CalibrationCollectionManifest,
+) -> Mapping[str, tuple[Path, ...]]:
+    known_cases = {case.case_id: case for case in manifest.cases}
+    grouped: dict[str, list[Path]] = {case.case_id: [] for case in manifest.cases}
+    cases_dir = suite_path / "cases"
+    if not cases_dir.is_dir():
+        return {case_id: () for case_id in grouped}
+    for case_dir in sorted(path for path in cases_dir.iterdir() if path.is_dir()):
+        case_path = case_dir / "case.json"
+        if not case_path.is_file():
+            continue
+        persisted_case = CalibrationCollectionCase.from_dict(_read_mapping_json(case_path))
+        expected = known_cases.get(persisted_case.case_id)
+        if expected is None:
+            raise ValueError(f"interrupted suite contains an unknown case: {persisted_case.case_id}")
+        if persisted_case != expected:
+            raise ValueError(f"interrupted suite case contract mismatch: {persisted_case.case_id}")
+        grouped[persisted_case.case_id].append(case_dir)
+    return {case_id: tuple(paths) for case_id, paths in grouped.items()}
+
+
+def resume_collection(
+    manifest: CalibrationCollectionManifest,
+    *,
+    suite_dir: str | Path,
+    run_config: CollectionRunConfig,
+    online_runner: OnlineRunner = run_online_experiment,
+    executor_factory: ExecutorFactory = _build_live_executor,
+) -> CollectionSuiteReport:
+    """Finish an interrupted immutable suite without replaying started execution."""
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = run_config.gpu
+    finalized = _preflight_manifest(manifest)
+    existing_path = Path(suite_dir).resolve(strict=True)
+    existing_dir = Phase5RunDirectory(existing_path)
+    persisted = _load_persisted_manifest(existing_path)
+    if collection_manifest_sha256(persisted) != finalized.manifest_sha256:
+        raise ValueError("resume manifest digest does not match the interrupted suite")
+    if _read_optional_mapping(existing_path / "run_config.json").get("status") == "completed":
+        raise ValueError("cannot resume a completed collection suite")
+
+    existing_dir.write_json(
         "run_config.json",
-        {**summary_payload, **asdict(run_config), "status": "completed"},
+        {
+            "experiment": EXPERIMENT_NAME,
+            "manifest_sha256": finalized.manifest_sha256,
+            **asdict(run_config),
+            "status": "resuming",
+        },
     )
-    suite_dir.write_text(
-        "summary.md",
-        "# CAP-MAS P5.6 object-6 collection suite\n\n"
-        f"- case_count: {len(results)}\n"
-        f"- completed_cases: {report.completed_cases}\n"
-        f"- failed_cases: {report.failed_cases}\n"
-        f"- tier_a_count: {report.tier_a_count}\n"
-        f"- positive_count: {report.positive_count}\n"
-        f"- negative_count: {report.negative_count}\n"
-        f"- eligible_20_5_5: {report.eligible_20_5_5}\n",
+    attempts = _existing_case_attempts(existing_path, manifest=finalized)
+    results_by_case: dict[str, CollectionCaseResult] = {}
+    lineages_by_case: dict[str, CalibrationLineage] = {}
+    pending: list[CalibrationCollectionCase] = []
+    interruption_records: list[dict[str, object]] = []
+
+    for case in finalized.cases:
+        case_attempts = attempts[case.case_id]
+        completed = tuple(path for path in case_attempts if _case_status(path) == "completed")
+        if len(completed) > 1:
+            raise ValueError(f"interrupted suite has multiple completed attempts: {case.case_id}")
+        if completed:
+            result, lineage = _restore_completed_case(completed[0], case=case)
+            results_by_case[case.case_id] = result
+            lineages_by_case[case.case_id] = lineage
+            continue
+
+        running = tuple(path for path in case_attempts if _case_status(path) == "running")
+        if len(running) > 1:
+            raise ValueError(f"interrupted suite has multiple running attempts: {case.case_id}")
+        if running:
+            interrupted_path = running[0]
+            started_at = _physical_execution_started_at_ns(interrupted_path)
+            _mark_interrupted_case(
+                Phase5RunDirectory(interrupted_path),
+                case=case,
+                physical_execution_started_at_ns=started_at,
+            )
+            disposition = (
+                "retry_unstarted" if started_at is None else "do_not_retry_physical_started"
+            )
+            interruption_records.append(
+                {
+                    "case_id": case.case_id,
+                    "disposition": disposition,
+                    "physical_execution_started_at_ns": started_at,
+                    "prior_case_dir": str(interrupted_path),
+                }
+            )
+            if started_at is None:
+                pending.append(case)
+            else:
+                results_by_case[case.case_id] = _restore_failed_case(
+                    interrupted_path,
+                    case=case,
+                )
+            continue
+
+        failed = tuple(path for path in case_attempts if _case_status(path) == "failed")
+        if len(failed) > 1:
+            raise ValueError(f"interrupted suite has multiple failed attempts: {case.case_id}")
+        if failed:
+            results_by_case[case.case_id] = _restore_failed_case(failed[0], case=case)
+            continue
+        pending.append(case)
+
+    existing_dir.write_json("results/interrupted_attempts.json", interruption_records)
+    stop_error: RuntimeError | None = None
+    for case in pending:
+        result, lineage = run_collection_case(
+            case,
+            suite_dir=existing_dir,
+            manifest=finalized,
+            run_config=run_config,
+            online_runner=online_runner,
+            executor_factory=executor_factory,
+        )
+        results_by_case[case.case_id] = result
+        if lineage is not None:
+            lineages_by_case[case.case_id] = lineage
+        if run_config.fail_fast and _is_infrastructure_failure(result):
+            stop_error = RuntimeError(
+                f"P5.6 collection case failed: {case.case_id}: {result.error}"
+            )
+            break
+
+    ordered_results = [results_by_case[case.case_id] for case in finalized.cases if case.case_id in results_by_case]
+    ordered_lineages = [
+        lineages_by_case[case.case_id]
+        for case in finalized.cases
+        if case.case_id in lineages_by_case
+    ]
+    report = _suite_report(
+        existing_dir,
+        manifest=finalized,
+        run_config=run_config,
+        results=ordered_results,
+        lineages=ordered_lineages,
     )
-    suite_dir.write_text(
-        "logs/runner.log",
-        "\n".join(
-            [
-                f"experiment={EXPERIMENT_NAME}",
-                f"manifest_sha256={finalized.manifest_sha256}",
-                f"case_count={len(results)}",
-                f"completed_cases={report.completed_cases}",
-                f"failed_cases={report.failed_cases}",
-                f"tier_a_count={report.tier_a_count}",
-                f"positive_count={report.positive_count}",
-                f"negative_count={report.negative_count}",
-                f"eligible_20_5_5={report.eligible_20_5_5}",
-                "",
-            ]
-        ),
-    )
-    suite_dir.finalize_manifest()
     if stop_error is not None:
         raise stop_error
     return report
@@ -1126,6 +1409,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-restarts", type=int, default=0)
     parser.add_argument("--max-steps", type=int, default=32)
     parser.add_argument("--fail-fast", action="store_true")
+    parser.add_argument("--resume-suite")
     parser.add_argument("--summarize-suite", action="append", default=[])
     parser.add_argument("--history-audit", default=None)
     return parser.parse_args()
@@ -1143,6 +1427,8 @@ def _terminate_servers(servers: Sequence[object]) -> None:
 
 def main() -> None:
     args = parse_args()
+    if args.resume_suite and args.summarize_suite:
+        raise SystemExit("--resume-suite cannot be combined with --summarize-suite")
     if args.summarize_suite:
         report = summarize_collection(args.summarize_suite, history_audit=args.history_audit)
         print(json.dumps(asdict(report), indent=2, sort_keys=True))
@@ -1157,18 +1443,26 @@ def main() -> None:
     servers: list[object] = []
     try:
         servers = _start_capx_api_servers(_resolve_project_path(finalized.cases[0].config_path))
-        report = run_collection(
-            finalized,
-            output_root=args.output_root,
-            run_config=CollectionRunConfig(
-                max_workers=args.max_workers,
-                timeout_s=args.timeout_s,
-                max_restarts=args.max_restarts,
-                max_steps=args.max_steps,
-                gpu=args.gpu,
-                fail_fast=args.fail_fast,
-            ),
+        run_config = CollectionRunConfig(
+            max_workers=args.max_workers,
+            timeout_s=args.timeout_s,
+            max_restarts=args.max_restarts,
+            max_steps=args.max_steps,
+            gpu=args.gpu,
+            fail_fast=args.fail_fast,
         )
+        if args.resume_suite:
+            report = resume_collection(
+                finalized,
+                suite_dir=args.resume_suite,
+                run_config=run_config,
+            )
+        else:
+            report = run_collection(
+                finalized,
+                output_root=args.output_root,
+                run_config=run_config,
+            )
     finally:
         _terminate_servers(servers)
     print(f"CAP-MAS P5.6 suite: {report.suite_dir}")

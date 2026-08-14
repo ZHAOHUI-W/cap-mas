@@ -23,6 +23,7 @@ from capmas.evaluation.feature_snapshots import FEATURE_GROUPS_V1
 from scripts.create_p56_object6_manifests import create_object6_manifests
 from scripts.run_libero_p56_collect import (
     CollectionRunConfig,
+    resume_collection,
     run_collection,
     summarize_collection,
 )
@@ -307,6 +308,149 @@ def test_collection_captures_all_candidates_but_labels_only_selected(tmp_path) -
     assert (case_dirs[0] / "evidence" / "decision_snapshots.json").exists()
     assert (case_dirs[0] / "evidence" / "physical_payload.json").exists()
     assert (case_dirs[0] / "evidence" / "horizon.json").exists()
+
+
+def test_resume_retries_only_an_interrupted_attempt_without_physical_execution(tmp_path) -> None:
+    manifest = _collection_manifest(seeds=(11, 12))
+    run_config = CollectionRunConfig()
+    suite = collection_module.Phase5RunDirectory.create(
+        tmp_path,
+        collection_module.EXPERIMENT_NAME,
+        "interrupted-suite",
+    )
+    suite.write_json("suite_manifest.json", manifest.to_dict())
+    suite.write_json("run_config.json", {"status": "running"})
+
+    collection_module.run_collection_case(
+        manifest.cases[0],
+        suite_dir=suite,
+        manifest=manifest,
+        run_config=run_config,
+        online_runner=lambda **kwargs: _online_outcome(
+            success=True,
+            episode_id=kwargs["calibration_context"].episode_id,
+        ),
+        executor_factory=lambda **kwargs: object(),
+    )
+    interrupted = collection_module.Phase5RunDirectory.create(
+        suite.path,
+        "cases",
+        manifest.cases[1].case_id,
+    )
+    interrupted.write_json("case.json", manifest.cases[1].to_dict())
+    interrupted.write_json("run_config.json", {"status": "running"})
+    online = collection_module.Phase5RunDirectory.create(
+        interrupted.path,
+        "online",
+        "runner-interrupted",
+    )
+    online.write_json(
+        "run_config.json",
+        {
+            "status": "running",
+            "physical_execution_started_at_ns": None,
+        },
+    )
+    calls: list[int] = []
+
+    def fake_runner(**kwargs: object) -> dict[str, object]:
+        calls.append(kwargs["seed"])
+        return _online_outcome(
+            success=False,
+            episode_id=kwargs["calibration_context"].episode_id,
+        )
+
+    report = resume_collection(
+        manifest,
+        suite_dir=suite.path,
+        run_config=run_config,
+        online_runner=fake_runner,
+        executor_factory=lambda **kwargs: object(),
+    )
+
+    assert calls == [12]
+    assert report.completed_cases == 2
+    assert report.failed_cases == 0
+    assert report.positive_count == 1
+    assert report.negative_count == 1
+    assert report.cases[1].case_dir != interrupted.path
+    failure = json.loads((interrupted.path / "failure.json").read_text())
+    assert failure["stage"] == "online_runner"
+    assert failure["error_type"] == "ExternalProcessInterruptionError"
+    assert failure["physical_execution_started_at_ns"] is None
+    attempts = json.loads((suite.path / "results" / "interrupted_attempts.json").read_text())
+    assert attempts == [
+        {
+            "case_id": "object-6-id-seed12",
+            "disposition": "retry_unstarted",
+            "physical_execution_started_at_ns": None,
+            "prior_case_dir": str(interrupted.path),
+        }
+    ]
+    persisted_cases = json.loads((suite.path / "results" / "cases.json").read_text())
+    assert [row["case_id"] for row in persisted_cases] == [
+        "object-6-id-seed11",
+        "object-6-id-seed12",
+    ]
+
+
+def test_resume_never_retries_an_interrupted_attempt_after_physical_execution_starts(
+    tmp_path,
+) -> None:
+    manifest = _collection_manifest(seeds=(11,))
+    run_config = CollectionRunConfig()
+    suite = collection_module.Phase5RunDirectory.create(
+        tmp_path,
+        collection_module.EXPERIMENT_NAME,
+        "physical-started-suite",
+    )
+    suite.write_json("suite_manifest.json", manifest.to_dict())
+    suite.write_json("run_config.json", {"status": "running"})
+    interrupted = collection_module.Phase5RunDirectory.create(
+        suite.path,
+        "cases",
+        manifest.cases[0].case_id,
+    )
+    interrupted.write_json("case.json", manifest.cases[0].to_dict())
+    interrupted.write_json("run_config.json", {"status": "running"})
+    online = collection_module.Phase5RunDirectory.create(
+        interrupted.path,
+        "online",
+        "runner-interrupted",
+    )
+    online.write_json(
+        "run_config.json",
+        {
+            "status": "running",
+            "physical_execution_started_at_ns": 123,
+        },
+    )
+    calls: list[int] = []
+
+    report = resume_collection(
+        manifest,
+        suite_dir=suite.path,
+        run_config=run_config,
+        online_runner=lambda **kwargs: calls.append(kwargs["seed"]),
+        executor_factory=lambda **kwargs: object(),
+    )
+
+    assert calls == []
+    assert report.completed_cases == 0
+    assert report.failed_cases == 1
+    failure = json.loads((interrupted.path / "failure.json").read_text())
+    assert failure["stage"] == "online_runner"
+    assert failure["error_type"] == "ExternalProcessInterruptionError"
+    assert failure["physical_execution_started_at_ns"] == 123
+    attempts = json.loads((suite.path / "results" / "interrupted_attempts.json").read_text())
+    assert attempts == [
+        {
+            "case_id": "object-6-id-seed11",
+            "disposition": "do_not_retry_physical_started",
+            "physical_execution_started_at_ns": 123,
+            "prior_case_dir": str(interrupted.path),
+        }
+    ]
 
 
 @pytest.mark.parametrize("evaluator_success", [None, "true"])
