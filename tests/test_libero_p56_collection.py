@@ -395,6 +395,44 @@ def test_raw_artifact_persistence_retry_keeps_original_failure_typed(
     assert failure["raw_artifact_persistence_error"] == "retry obscured error"
 
 
+def test_partial_raw_artifact_persistence_attempts_later_evidence(tmp_path, monkeypatch) -> None:
+    original_write_json = collection_module.Phase5RunDirectory.write_json
+
+    def fail_physical_payload(run_dir: object, name: str, payload: object) -> object:
+        if name == "evidence/physical_payload.json":
+            raise OSError("physical payload write failed")
+        return original_write_json(run_dir, name, payload)
+
+    monkeypatch.setattr(
+        collection_module.Phase5RunDirectory,
+        "write_json",
+        fail_physical_payload,
+    )
+
+    report = run_collection(
+        _collection_manifest(),
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(),
+        online_runner=lambda **kwargs: _online_outcome(
+            success=True,
+            episode_id=kwargs["calibration_context"].episode_id,
+        ),
+        executor_factory=lambda **kwargs: object(),
+    )
+
+    assert report.failed_cases == 1
+    case_dir = report.cases[0].case_dir
+    assert (case_dir / "results" / "online.json").exists()
+    assert (case_dir / "evidence" / "decision_snapshots.json").exists()
+    assert (case_dir / "evidence" / "horizon.json").exists()
+    assert (case_dir / "evidence" / "graph_events.json").exists()
+    failure = json.loads((case_dir / "failure.json").read_text())
+    assert failure["raw_artifact_persistence_errors"] == {
+        "initial": [{"artifact": "evidence/physical_payload.json", "error": "physical payload write failed", "error_type": "OSError"}],
+        "retry": [{"artifact": "evidence/physical_payload.json", "error": "physical payload write failed", "error_type": "OSError"}],
+    }
+
+
 def test_case_finalization_failure_is_typed_and_fail_fast_continues(
     tmp_path, monkeypatch
 ) -> None:
@@ -431,6 +469,43 @@ def test_case_finalization_failure_is_typed_and_fail_fast_continues(
     failure = json.loads((report.cases[1].case_dir / "failure.json").read_text())
     assert failure["stage"] == "persistence"
     assert failure["error_type"] == "OSError"
+
+
+def test_case_finalization_failure_augments_existing_typed_failure(tmp_path, monkeypatch) -> None:
+    original_finalize = collection_module.Phase5RunDirectory.finalize_manifest
+
+    def failing_case_finalize(run_dir: object) -> object:
+        path = run_dir.path
+        if path.parent.name == "cases" and path.name.endswith("seed12"):
+            raise OSError("case manifest persistence failed")
+        return original_finalize(run_dir)
+
+    monkeypatch.setattr(
+        collection_module.Phase5RunDirectory,
+        "finalize_manifest",
+        failing_case_finalize,
+    )
+
+    report = run_collection(
+        _collection_manifest(seeds=(11, 12, 13)),
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(fail_fast=False),
+        online_runner=lambda **kwargs: (
+            (_ for _ in ()).throw(RuntimeError("runner failed"))
+            if kwargs["seed"] == 12
+            else _online_outcome(
+                success=False,
+                episode_id=kwargs["calibration_context"].episode_id,
+            )
+        ),
+        executor_factory=lambda **kwargs: object(),
+    )
+
+    assert [case.seed for case in report.cases] == [11, 12, 13]
+    failure = json.loads((report.cases[1].case_dir / "failure.json").read_text())
+    assert failure["stage"] == "online_runner"
+    assert failure["manifest_finalization_error_type"] == "OSError"
+    assert failure["manifest_finalization_error"] == "case manifest persistence failed"
 
 
 @pytest.mark.parametrize("preparation_failure", ["context", "pool"])

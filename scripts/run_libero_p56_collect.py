@@ -37,6 +37,14 @@ OnlineRunner = Callable[..., object]
 ExecutorFactory = Callable[..., object]
 
 
+class RawArtifactPersistenceError(RuntimeError):
+    """Carries all raw evidence writes that failed without aborting later writes."""
+
+    def __init__(self, errors: Sequence[Mapping[str, str]]) -> None:
+        self.errors = tuple(dict(error) for error in errors)
+        super().__init__(f"raw artifact persistence failed for {len(self.errors)} artifact(s)")
+
+
 @dataclass(frozen=True)
 class CollectionRunConfig:
     max_workers: int = 1
@@ -207,18 +215,63 @@ def _write_case_failure(
     error: Exception,
     payload: Mapping[str, object] | None = None,
 ) -> None:
+    raw_errors: dict[str, list[dict[str, str]]] = {}
+    if isinstance(error, RawArtifactPersistenceError):
+        raw_errors["initial"] = [dict(item) for item in error.errors]
     raw_artifact_error: Exception | None = None
     if payload is None:
-        case_dir.write_json("results/outcomes.json", [])
-        case_dir.write_json("evidence/decision_snapshots.json", [])
-        case_dir.write_json("evidence/physical_payload.json", {})
-        case_dir.write_json("evidence/horizon.json", _unknown_horizon().to_dict())
-        case_dir.write_json("evidence/graph_events.json", [])
+        placeholder_errors = _write_evidence_artifacts(
+            case_dir,
+            {
+                "evidence/decision_snapshots.json": [],
+                "evidence/physical_payload.json": {},
+                "evidence/horizon.json": _unknown_horizon().to_dict(),
+                "evidence/graph_events.json": [],
+            },
+        )
+        if placeholder_errors:
+            raw_errors["placeholder"] = placeholder_errors
     else:
         try:
-            _write_raw_artifacts(case_dir, payload=payload)
+            retry_errors = _write_raw_artifacts(case_dir, payload=payload)
         except Exception as persistence_error:  # noqa: BLE001
             raw_artifact_error = persistence_error
+        else:
+            if retry_errors:
+                raw_errors["retry"] = retry_errors
+
+    ancillary_errors: list[dict[str, str]] = []
+    _write_json_best_effort(case_dir, "results/outcomes.json", [], ancillary_errors)
+    _write_json_best_effort(
+        case_dir,
+        "summary.json",
+        {
+            "case_id": case.case_id,
+            "seed": case.seed,
+            "status": "failed",
+            "stage": stage,
+            "error_type": type(error).__name__,
+            "error": str(error),
+        },
+        ancillary_errors,
+    )
+    _write_text_best_effort(
+        case_dir,
+        "logs/runner.log",
+        "\n".join(
+            [
+                f"experiment={EXPERIMENT_NAME}",
+                f"case_id={case.case_id}",
+                f"seed={case.seed}",
+                "status=failed",
+                f"stage={stage}",
+                f"error_type={type(error).__name__}",
+                f"error={error}",
+                "",
+            ]
+        ),
+        ancillary_errors,
+    )
     failure_payload: dict[str, object] = {
         "status": "failed",
         "case_id": case.case_id,
@@ -234,37 +287,11 @@ def _write_case_failure(
                 "raw_artifact_persistence_error": str(raw_artifact_error),
             }
         )
-    case_dir.write_json(
-        "failure.json",
-        failure_payload,
-    )
-    case_dir.write_json("results/outcomes.json", [])
-    case_dir.write_json(
-        "summary.json",
-        {
-            "case_id": case.case_id,
-            "seed": case.seed,
-            "status": "failed",
-            "stage": stage,
-            "error_type": type(error).__name__,
-            "error": str(error),
-        },
-    )
-    case_dir.write_text(
-        "logs/runner.log",
-        "\n".join(
-            [
-                f"experiment={EXPERIMENT_NAME}",
-                f"case_id={case.case_id}",
-                f"seed={case.seed}",
-                "status=failed",
-                f"stage={stage}",
-                f"error_type={type(error).__name__}",
-                f"error={error}",
-                "",
-            ]
-        ),
-    )
+    if raw_errors:
+        failure_payload["raw_artifact_persistence_errors"] = raw_errors
+    if ancillary_errors:
+        failure_payload["failure_artifact_persistence_errors"] = ancillary_errors
+    _write_json_best_effort(case_dir, "failure.json", failure_payload, [])
 
 
 def _mapping(value: object) -> Mapping[str, object]:
@@ -285,23 +312,85 @@ def _json_plain(value: object) -> object:
     return value
 
 
+def _persistence_error(name: str, error: Exception) -> dict[str, str]:
+    return {"artifact": name, "error_type": type(error).__name__, "error": str(error)}
+
+
+def _write_json_best_effort(
+    case_dir: Phase5RunDirectory,
+    name: str,
+    payload: object,
+    errors: list[dict[str, str]],
+) -> None:
+    try:
+        case_dir.write_json(name, payload)
+    except Exception as error:  # noqa: BLE001
+        errors.append(_persistence_error(name, error))
+
+
+def _write_text_best_effort(
+    case_dir: Phase5RunDirectory,
+    name: str,
+    content: str,
+    errors: list[dict[str, str]],
+) -> None:
+    try:
+        case_dir.write_text(name, content)
+    except Exception as error:  # noqa: BLE001
+        errors.append(_persistence_error(name, error))
+
+
+def _write_evidence_artifacts(
+    case_dir: Phase5RunDirectory,
+    artifacts: Mapping[str, object],
+) -> list[dict[str, str]]:
+    errors: list[dict[str, str]] = []
+    for name, artifact in artifacts.items():
+        _write_json_best_effort(case_dir, name, artifact, errors)
+    return errors
+
+
 def _write_raw_artifacts(
     case_dir: Phase5RunDirectory,
     *,
     payload: Mapping[str, object],
-) -> None:
+) -> list[dict[str, str]]:
     physical_payload = payload.get("physical_result")
     physical_mapping = physical_payload if isinstance(physical_payload, Mapping) else {}
     raw_horizon = physical_mapping.get("horizon", _unknown_horizon())
     raw_graph_events = physical_mapping.get("graph_events", [])
-    case_dir.write_json("results/online.json", _json_plain(payload))
-    case_dir.write_json(
-        "evidence/decision_snapshots.json",
-        _json_plain(payload.get("feature_snapshots", [])),
+    return _write_evidence_artifacts(
+        case_dir,
+        {
+            "results/online.json": _json_plain(payload),
+            "evidence/decision_snapshots.json": _json_plain(payload.get("feature_snapshots", [])),
+            "evidence/physical_payload.json": _json_plain(physical_payload or {}),
+            "evidence/horizon.json": _json_plain(raw_horizon),
+            "evidence/graph_events.json": _json_plain(raw_graph_events),
+        },
     )
-    case_dir.write_json("evidence/physical_payload.json", _json_plain(physical_payload or {}))
-    case_dir.write_json("evidence/horizon.json", _json_plain(raw_horizon))
-    case_dir.write_json("evidence/graph_events.json", _json_plain(raw_graph_events))
+
+
+def _annotate_finalization_failure(
+    case_dir: Phase5RunDirectory,
+    *,
+    case: CalibrationCollectionCase,
+    error: Exception,
+) -> None:
+    try:
+        failure_payload = dict(_read_mapping_json(case_dir.path / "failure.json"))
+    except Exception:  # noqa: BLE001
+        failure_payload = {
+            "status": "failed",
+            "case_id": case.case_id,
+            "seed": case.seed,
+            "stage": "persistence",
+            "error_type": type(error).__name__,
+            "error": str(error),
+        }
+    failure_payload["manifest_finalization_error_type"] = type(error).__name__
+    failure_payload["manifest_finalization_error"] = str(error)
+    _write_json_best_effort(case_dir, "failure.json", failure_payload, [])
 
 
 def _outcome_payload(outcome: object) -> dict[str, object]:
@@ -589,7 +678,9 @@ def run_collection_case(
         stage = "validation"
         payload = _outcome_payload(outcome)
         stage = "persistence"
-        _write_raw_artifacts(case_dir, payload=payload)
+        raw_write_errors = _write_raw_artifacts(case_dir, payload=payload)
+        if raw_write_errors:
+            raise RawArtifactPersistenceError(raw_write_errors)
         stage = "validation"
         snapshots = _snapshot_tuple(payload.get("feature_snapshots"))
         if not snapshots:
@@ -683,6 +774,12 @@ def run_collection_case(
                 ),
             )
             lineage = None
+        else:
+            _annotate_finalization_failure(
+                case_dir,
+                case=case,
+                error=finalization_error,
+            )
     return result, lineage
 
 

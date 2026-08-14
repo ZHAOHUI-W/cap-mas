@@ -233,3 +233,29 @@ python scripts/create_p56_object6_manifests.py --project-root . --check
 validated p56_object6_id_seeds_11_20.json sha256=7104dee4da0a59e3aa4f3dbb11f65924c2b3242423d895aff3c9fe355282726b
 validated p56_object6_id_seeds_21_30.json sha256=97ba76e1918fb4f087ce522d79599be6da8b1333026e0292da7cb807b3f6ca1b
 ```
+
+## Best-effort persistence remediation
+
+The final task review found that raw evidence writes still stopped at the first
+storage error and that a finalization error after an existing case failure was
+not retained. Each raw or placeholder artifact is now attempted independently;
+all write failures are collected, and any partial raw write produces a typed
+non-infrastructure persistence failure. A finalization error augments an
+existing failure record rather than being discarded. Regressions cover both a
+single failed raw artifact while later evidence remains written and a manifest
+finalization failure after an online-runner failure.
+
+Controller verification:
+
+```text
+/data/MLLM/wzh/agent/paper/infiAgent/workspace/cap-x/.venv-libero/bin/python -m pytest -q tests/test_libero_p56_collection.py tests/test_libero_p53_online.py tests/test_libero_p55_ood.py
+............................................                             [100%]
+44 passed in 4.35s
+
+ruff check scripts/run_libero_p56_collect.py tests/test_libero_p56_collection.py
+All checks passed!
+
+python scripts/create_p56_object6_manifests.py --project-root . --check
+validated p56_object6_id_seeds_11_20.json sha256=7104dee4da0a59e3aa4f3dbb11f65924c2b3242423d895aff3c9fe355282726b
+validated p56_object6_id_seeds_21_30.json sha256=97ba76e1918fb4f087ce522d79599be6da8b1333026e0292da7cb807b3f6ca1b
+```
