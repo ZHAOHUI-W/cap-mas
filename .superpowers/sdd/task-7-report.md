@@ -181,3 +181,23 @@ Compiling 'tests/test_libero_p56_collection.py'...
 
 - No real LIBERO physical collection was executed, by instruction. The controller still needs to run the actual block after review.
 - The worktree contains unrelated pre-existing untracked `outputs/phase5/...` artifacts; I did not modify or stage them.
+
+## Review remediation
+
+Independent task review found four collection-boundary defects: evaluator labels
+could fall back to non-evaluator success, post-run failures could discard raw
+evidence, `fail_fast` could stop on non-infrastructure validation failures, and
+summary mode could miss duplicate failed cases. Commit `48cd8f1` adds focused
+regressions and fixes those paths. The regressions first failed before the
+implementation and then passed.
+
+Controller verification after a lint-only cleanup:
+
+```text
+ruff check scripts/run_libero_p56_collect.py tests/test_libero_p56_collection.py
+All checks passed!
+
+/data/MLLM/wzh/agent/paper/infiAgent/workspace/cap-x/.venv-libero/bin/python -m pytest -q tests/test_libero_p56_collection.py tests/test_libero_p53_online.py tests/test_libero_p55_ood.py
+....................................                                     [100%]
+36 passed in 3.66s
+```

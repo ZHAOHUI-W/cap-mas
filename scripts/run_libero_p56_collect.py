@@ -447,7 +447,6 @@ def _write_case_success(
     outcomes: tuple[CalibrationOutcome, ...],
     lineage: CalibrationLineage,
 ) -> None:
-    physical_payload = _mapping(payload.get("physical_result"))
     case_dir.write_json("results/outcomes.json", [outcome.to_dict() for outcome in outcomes])
     case_dir.write_json("evidence/lineage.json", lineage.to_dict())
     tier_a = tuple(outcome for outcome in outcomes if outcome.tier == "A")
