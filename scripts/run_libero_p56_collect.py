@@ -747,7 +747,7 @@ def _suite_report(
                 "case_id": result.case_id,
                 "seed": result.seed,
                 "status": result.status,
-                "case_dir": str(result.case_dir),
+                "case_dir": str(result.case_dir.relative_to(suite_dir.path)),
                 "outcome_count": len(result.outcomes),
                 "error": result.error,
             }
@@ -1265,9 +1265,20 @@ def _suite_case_identities(
             raise ValueError(f"collection case result lacks case_id: {suite_path}")
         if not isinstance(case_dir_value, str) or not case_dir_value:
             raise ValueError(f"collection case result lacks case_dir: {suite_path}")
-        case_dir = Path(case_dir_value)
-        if not case_dir.is_absolute():
-            case_dir = suite_path / case_dir
+        raw_case_dir = Path(case_dir_value)
+        candidates = (
+            (raw_case_dir,)
+            if raw_case_dir.is_absolute()
+            else (suite_path / raw_case_dir, raw_case_dir)
+        )
+        case_dir = next(
+            (candidate for candidate in candidates if (candidate / "case.json").is_file()),
+            None,
+        )
+        if case_dir is None:
+            raise FileNotFoundError(
+                f"persisted collection case directory cannot be resolved: {case_dir_value}"
+            )
         case = CalibrationCollectionCase.from_dict(_read_mapping_json(case_dir / "case.json"))
         if case.case_id != case_id:
             raise ValueError(f"persisted collection case identity mismatch: {case_id}")

@@ -813,3 +813,35 @@ layout, two families stayed at zero, P5.5 evidence was shadow-only, and 57/60
 selections were ties. Realized horizon was not recorded, so no horizon bucket
 or stability claim is reported; adding that field and calibrated active
 evidence weighting is the P5.6 handoff.
+
+### P5.6A data foundation fixed-block collection (2026-08-17)
+
+P5.6A records `p56.feature.v1` decision-time feature snapshots, typed physical
+outcomes, lineage, and planned/realized horizon before any calibration fit.
+`max_steps=32 is not a horizon`; it is a fixed executor budget. The read-only
+capability diagnosis at
+`outputs/phase5/P5.6.0_capability_diagnosis/20260813_072308_capability_c9df3f4b/`
+found 10/10 physical execution reach and zero infrastructure unknowns for each
+family, but evaluator success was `0/10` for `spatial-0`, `0/10` for `goal-1`,
+and `4/10` for `object-6`. `spatial-0` and `goal-1` are deferred to the
+separate `P5.3.2 Task-Family Capability Repair` work package.
+
+The history audit
+`outputs/phase5/P5.6.2a_object6_history_audit/20260813_103434_history_a6bc49b1/`
+accepted zero legacy rows. Consequently, immutable object-6 ID seed blocks
+11-20 and 21-30 ran at
+`outputs/phase5/P5.6.2a_object6_collection/20260814_022145_suite_85dd4d7d/`
+and
+`outputs/phase5/P5.6.2a_object6_collection/20260817_070047_suite_c966d81c/`.
+Both completed 10/10 cases with no case-level infrastructure failure, each
+yielding 5 positive and 5 negative Tier A labels. The combined result is
+20 Tier A outcomes, 10 positive and 10 negative, satisfying the pre-registered
+20/5/5 collection gate without outcome-adaptive seed selection.
+The capability diagnosis, history audit, and both collection suites each retain
+`results/manifest_verification.json`; their regenerated manifests report zero
+missing, size, SHA-256, and untracked-file mismatches.
+
+This is a data-coverage gate only. It does not fit a model, emit calibrated
+probabilities, change Arbiter ranking, or demonstrate a downstream success-rate
+gain. P5.6B/C calibration, shadow arbitration, and canary evaluation remain
+open.

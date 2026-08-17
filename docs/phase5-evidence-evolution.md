@@ -1027,3 +1027,38 @@ and eligible coverage >=50%. The bounded canary requires at least 20 matched
 physical episodes and supports only a safety/operability claim. Full details
 are in [the P5.6 design](superpowers/specs/2026-08-11-p5-6-evidence-calibration-design.md)
 and [ADR-0014](adr/0014-calibrated-evidence-and-snapshot-activation.md).
+
+## P5.6A data foundation status (2026-08-17)
+
+P5.6A closes the contracts, execution telemetry, feature-snapshot, dataset,
+capability-diagnosis, compatibility-audit, and fixed-block collection gates.
+Its feature contract is `p56.feature.v1`. A decision-time feature snapshot is
+captured before lease acquisition and physical execution; dynamic verification
+and after-action scene state remain outcome evidence. `max_steps=32 is not a horizon`:
+planned and realized horizon are recorded separately from the action
+budget.
+
+The capability artifact
+`outputs/phase5/P5.6.0_capability_diagnosis/20260813_072308_capability_c9df3f4b/`
+records `spatial-0=0/10`, `goal-1=0/10`, and `object-6=4/10` evaluator
+successes, with no infrastructure unknowns. The first two families remain
+blocked on `P5.3.2 Task-Family Capability Repair`; that repair must not alter
+P5.6A records or add a learned score.
+
+Historical object-6 data was rejected by the compatibility audit at
+`outputs/phase5/P5.6.2a_object6_history_audit/20260813_103434_history_a6bc49b1/`
+with zero admissible Tier A rows. Fresh immutable ID suites
+`20260814_022145_suite_85dd4d7d` (seeds 11-20) and
+`20260817_070047_suite_c966d81c` (seeds 21-30) under
+`outputs/phase5/P5.6.2a_object6_collection/` each completed 10 cases with
+five positive and five negative Tier A labels. Their combined 20 Tier A rows,
+10 positive and 10 negative, close the family-scoped 20/5/5 collection gate.
+The capability, history-audit, and both collection suites each contain
+`results/manifest_verification.json`; regenerated manifests have zero missing,
+size, SHA-256, or untracked-file mismatches.
+
+This does not fit or activate a calibrator. P5.6B retains correlation
+reduction, constrained fitting, isotonic calibration, and immutable snapshots;
+P5.6C retains calibrated shadow arbitration, abstention/fallback integration,
+and bounded canary evaluation. There is no active `success_probability`, no
+new Arbiter ranking, and no claim of downstream task-success improvement.

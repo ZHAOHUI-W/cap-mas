@@ -310,6 +310,44 @@ def test_collection_captures_all_candidates_but_labels_only_selected(tmp_path) -
     assert (case_dirs[0] / "evidence" / "horizon.json").exists()
 
 
+def test_collection_persists_case_paths_relative_to_its_suite(tmp_path) -> None:
+    report = run_collection(
+        _collection_manifest(seeds=(11,)),
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(),
+        online_runner=lambda **kwargs: _online_outcome(
+            success=True,
+            episode_id=kwargs["calibration_context"].episode_id,
+        ),
+        executor_factory=lambda **kwargs: object(),
+    )
+
+    persisted = json.loads((report.suite_dir / "results" / "cases.json").read_text())
+
+    assert persisted[0]["case_dir"].startswith("cases/")
+
+
+def test_collection_summary_reads_legacy_workdir_relative_case_paths(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    report = run_collection(
+        _collection_manifest(seeds=(11,)),
+        output_root=Path("relative-output"),
+        run_config=CollectionRunConfig(),
+        online_runner=lambda **kwargs: _online_outcome(
+            success=True,
+            episode_id=kwargs["calibration_context"].episode_id,
+        ),
+        executor_factory=lambda **kwargs: object(),
+    )
+
+    summary = summarize_collection((report.suite_dir,))
+
+    assert summary.admissible_tier_a_count == 1
+    assert summary.positive_count == 1
+
+
 def test_resume_retries_only_an_interrupted_attempt_without_physical_execution(tmp_path) -> None:
     manifest = _collection_manifest(seeds=(11, 12))
     run_config = CollectionRunConfig()

@@ -54,6 +54,7 @@
 | Degraded Runtime | A fail-closed health state reached after restart or artifact-failure budgets are exhausted; fresh-dependent actions are rejected. |
 | Artifact Failure | Missing, checksum-invalid, truncated, or undecodable shared data that prevents one observation from producing a snapshot. |
 | Calibration Feature Snapshot | Immutable, pre-execution candidate feature record bound to an episode, candidate fingerprint, scene/map versions, feature schema, and Memory/Robot Skill versions. |
+| Decision-Time Feature Snapshot | The decision-time feature snapshot is a calibration feature record captured after evidence normalization and before lease acquisition or physical execution; it never reconstructs features from an after-action scene. |
 | Calibration Outcome | A typed result that keeps physical task success, graph completion, verifier success, execution status, and horizon as separate fields. |
 | Tier A Outcome | A conclusive physical evaluator outcome from the selected candidate, eligible as the primary supervised calibration label. |
 | Tier B Outcome | An isolated rehearsal outcome used for diagnostics or shadow analysis; it cannot be relabeled as physical success. |
