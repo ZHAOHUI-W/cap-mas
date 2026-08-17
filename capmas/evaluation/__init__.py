@@ -87,6 +87,12 @@ from capmas.evaluation.dataset import (
     build_calibration_dataset,
     normalize_physical_outcomes,
 )
+from capmas.evaluation.offline import (
+    OFFLINE_SPLITTER_VERSION,
+    ExactQuotaSplitConfig,
+    OfflineExample,
+    partition_tier_a_outcomes,
+)
 from capmas.evaluation.verifier_artifacts import (
     DynamicVerifierArtifact,
     collect_dynamic_verifier_artifacts,
@@ -176,6 +182,10 @@ __all__ = [  # noqa: RUF022
     "audit_calibration_dataset",
     "build_calibration_dataset",
     "normalize_physical_outcomes",
+    "OFFLINE_SPLITTER_VERSION",
+    "ExactQuotaSplitConfig",
+    "OfflineExample",
+    "partition_tier_a_outcomes",
     "DynamicVerifierArtifact",
     "collect_dynamic_verifier_artifacts",
     "static_verifier_artifacts_from_arbitrations",
