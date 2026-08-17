@@ -159,12 +159,25 @@ cross-entropy with fixed L2 regularization. Version-one constants are part of
 the serialized model:
 
 ```text
-max_iterations = 2_000
+max_iterations = 5_000
 initial_learning_rate = 0.10
 learning_rate(iteration) = 0.10 * 0.995 ** floor(iteration / 100)
 l2_regularization = 0.01
 convergence_tolerance = 1e-9
 ```
+
+The iteration budget is an upper bound, not a convergence claim. With the
+fixed schedule, the versioned six-row regression fixture reaches a final
+learning rate of `0.0909156262` and a final single-step loss change of
+`9.881077e-7` at iteration 2,000; at iteration 5,000 those values are
+`0.0782223675` and `1.219500e-7`. Both loss changes exceed the `1e-9`
+tolerance, so that fixture correctly remains non-converged and only verifies
+the configured budget. The worktree contains no eligible, versioned 12-row
+object-6 training artifact from which to reproduce a separate convergence
+claim. A Phase 5 offline run must record that measurement before the
+specification states an iteration-to-convergence result for the locked train
+split. This revision changes no optimizer, schedule, L2 value, tolerance, sign
+constraint, or pure-Python boundary.
 
 The initial intercept is the logit of the smoothed train positive rate,
 `(positive_count + 0.5) / (train_count + 1.0)`. All non-intercept parameters
