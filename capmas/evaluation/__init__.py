@@ -72,6 +72,12 @@ from capmas.evaluation.online_rehearsal import (
     select_with_rehearsal,
 )
 from capmas.evaluation.feature_snapshots import FEATURE_GROUPS_V1, capture_feature_snapshot
+from capmas.evaluation.correlation import (
+    REDUCTION_POLICY_VERSION,
+    ReducedDimension,
+    ReducedFeatureVector,
+    reduce_feature_snapshot,
+)
 from capmas.evaluation.dataset import (
     DatasetAudit,
     LeakageFinding,
@@ -159,6 +165,10 @@ __all__ = [  # noqa: RUF022
     "select_with_rehearsal",
     "FEATURE_GROUPS_V1",
     "capture_feature_snapshot",
+    "REDUCTION_POLICY_VERSION",
+    "ReducedDimension",
+    "ReducedFeatureVector",
+    "reduce_feature_snapshot",
     "DatasetAudit",
     "LeakageFinding",
     "assert_dataset_eligible",
