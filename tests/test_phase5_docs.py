@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -83,6 +82,22 @@ def test_phase5_docs_record_execution_grounding_smoke():
         assert "0.72409" in document
     assert "0.81099" in document
     assert "not a multi-seed quality result" in experiments
+
+
+def test_phase5_docs_record_p56a_data_foundation_gate():
+    phase5 = (ROOT / "docs/phase5-evidence-evolution.md").read_text(encoding="utf-8")
+    roadmap = (ROOT / "docs/implementation-roadmap.md").read_text(encoding="utf-8")
+    experiments = (ROOT / "docs/experiments.md").read_text(encoding="utf-8")
+    glossary = (ROOT / "docs/glossary.md").read_text(encoding="utf-8")
+
+    for document in (phase5, roadmap, experiments):
+        assert "P5.6A data foundation" in document
+        assert "p56.feature.v1" in document
+        assert "P5.3.2 Task-Family Capability Repair" in document
+        assert "max_steps=32 is not a horizon" in document
+        assert "manifest_verification.json" in document
+    assert "20 Tier A" in experiments
+    assert "decision-time feature snapshot" in glossary
 
 
 def test_phase5_docs_record_gripper_state_semantic_correction():

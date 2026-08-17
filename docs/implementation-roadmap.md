@@ -675,6 +675,43 @@ requires at least 20 independent Tier A physical outcomes for that family,
 including at least five positive and five negative `task_success` labels.
 Ineligible families abstain and use the fixed-weight Arbiter fallback.
 
+#### P5.6A data foundation status (2026-08-17)
+
+P5.6.0, P5.6.1, P5.6.2, and the collection portion of P5.6.2a are complete
+as a data foundation, not as an active calibration feature. The immutable
+contracts use `p56.feature.v1`; each selected candidate has a decision-time
+feature snapshot, a typed physical outcome, lineage, and planned/realized
+horizon telemetry. `max_steps=32 is not a horizon`; it is an execution budget
+and never determines an H bucket.
+
+The read-only capability diagnosis at
+`outputs/phase5/P5.6.0_capability_diagnosis/20260813_072308_capability_c9df3f4b/`
+found zero infrastructure unknowns and 10/10 physical execution reach for all
+three families. `spatial-0` and `goal-1` each had 0/10 evaluator successes and
+are explicitly handed to `P5.3.2 Task-Family Capability Repair`. `object-6`
+had 4/10 evaluator successes and is eligible only as a family-scoped
+calibration data source.
+
+The historical compatibility audit at
+`outputs/phase5/P5.6.2a_object6_history_audit/20260813_103434_history_a6bc49b1/`
+accepted zero historical rows. Two complete, disjoint, frozen object-6 ID
+blocks were therefore executed: seeds 11-20 at
+`outputs/phase5/P5.6.2a_object6_collection/20260814_022145_suite_85dd4d7d/`
+and seeds 21-30 at
+`outputs/phase5/P5.6.2a_object6_collection/20260817_070047_suite_c966d81c/`.
+Each block completed all 10 cases with 5 positive and 5 negative Tier A
+outcomes. Together they provide 20 Tier A outcomes, 10 positive and 10
+negative, closing the 20/5/5 data gate without adaptive seed selection.
+The capability, history-audit, and both collection run directories each retain
+`results/manifest_verification.json`; after regeneration, every listed file
+has zero missing-file, size, digest, and untracked-file mismatches.
+
+P5.6B/C remain open. No correlation-reduced model, fitted coefficient,
+calibration snapshot, `success_probability`, active evidence weight, or
+calibrated Arbiter selection is enabled by this result. P5.3.2 remains a
+separate task-completion repair, and no all-family or downstream-success claim
+is justified.
+
 The current object-6 suite contains 20 physical outcomes: 14 positive and six
 negative. It meets the numerical 20/5/5 gate, but the records predate P5.6
 feature-snapshot and horizon lineage and therefore require a read-only
