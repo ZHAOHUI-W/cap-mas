@@ -763,6 +763,25 @@ improvement claim. See
 [`P5.6 design`](superpowers/specs/2026-08-11-p5-6-evidence-calibration-design.md)
 and [ADR-0014](adr/0014-calibrated-evidence-and-snapshot-activation.md).
 
+#### P5.6C fit stability status (2026-08-18)
+
+P5.6C adds an offline-only `p56b.constrained_logistic.v2` fitter. It records
+train-design rank and availability, freezes constant non-intercept columns,
+requires both loss-delta and projected-KKT convergence, and abstains when a
+scoring vector violates the train availability signature. It changes neither
+the evidence reducer, the locked `12/4/4` split, OOD policy, runtime Arbiter,
+nor physical execution.
+
+The collection artifacts are unavailable in this checkout: an Aug-18
+filesystem audit finds the retained P5.6.2a history audit but not the two
+collection directories cited above. Therefore their historical `20/5/5`
+claims are not treated as reproducible input to P5.6B/C. The history audit
+alone admits zero rows. P5.6C unit tests validate only synthetic train-design
+diagnostics; no verified real 12-row calibration result, PAVA transform,
+offline metric, active probability, or downstream success-rate improvement is
+claimed. A restored or recollected 20-row Tier A source must pass manifest
+verification before the offline runner may create a real fit artifact.
+
 ## Phase 6 — Memory Controller learning
 
 - Add verified terminal and intermediate learning-return calculation.

@@ -1062,3 +1062,22 @@ reduction, constrained fitting, isotonic calibration, and immutable snapshots;
 P5.6C retains calibrated shadow arbitration, abstention/fallback integration,
 and bounded canary evaluation. There is no active `success_probability`, no
 new Arbiter ranking, and no claim of downstream task-success improvement.
+
+## P5.6C fit stability status (2026-08-18)
+
+The offline calibration implementation now has a V2 constrained-logistic
+stability layer. It derives rank and availability diagnostics from train rows
+only, fixes zero-variance non-intercept columns at zero, records the final
+projected-KKT infinity norm, and requires that norm together with the fixed
+loss-delta condition before reporting convergence. A candidate whose reduced
+availability differs from an `all_present` or `all_unknown` train dimension
+abstains offline; `mixed` dimensions accept either availability state.
+
+This is not a calibrated shadow-Arbiter or canary result. The collection
+artifacts referenced by the P5.6A status are unavailable in this checkout, so
+the retained history audit with zero admitted rows is the only locally
+verifiable source. The new V2 code is covered by synthetic diagnostics only.
+No verified real 12-row calibration result, PAVA fit, Brier/ECE metric,
+`success_probability`, active evidence weight, or downstream task-success
+claim exists. Reinstating the collection artifacts requires a fresh manifest
+verification before P5.6B offline fitting can begin.

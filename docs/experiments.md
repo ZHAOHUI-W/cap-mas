@@ -845,3 +845,21 @@ This is a data-coverage gate only. It does not fit a model, emit calibrated
 probabilities, change Arbiter ranking, or demonstrate a downstream success-rate
 gain. P5.6B/C calibration, shadow arbitration, and canary evaluation remain
 open.
+
+### P5.6C fit stability synthetic verification (2026-08-18)
+
+P5.6C adds train-only design diagnostics, constant-column freezing,
+availability-pattern abstention, and projected-KKT convergence reporting to
+the offline constrained-logistic primitive. The verified synthetic fixture has
+six train rows and a rank-two design matrix after the constant columns are
+identified. It is an implementation regression test, not a physical
+calibration experiment.
+
+There is no verified real 12-row calibration result. The collection artifacts
+referenced by the earlier P5.6A entry are unavailable in this checkout; only
+the P5.6.2a history audit directory is present and that audit admitted zero
+legacy rows. Before reporting any real fit, the restored or recollected
+object-6 source must contain 20 independent Tier A physical outcomes with the
+locked lineage split, a verified manifest, train-design diagnostics, a model
+digest, convergence status, PAVA output, and held-out metrics. Until then,
+P5.6C emits no active probability or Arbiter selection change.
