@@ -14,12 +14,16 @@ from capmas.contracts.calibration import (
     HorizonLabel,
 )
 from capmas.evaluation.calibration import (
+    CALIBRATION_MODEL_VERSION,
     MAX_ITERATIONS,
+    PROJECTED_GRADIENT_TOLERANCE,
+    _convergence_reached,
     brier_score,
     expected_calibration_error,
     fit_constrained_logistic,
     fit_isotonic,
     predict_offline,
+    projected_gradient_inf_norm,
     wilson_interval_width,
 )
 from capmas.evaluation.correlation import ReducedDimension, ReducedFeatureVector
@@ -173,6 +177,32 @@ def test_projected_fit_is_deterministic_and_keeps_constrained_weights_nonnegativ
         _train_examples()[0].reduced
     )
     assert "ood" not in set(first.support_weights) | set(first.risk_weights)
+
+
+def test_v2_freezes_non_identifiable_parameters_and_records_fit_diagnostics() -> None:
+    model = fit_constrained_logistic(_train_examples())
+
+    assert CALIBRATION_MODEL_VERSION == "p56b.constrained_logistic.v2"
+    assert model.model_version == CALIBRATION_MODEL_VERSION
+    assert model.support_weights["scene_grounding"] == 0.0
+    assert model.risk_weights["collision_risk"] == 0.0
+    assert model.missing_penalties["scene_grounding"] == 0.0
+    assert "support.scene_grounding" in model.fit_diagnostics.frozen_parameters
+    assert model.fit_diagnostics.availability_signature["scene_grounding"] == "all_unknown"
+    assert model.fit_diagnostics.train_design.matrix_rank == 2
+    assert model.fit_diagnostics.final_loss_delta is not None
+    assert math.isfinite(model.fit_diagnostics.projected_gradient_inf_norm)
+    assert model.to_dict()["fit_diagnostics"] == model.fit_diagnostics.to_dict()
+
+
+def test_projected_kkt_residual_and_convergence_require_both_conditions() -> None:
+    assert projected_gradient_inf_norm(
+        0.1,
+        {"active": -0.4, "lower_bound_satisfied": 0.8, "lower_bound_violated": -0.3},
+        {"active": 0.2, "lower_bound_satisfied": 0.0, "lower_bound_violated": 0.0},
+    ) == pytest.approx(0.4)
+    assert _convergence_reached(1e-12, 1e-2) is False
+    assert _convergence_reached(1e-12, PROJECTED_GRADIENT_TOLERANCE) is True
 
 
 @pytest.mark.parametrize(

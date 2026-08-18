@@ -9,18 +9,23 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from capmas.contracts.calibration import CalibrationPrediction
+from capmas.evaluation.calibration_diagnostics import (
+    TrainDesignDiagnostics,
+    analyze_train_design,
+)
 from capmas.evaluation.correlation import ReducedFeatureVector
 
 if TYPE_CHECKING:
     from capmas.evaluation.offline import OfflineExample
 
-CALIBRATION_MODEL_VERSION = "p56b.constrained_logistic.v1"
+CALIBRATION_MODEL_VERSION = "p56b.constrained_logistic.v2"
 ISOTONIC_CALIBRATION_VERSION = "p56b.pava.v1"
 MAX_ITERATIONS = 5_000
 INITIAL_LEARNING_RATE = 0.10
 LEARNING_RATE_DECAY = 0.995
 L2_REGULARIZATION = 0.01
 CONVERGENCE_TOLERANCE = 1e-9
+PROJECTED_GRADIENT_TOLERANCE = 1e-8
 WILSON_Z = 1.959963984540054
 
 _SUPPORT_DIMENSIONS = ("scene_grounding", "action_feasibility")
@@ -31,6 +36,52 @@ _RISK_DIMENSIONS = (
 )
 _OPTIONAL_DIMENSIONS = ("scene_grounding", *_RISK_DIMENSIONS)
 _REQUIRED_DIMENSION = "action_feasibility"
+
+
+@dataclass(frozen=True)
+class CalibrationFitDiagnostics:
+    """Train-only geometry and final stationarity information for one fit."""
+
+    train_design: TrainDesignDiagnostics
+    final_loss_delta: float | None
+    projected_gradient_inf_norm: float
+    loss_delta_tolerance: float
+    projected_gradient_tolerance: float
+    convergence_rule: str = "loss_delta_and_projected_kkt.v1"
+
+    def __post_init__(self) -> None:
+        if self.final_loss_delta is not None and (
+            not math.isfinite(self.final_loss_delta) or self.final_loss_delta < 0.0
+        ):
+            raise ValueError("fit final_loss_delta must be finite and non-negative")
+        for name in (
+            "projected_gradient_inf_norm",
+            "loss_delta_tolerance",
+            "projected_gradient_tolerance",
+        ):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"fit {name} must be finite and non-negative")
+        if self.convergence_rule != "loss_delta_and_projected_kkt.v1":
+            raise ValueError("fit convergence_rule is not supported")
+
+    @property
+    def frozen_parameters(self) -> tuple[str, ...]:
+        return self.train_design.frozen_parameters
+
+    @property
+    def availability_signature(self) -> Mapping[str, str]:
+        return self.train_design.availability_signature
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "convergence_rule": self.convergence_rule,
+            "final_loss_delta": self.final_loss_delta,
+            "loss_delta_tolerance": self.loss_delta_tolerance,
+            "projected_gradient_inf_norm": self.projected_gradient_inf_norm,
+            "projected_gradient_tolerance": self.projected_gradient_tolerance,
+            "train_design": self.train_design.to_dict(),
+        }
 
 
 @dataclass(frozen=True)
@@ -47,6 +98,7 @@ class ConstrainedLogisticModel:
     iterations: int
     final_loss: float
     converged: bool
+    fit_diagnostics: CalibrationFitDiagnostics
 
     def __post_init__(self) -> None:
         if not self.model_version or not self.family_id or not self.feature_schema_version:
@@ -57,6 +109,8 @@ class ConstrainedLogisticModel:
             raise ValueError("model iteration count is invalid")
         if not isinstance(self.converged, bool):
             raise TypeError("model converged flag must be boolean")
+        if not isinstance(self.fit_diagnostics, CalibrationFitDiagnostics):
+            raise TypeError("model fit_diagnostics must be CalibrationFitDiagnostics")
         object.__setattr__(
             self,
             "support_weights",
@@ -104,6 +158,7 @@ class ConstrainedLogisticModel:
             "family_id": self.family_id,
             "feature_schema_version": self.feature_schema_version,
             "final_loss": self.final_loss,
+            "fit_diagnostics": self.fit_diagnostics.to_dict(),
             "intercept": self.intercept,
             "iterations": self.iterations,
             "missing_penalties": dict(self.missing_penalties),
@@ -195,50 +250,69 @@ def fit_constrained_logistic(examples: Sequence[OfflineExample]) -> ConstrainedL
 
     family_id = rows[0][0].family_id
     feature_schema_version = rows[0][0].feature_schema_version
+    train_design = analyze_train_design(tuple(vector for vector, _ in rows))
+    frozen_parameters = set(train_design.frozen_parameters)
     positives = sum(label for _, label in rows)
     intercept = _logit((positives + 0.5) / (len(rows) + 1.0))
     support_weights = {name: 0.0 for name in _SUPPORT_DIMENSIONS}
     risk_weights = {name: 0.0 for name in _RISK_DIMENSIONS}
     missing_penalties = {name: 0.0 for name in _OPTIONAL_DIMENSIONS}
     previous_loss: float | None = None
+    loss_delta: float | None = None
+    projected_gradient_norm = math.inf
     converged = False
 
     for iteration in range(1, MAX_ITERATIONS + 1):
-        gradients = _zero_gradients()
-        for vector, label in rows:
-            score = _raw_score(vector, intercept, support_weights, risk_weights, missing_penalties)
-            error = _sigmoid(score) - float(label)
-            gradients["intercept"] += error
-            for name in _SUPPORT_DIMENSIONS:
-                dimension = vector.dimension(name)
-                if dimension.value is None:
-                    gradients["missing_penalties"][name] -= error
-                else:
-                    gradients["support_weights"][name] += error * dimension.value
-            for name in _RISK_DIMENSIONS:
-                dimension = vector.dimension(name)
-                if dimension.value is None:
-                    gradients["missing_penalties"][name] -= error
-                else:
-                    gradients["risk_weights"][name] -= error * dimension.value
-
+        gradients = _objective_gradients(
+            rows,
+            intercept,
+            support_weights,
+            risk_weights,
+            missing_penalties,
+        )
         rate = INITIAL_LEARNING_RATE * LEARNING_RATE_DECAY ** ((iteration - 1) // 100)
-        count = len(rows)
-        intercept -= rate * gradients["intercept"] / count
+        intercept -= rate * gradients["intercept"]
         for name in _SUPPORT_DIMENSIONS:
-            gradient = gradients["support_weights"][name] / count + 2.0 * L2_REGULARIZATION * support_weights[name]
-            support_weights[name] = max(0.0, support_weights[name] - rate * gradient)
+            if f"support.{name}" not in frozen_parameters:
+                support_weights[name] = max(
+                    0.0,
+                    support_weights[name] - rate * gradients["support_weights"][name],
+                )
         for name in _RISK_DIMENSIONS:
-            gradient = gradients["risk_weights"][name] / count + 2.0 * L2_REGULARIZATION * risk_weights[name]
-            risk_weights[name] = max(0.0, risk_weights[name] - rate * gradient)
+            if f"risk.{name}" not in frozen_parameters:
+                risk_weights[name] = max(
+                    0.0,
+                    risk_weights[name] - rate * gradients["risk_weights"][name],
+                )
         for name in _OPTIONAL_DIMENSIONS:
-            gradient = gradients["missing_penalties"][name] / count + 2.0 * L2_REGULARIZATION * missing_penalties[name]
-            missing_penalties[name] = max(0.0, missing_penalties[name] - rate * gradient)
+            if f"missing.{name}" not in frozen_parameters:
+                missing_penalties[name] = max(
+                    0.0,
+                    missing_penalties[name] - rate * gradients["missing_penalties"][name],
+                )
 
         loss = _loss(rows, intercept, support_weights, risk_weights, missing_penalties)
         if not math.isfinite(loss) or not math.isfinite(intercept):
             raise ValueError("fit_rejected_nonfinite_optimizer_state")
-        if previous_loss is not None and abs(previous_loss - loss) <= CONVERGENCE_TOLERANCE:
+        loss_delta = None if previous_loss is None else abs(previous_loss - loss)
+        gradients = _objective_gradients(
+            rows,
+            intercept,
+            support_weights,
+            risk_weights,
+            missing_penalties,
+        )
+        projected_gradient_norm = projected_gradient_inf_norm(
+            gradients["intercept"],
+            _active_constrained_gradients(gradients, frozen_parameters),
+            _active_constrained_values(
+                support_weights,
+                risk_weights,
+                missing_penalties,
+                frozen_parameters,
+            ),
+        )
+        if _convergence_reached(loss_delta, projected_gradient_norm):
             converged = True
             break
         previous_loss = loss
@@ -248,6 +322,24 @@ def fit_constrained_logistic(examples: Sequence[OfflineExample]) -> ConstrainedL
     final_loss = _loss(rows, intercept, support_weights, risk_weights, missing_penalties)
     if not math.isfinite(final_loss):
         raise ValueError("fit_rejected_nonfinite_loss")
+    gradients = _objective_gradients(
+        rows,
+        intercept,
+        support_weights,
+        risk_weights,
+        missing_penalties,
+    )
+    projected_gradient_norm = projected_gradient_inf_norm(
+        gradients["intercept"],
+        _active_constrained_gradients(gradients, frozen_parameters),
+        _active_constrained_values(
+            support_weights,
+            risk_weights,
+            missing_penalties,
+            frozen_parameters,
+        ),
+    )
+    converged = _convergence_reached(loss_delta, projected_gradient_norm)
     return ConstrainedLogisticModel(
         model_version=CALIBRATION_MODEL_VERSION,
         family_id=family_id,
@@ -259,6 +351,13 @@ def fit_constrained_logistic(examples: Sequence[OfflineExample]) -> ConstrainedL
         iterations=iteration,
         final_loss=final_loss,
         converged=converged,
+        fit_diagnostics=CalibrationFitDiagnostics(
+            train_design=train_design,
+            final_loss_delta=loss_delta,
+            projected_gradient_inf_norm=projected_gradient_norm,
+            loss_delta_tolerance=CONVERGENCE_TOLERANCE,
+            projected_gradient_tolerance=PROJECTED_GRADIENT_TOLERANCE,
+        ),
     )
 
 
@@ -473,6 +572,127 @@ def _loss(
     return total / len(rows) + L2_REGULARIZATION * regularization
 
 
+def _objective_gradients(
+    rows: Sequence[tuple[ReducedFeatureVector, bool]],
+    intercept: float,
+    support_weights: Mapping[str, float],
+    risk_weights: Mapping[str, float],
+    missing_penalties: Mapping[str, float],
+) -> dict[str, object]:
+    gradients = _zero_gradients()
+    for vector, label in rows:
+        score = _raw_score(vector, intercept, support_weights, risk_weights, missing_penalties)
+        error = _sigmoid(score) - float(label)
+        gradients["intercept"] += error
+        for name in _SUPPORT_DIMENSIONS:
+            dimension = vector.dimension(name)
+            if dimension.value is None:
+                gradients["missing_penalties"][name] -= error
+            else:
+                gradients["support_weights"][name] += error * dimension.value
+        for name in _RISK_DIMENSIONS:
+            dimension = vector.dimension(name)
+            if dimension.value is None:
+                gradients["missing_penalties"][name] -= error
+            else:
+                gradients["risk_weights"][name] -= error * dimension.value
+
+    count = len(rows)
+    gradients["intercept"] /= count
+    for name in _SUPPORT_DIMENSIONS:
+        gradients["support_weights"][name] = (
+            gradients["support_weights"][name] / count
+            + 2.0 * L2_REGULARIZATION * support_weights[name]
+        )
+    for name in _RISK_DIMENSIONS:
+        gradients["risk_weights"][name] = (
+            gradients["risk_weights"][name] / count + 2.0 * L2_REGULARIZATION * risk_weights[name]
+        )
+    for name in _OPTIONAL_DIMENSIONS:
+        gradients["missing_penalties"][name] = (
+            gradients["missing_penalties"][name] / count
+            + 2.0 * L2_REGULARIZATION * missing_penalties[name]
+        )
+    return gradients
+
+
+def projected_gradient_inf_norm(
+    intercept_gradient: float,
+    constrained_gradients: Mapping[str, float],
+    constrained_values: Mapping[str, float],
+) -> float:
+    """Return the first-order KKT residual for non-negative coefficients."""
+
+    if set(constrained_gradients) != set(constrained_values):
+        raise ValueError("KKT gradients and values must use identical keys")
+    residuals = [abs(_finite_value(intercept_gradient, "intercept_gradient"))]
+    for parameter in sorted(constrained_gradients):
+        gradient = _finite_value(constrained_gradients[parameter], parameter)
+        value = _finite_value(constrained_values[parameter], parameter)
+        if value < 0.0:
+            raise ValueError(f"{parameter} must be non-negative")
+        residuals.append(abs(gradient) if value > 0.0 else max(0.0, -gradient))
+    return max(residuals)
+
+
+def _convergence_reached(
+    loss_delta: float | None,
+    projected_gradient_norm: float,
+) -> bool:
+    return (
+        loss_delta is not None
+        and loss_delta <= CONVERGENCE_TOLERANCE
+        and projected_gradient_norm <= PROJECTED_GRADIENT_TOLERANCE
+    )
+
+
+def _active_constrained_gradients(
+    gradients: Mapping[str, object], frozen_parameters: set[str]
+) -> dict[str, float]:
+    active: dict[str, float] = {}
+    for name in _SUPPORT_DIMENSIONS:
+        parameter = f"support.{name}"
+        if parameter not in frozen_parameters:
+            active[parameter] = gradients["support_weights"][name]
+    for name in _RISK_DIMENSIONS:
+        parameter = f"risk.{name}"
+        if parameter not in frozen_parameters:
+            active[parameter] = gradients["risk_weights"][name]
+    for name in _OPTIONAL_DIMENSIONS:
+        parameter = f"missing.{name}"
+        if parameter not in frozen_parameters:
+            active[parameter] = gradients["missing_penalties"][name]
+    return active
+
+
+def _active_constrained_values(
+    support_weights: Mapping[str, float],
+    risk_weights: Mapping[str, float],
+    missing_penalties: Mapping[str, float],
+    frozen_parameters: set[str],
+) -> dict[str, float]:
+    active: dict[str, float] = {}
+    for name in _SUPPORT_DIMENSIONS:
+        parameter = f"support.{name}"
+        if parameter not in frozen_parameters:
+            active[parameter] = support_weights[name]
+    for name in _RISK_DIMENSIONS:
+        parameter = f"risk.{name}"
+        if parameter not in frozen_parameters:
+            active[parameter] = risk_weights[name]
+    for name in _OPTIONAL_DIMENSIONS:
+        parameter = f"missing.{name}"
+        if parameter not in frozen_parameters:
+            active[parameter] = missing_penalties[name]
+    return active
+
+
+def _finite_value(value: object, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise ValueError(f"{name} must be finite")
+    return float(value)
+
+
 def _zero_gradients() -> dict[str, object]:
     return {
         "intercept": 0.0,
@@ -553,7 +773,9 @@ __all__ = [
     "L2_REGULARIZATION",
     "LEARNING_RATE_DECAY",
     "MAX_ITERATIONS",
+    "PROJECTED_GRADIENT_TOLERANCE",
     "WILSON_Z",
+    "CalibrationFitDiagnostics",
     "ConstrainedLogisticModel",
     "IsotonicBlock",
     "IsotonicCalibration",
@@ -562,5 +784,6 @@ __all__ = [
     "fit_constrained_logistic",
     "fit_isotonic",
     "predict_offline",
+    "projected_gradient_inf_norm",
     "wilson_interval_width",
 ]
