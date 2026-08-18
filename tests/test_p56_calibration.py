@@ -278,6 +278,40 @@ def test_prediction_abstains_for_missing_required_evidence_and_never_qualifies_r
     assert predicted.snapshot_id is None
 
 
+def test_prediction_abstains_when_all_unknown_dimension_becomes_present() -> None:
+    model = fit_constrained_logistic(_train_examples())
+    calibration = fit_isotonic(
+        model,
+        (
+            _example("calibration", False, 0.2, candidate_id="d"),
+            _example("calibration", True, 0.8, candidate_id="e"),
+        ),
+    )
+
+    prediction = predict_offline(
+        model,
+        calibration,
+        _example("test", True, 0.9, candidate_id="g", scene=0.4),
+    )
+
+    assert prediction.abstained is True
+    assert prediction.reason == "prediction_abstained_availability_mismatch"
+
+
+def test_mixed_availability_accepts_present_and_unknown_rows() -> None:
+    examples = (
+        _example("train", False, 0.1, candidate_id="a"),
+        _example("train", False, 0.2, candidate_id="b", scene=0.2),
+        _example("train", True, 0.8, candidate_id="c"),
+        _example("train", True, 0.9, candidate_id="d", scene=0.8),
+    )
+    model = fit_constrained_logistic(examples)
+
+    assert model.fit_diagnostics.availability_signature["scene_grounding"] == "mixed"
+    assert model.raw_probability(examples[0].reduced) >= 0.0
+    assert model.raw_probability(examples[1].reduced) >= 0.0
+
+
 def test_metrics_and_contract_serialization_are_deterministic() -> None:
     assert brier_score(((0.1, False), (0.9, True))) == pytest.approx(0.01)
     assert expected_calibration_error(((0.1, False), (0.9, True))) == pytest.approx(0.1)

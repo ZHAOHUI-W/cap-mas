@@ -36,6 +36,7 @@ _RISK_DIMENSIONS = (
 )
 _OPTIONAL_DIMENSIONS = ("scene_grounding", *_RISK_DIMENSIONS)
 _REQUIRED_DIMENSION = "action_feasibility"
+_AVAILABILITY_MISMATCH_ERROR = "reduced vector availability signature does not match model"
 
 
 @dataclass(frozen=True)
@@ -135,6 +136,7 @@ class ConstrainedLogisticModel:
         """Score a reduced decision-time vector without calibration remapping."""
 
         _validate_vector_compatibility(vector, self.family_id, self.feature_schema_version)
+        _validate_availability(vector, self.fit_diagnostics.availability_signature)
         score = self.intercept
         for name in _SUPPORT_DIMENSIONS:
             dimension = vector.dimension(name)
@@ -426,7 +428,13 @@ def predict_offline(
         return _abstained_prediction(model, vector, "prediction_abstained_schema_mismatch")
     try:
         raw_probability = model.raw_probability(vector)
-    except ValueError:
+    except ValueError as error:
+        if str(error) == _AVAILABILITY_MISMATCH_ERROR:
+            return _abstained_prediction(
+                model,
+                vector,
+                "prediction_abstained_availability_mismatch",
+            )
         return _abstained_prediction(model, vector, "prediction_abstained_model_mismatch")
     probability, uncertainty = isotonic.calibrate(raw_probability)
     return CalibrationPrediction(
@@ -723,6 +731,21 @@ def _validate_vector_compatibility(
         raise ValueError("reduced vector family does not match model")
     if vector.feature_schema_version != feature_schema_version:
         raise ValueError("reduced vector schema does not match model")
+
+
+def _validate_availability(
+    vector: ReducedFeatureVector, availability_signature: Mapping[str, str]
+) -> None:
+    for name in (*_SUPPORT_DIMENSIONS, *_RISK_DIMENSIONS):
+        expected = availability_signature[name]
+        actual = "present" if vector.dimension(name).value is not None else "unknown"
+        if expected == "mixed":
+            continue
+        if expected == "all_present" and actual == "present":
+            continue
+        if expected == "all_unknown" and actual == "unknown":
+            continue
+        raise ValueError(_AVAILABILITY_MISMATCH_ERROR)
 
 
 def _abstained_prediction(
