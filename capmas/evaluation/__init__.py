@@ -112,6 +112,13 @@ from capmas.evaluation.calibration import (
     predict_offline,
     wilson_interval_width,
 )
+from capmas.evaluation.calibration_diagnostics import (
+    RANK_TOLERANCE,
+    AvailabilityClass,
+    TrainColumnDiagnostic,
+    TrainDesignDiagnostics,
+    analyze_train_design,
+)
 from capmas.evaluation.verifier_artifacts import (
     DynamicVerifierArtifact,
     collect_dynamic_verifier_artifacts,
@@ -222,6 +229,11 @@ __all__ = [  # noqa: RUF022
     "fit_isotonic",
     "predict_offline",
     "wilson_interval_width",
+    "RANK_TOLERANCE",
+    "AvailabilityClass",
+    "TrainColumnDiagnostic",
+    "TrainDesignDiagnostics",
+    "analyze_train_design",
     "DynamicVerifierArtifact",
     "collect_dynamic_verifier_artifacts",
     "static_verifier_artifacts_from_arbitrations",
