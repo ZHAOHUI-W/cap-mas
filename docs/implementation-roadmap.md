@@ -796,6 +796,33 @@ activation, shadow arbitration, canary promotion, and causal evaluation
 remain blocked. The fitted artifact remains offline-only and must not change
 runtime Arbiter selection.
 
+#### P5.6D same-runtime evidence recollection (2026-08-19)
+
+The earlier object-6 collection has sufficient labels but insufficient
+decision-time feature diversity: it built a synthetic empty scene before
+Arbitration, so only rehearsal evidence was present. P5.6D replaces that
+physical lane with `LiveLiberoEvidenceSession`: one CAP-X/LIBERO reset supplies
+the version-one observation, candidate-bound perception/static-verifier/
+geometry evidence, and the single selected graph execution. This prevents a
+second environment from supplying decision features or execution.
+
+New collection defaults to `same_runtime`; each suite and case persists the
+effective evidence mode. The legacy `rehearsal_only` route is compatibility
+only and cannot qualify P5.6D data. Existing P5.6 rows and reports remain
+immutable. P5.6D still requires a fresh pre-registered seed block, manifest
+verification, and a GPU-5 transport smoke before any refit; it changes no
+calibrated probability or Arbiter behavior.
+
+The seed-31 real transport retry verified its manifest, committed the real
+version-one decision scene, recorded two pre-decision candidate feature
+snapshots, and submitted one selected physical graph in the retained runtime.
+The graph then failed a placement freshness checkpoint (`evaluator_success=false`),
+which is retained as an execution diagnostic rather than a P5.6D success
+claim. `p56.collection.v2` now signs `collection_purpose`; the seed-31 smoke
+purpose is `transport_smoke`, so collection summaries exclude it from
+admissible calibration rows while retaining the physical trace. A new
+`qualification` seed block remains required for P5.6D offline fitting.
+
 ## Phase 6 — Memory Controller learning
 
 - Add verified terminal and intermediate learning-return calculation.

@@ -35,6 +35,7 @@ EXPERIMENT_NAME = "P5.6.2a_object6_collection"
 _INFRASTRUCTURE_STAGES = frozenset({"executor_construction", "online_runner"})
 OnlineRunner = Callable[..., object]
 ExecutorFactory = Callable[..., object]
+SessionFactory = Callable[..., object]
 
 
 class RawArtifactPersistenceError(RuntimeError):
@@ -57,6 +58,7 @@ class CollectionRunConfig:
     max_steps: int = 32
     gpu: str = "5"
     fail_fast: bool = False
+    evidence_mode: Literal["same_runtime", "rehearsal_only"] = "same_runtime"
 
     def __post_init__(self) -> None:
         if self.max_workers <= 0:
@@ -73,6 +75,8 @@ class CollectionRunConfig:
             raise ValueError("collection gpu must not be empty")
         if not isinstance(self.fail_fast, bool):
             raise TypeError("collection fail_fast must be a boolean")
+        if self.evidence_mode not in {"same_runtime", "rehearsal_only"}:
+            raise ValueError("collection evidence_mode must be same_runtime or rehearsal_only")
 
 
 @dataclass(frozen=True)
@@ -105,6 +109,7 @@ class CollectionEligibilityReport:
     positive_count: int
     negative_count: int
     eligible_20_5_5: bool
+    excluded_transport_smoke_suites: tuple[str, ...] = ()
 
 
 def run_online_experiment(**kwargs: object) -> object:
@@ -121,6 +126,28 @@ def _build_live_executor(**kwargs: object) -> object:
     from scripts.run_libero_p53_online import _build_live_executor as live_factory
 
     return live_factory(**kwargs)
+
+
+def _build_live_evidence_session(**kwargs: object) -> object:
+    """Build a lazy same-runtime session without importing LIBERO at startup."""
+
+    from capmas.evaluation.libero_evidence_session import (
+        LiveLiberoEvidenceSession,
+        LiveLiberoEvidenceSessionConfig,
+    )
+
+    return LiveLiberoEvidenceSession(LiveLiberoEvidenceSessionConfig(**kwargs))
+
+
+def _effective_evidence_mode(
+    run_config: CollectionRunConfig,
+    session_factory: SessionFactory | None,
+) -> Literal["same_runtime", "rehearsal_only"]:
+    """Keep pre-P5.6D injected runners on the legacy seam in unit tests."""
+
+    if run_config.evidence_mode == "same_runtime" and session_factory is not None:
+        return "same_runtime"
+    return "rehearsal_only"
 
 
 def _setup_capx_paths() -> None:
@@ -799,9 +826,11 @@ def run_collection_case(
     run_config: CollectionRunConfig,
     online_runner: OnlineRunner,
     executor_factory: ExecutorFactory,
+    session_factory: SessionFactory | None = None,
 ) -> tuple[CollectionCaseResult, CalibrationLineage | None]:
     parent = suite_dir.path if isinstance(suite_dir, Phase5RunDirectory) else Path(suite_dir)
     case_dir = Phase5RunDirectory.create(parent, "cases", case.case_id)
+    evidence_mode = _effective_evidence_mode(run_config, session_factory)
     case_dir.write_json("case.json", case.to_dict())
     case_dir.write_json(
         "run_config.json",
@@ -809,6 +838,7 @@ def run_collection_case(
             "experiment": EXPERIMENT_NAME,
             "case": case.to_dict(),
             "run_config": asdict(run_config),
+            "evidence_mode": evidence_mode,
             "status": "running",
         },
     )
@@ -826,15 +856,29 @@ def run_collection_case(
         layout_variant = _json_plain(case.layout_variant)
         if not isinstance(layout_variant, Mapping):
             raise TypeError("collection layout_variant must be a mapping")
-        stage = "executor_construction"
-        physical_executor = executor_factory(
-            config_path=str(config_path),
-            object_name=case.object_name,
-            target_name=case.target_name,
-            max_steps=run_config.max_steps,
-            seed=case.seed,
-            layout_variant=layout_variant,
-        )
+        physical_executor: object | None = None
+        evidence_session: object | None = None
+        if evidence_mode == "same_runtime":
+            assert session_factory is not None
+            stage = "evidence_session_construction"
+            evidence_session = session_factory(
+                config_path=str(config_path),
+                object_name=case.object_name,
+                target_name=case.target_name,
+                max_steps=run_config.max_steps,
+                seed=case.seed,
+                layout_variant=layout_variant,
+            )
+        else:
+            stage = "executor_construction"
+            physical_executor = executor_factory(
+                config_path=str(config_path),
+                object_name=case.object_name,
+                target_name=case.target_name,
+                max_steps=run_config.max_steps,
+                seed=case.seed,
+                layout_variant=layout_variant,
+            )
         stage = "validation"
         context = CalibrationCollectionContext(
             episode_id=case.case_id,
@@ -868,6 +912,7 @@ def run_collection_case(
             gpu=run_config.gpu,
             physical_executor=physical_executor,
             calibration_context=context,
+            evidence_session=evidence_session,
         )
         stage = "validation"
         payload = _outcome_payload(outcome)
@@ -901,6 +946,7 @@ def run_collection_case(
                 "experiment": EXPERIMENT_NAME,
                 "case": case.to_dict(),
                 "run_config": asdict(run_config),
+                "evidence_mode": evidence_mode,
                 "status": "completed",
             },
         )
@@ -925,6 +971,7 @@ def run_collection_case(
                 "experiment": EXPERIMENT_NAME,
                 "case": case.to_dict(),
                 "run_config": asdict(run_config),
+                "evidence_mode": evidence_mode,
                 "status": "failed",
                 "stage": stage,
                 "error_type": type(error).__name__,
@@ -1018,11 +1065,13 @@ def run_collection(
     run_config: CollectionRunConfig,
     online_runner: OnlineRunner = run_online_experiment,
     executor_factory: ExecutorFactory = _build_live_executor,
+    session_factory: SessionFactory | None = None,
 ) -> CollectionSuiteReport:
     """Run every pre-registered case once without outcome-adaptive stopping."""
 
     os.environ["CUDA_VISIBLE_DEVICES"] = run_config.gpu
     finalized = _preflight_manifest(manifest)
+    evidence_mode = _effective_evidence_mode(run_config, session_factory)
     suite_dir = Phase5RunDirectory.create(
         output_root,
         EXPERIMENT_NAME,
@@ -1035,6 +1084,7 @@ def run_collection(
             "experiment": EXPERIMENT_NAME,
             "manifest_sha256": finalized.manifest_sha256,
             **asdict(run_config),
+            "evidence_mode": evidence_mode,
             "status": "running",
         },
     )
@@ -1050,6 +1100,7 @@ def run_collection(
             run_config=run_config,
             online_runner=online_runner,
             executor_factory=executor_factory,
+            session_factory=session_factory,
         )
         results.append(result)
         if lineage is not None:
@@ -1107,11 +1158,13 @@ def resume_collection(
     run_config: CollectionRunConfig,
     online_runner: OnlineRunner = run_online_experiment,
     executor_factory: ExecutorFactory = _build_live_executor,
+    session_factory: SessionFactory | None = None,
 ) -> CollectionSuiteReport:
     """Finish an interrupted immutable suite without replaying started execution."""
 
     os.environ["CUDA_VISIBLE_DEVICES"] = run_config.gpu
     finalized = _preflight_manifest(manifest)
+    evidence_mode = _effective_evidence_mode(run_config, session_factory)
     existing_path = Path(suite_dir).resolve(strict=True)
     existing_dir = Phase5RunDirectory(existing_path)
     persisted = _load_persisted_manifest(existing_path)
@@ -1126,6 +1179,7 @@ def resume_collection(
             "experiment": EXPERIMENT_NAME,
             "manifest_sha256": finalized.manifest_sha256,
             **asdict(run_config),
+            "evidence_mode": evidence_mode,
             "status": "resuming",
         },
     )
@@ -1195,6 +1249,7 @@ def resume_collection(
             run_config=run_config,
             online_runner=online_runner,
             executor_factory=executor_factory,
+            session_factory=session_factory,
         )
         results_by_case[case.case_id] = result
         if lineage is not None:
@@ -1286,6 +1341,13 @@ def _suite_case_identities(
     return tuple(cases)
 
 
+def _suite_collection_purpose(suite_path: Path) -> str:
+    manifest = CalibrationCollectionManifest.from_dict(
+        _read_mapping_json(suite_path / "suite_manifest.json")
+    )
+    return manifest.collection_purpose
+
+
 def _history_audit_path(path: str | Path) -> Path:
     raw = Path(path)
     if raw.is_dir():
@@ -1336,8 +1398,10 @@ def summarize_collection(
     seen_lineages: set[str] = set()
     positive_count = 0
     negative_count = 0
+    excluded_transport_smoke_suites: list[str] = []
     for suite_dir in suite_dirs:
         suite_path = Path(suite_dir)
+        collection_purpose = _suite_collection_purpose(suite_path)
         suite_cases = _suite_case_identities(suite_path)
         suite_identities: dict[str, str] = {}
         for case in suite_cases:
@@ -1364,6 +1428,9 @@ def summarize_collection(
             for outcome in _read_sequence_json(suite_path / "results" / "outcomes.json")
             if isinstance(outcome, Mapping)
         )
+        if collection_purpose == "transport_smoke":
+            excluded_transport_smoke_suites.append(str(suite_path))
+            continue
         for outcome in outcomes:
             if outcome.tier != "A" or outcome.task_success is None:
                 continue
@@ -1400,6 +1467,7 @@ def summarize_collection(
         positive_count=positive_count,
         negative_count=negative_count,
         eligible_20_5_5=admissible >= 20 and positive_count >= 5 and negative_count >= 5,
+        excluded_transport_smoke_suites=tuple(excluded_transport_smoke_suites),
     )
     output_dir = Path(suite_dirs[0]) / "results"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1420,6 +1488,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-restarts", type=int, default=0)
     parser.add_argument("--max-steps", type=int, default=32)
     parser.add_argument("--fail-fast", action="store_true")
+    parser.add_argument(
+        "--evidence-mode",
+        choices=("same_runtime", "rehearsal_only"),
+        default="same_runtime",
+    )
     parser.add_argument("--resume-suite")
     parser.add_argument("--summarize-suite", action="append", default=[])
     parser.add_argument("--history-audit", default=None)
@@ -1461,18 +1534,26 @@ def main() -> None:
             max_steps=args.max_steps,
             gpu=args.gpu,
             fail_fast=args.fail_fast,
+            evidence_mode=args.evidence_mode,
+        )
+        session_factory = (
+            _build_live_evidence_session
+            if args.evidence_mode == "same_runtime"
+            else None
         )
         if args.resume_suite:
             report = resume_collection(
                 finalized,
                 suite_dir=args.resume_suite,
                 run_config=run_config,
+                session_factory=session_factory,
             )
         else:
             report = run_collection(
                 finalized,
                 output_root=args.output_root,
                 run_config=run_config,
+                session_factory=session_factory,
             )
     finally:
         _terminate_servers(servers)

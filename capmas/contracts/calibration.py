@@ -15,6 +15,7 @@ HORIZON_SCHEMA_VERSION = "p56.horizon.v1"
 DATASET_SCHEMA_VERSION = "p56.dataset.v1"
 CAPABILITY_SCHEMA_VERSION = "p56.capability.v1"
 COLLECTION_SCHEMA_VERSION = "p56.collection.v1"
+TRANSPORT_SMOKE_COLLECTION_SCHEMA_VERSION = "p56.collection.v2"
 
 ExecutionStatus = Literal[
     "selected_executed",
@@ -134,6 +135,10 @@ _COLLECTION_MANIFEST_FIELDS = {
     "environment_version",
     "code_revision",
     "manifest_sha256",
+}
+_TRANSPORT_SMOKE_COLLECTION_MANIFEST_FIELDS = {
+    *_COLLECTION_MANIFEST_FIELDS,
+    "collection_purpose",
 }
 _PREDICTION_FIELDS = {
     "candidate_id",
@@ -715,6 +720,7 @@ class CalibrationCollectionManifest:
     prompt_version: str
     environment_version: str
     code_revision: str
+    collection_purpose: Literal["qualification", "transport_smoke"] = "qualification"
     manifest_sha256: str = ""
 
     def __post_init__(self) -> None:
@@ -734,8 +740,18 @@ class CalibrationCollectionManifest:
             "code_revision",
         ):
             _require_nonempty(getattr(self, name), name)
-        if self.schema_version != COLLECTION_SCHEMA_VERSION:
+        if self.schema_version not in {
+            COLLECTION_SCHEMA_VERSION,
+            TRANSPORT_SMOKE_COLLECTION_SCHEMA_VERSION,
+        }:
             raise ValueError("collection manifest schema_version is unsupported")
+        if self.collection_purpose not in {"qualification", "transport_smoke"}:
+            raise ValueError("collection manifest purpose is unsupported")
+        if (
+            self.schema_version == COLLECTION_SCHEMA_VERSION
+            and self.collection_purpose != "qualification"
+        ):
+            raise ValueError("p56.collection.v1 requires qualification purpose")
         case_ids = [case.case_id for case in self.cases]
         duplicate_case_ids = sorted(
             {case_id for case_id in case_ids if case_ids.count(case_id) > 1}
@@ -758,12 +774,29 @@ class CalibrationCollectionManifest:
                 raise ValueError("manifest_id must match manifest_sha256")
 
     def to_dict(self) -> dict[str, object]:
-        return _sorted_dict(self)
+        payload = _sorted_dict(self)
+        # Keep v1 byte-identical so historical manifests retain their signed
+        # digest. Purpose became an explicit, signed field only in v2.
+        if self.schema_version == COLLECTION_SCHEMA_VERSION:
+            payload.pop("collection_purpose")
+        return payload
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, object]) -> CalibrationCollectionManifest:
-        _require_fields(raw, _COLLECTION_MANIFEST_FIELDS, "collection manifest")
+        schema_version = raw.get("schema_version") if isinstance(raw, Mapping) else None
+        if schema_version == COLLECTION_SCHEMA_VERSION:
+            _require_fields(raw, _COLLECTION_MANIFEST_FIELDS, "collection manifest")
+        elif schema_version == TRANSPORT_SMOKE_COLLECTION_SCHEMA_VERSION:
+            _require_fields(
+                raw,
+                _TRANSPORT_SMOKE_COLLECTION_MANIFEST_FIELDS,
+                "collection manifest",
+            )
+        else:
+            _require_fields(raw, _COLLECTION_MANIFEST_FIELDS, "collection manifest")
         data = dict(raw)
+        if schema_version == COLLECTION_SCHEMA_VERSION:
+            data["collection_purpose"] = "qualification"
         cases = data["cases"]
         if not isinstance(cases, (tuple, list)):
             raise TypeError("collection manifest cases must be a sequence")
@@ -863,6 +896,7 @@ __all__ = [
     "DATASET_SCHEMA_VERSION",
     "FEATURE_SCHEMA_VERSION",
     "HORIZON_SCHEMA_VERSION",
+    "TRANSPORT_SMOKE_COLLECTION_SCHEMA_VERSION",
     "CalibrationCollectionCase",
     "CalibrationCollectionContext",
     "CalibrationCollectionManifest",

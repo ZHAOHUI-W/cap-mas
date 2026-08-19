@@ -1118,3 +1118,46 @@ implementation and fit-stability gates are closed, while the offline
 qualification gate remains open because the baseline-relative Brier target
 failed. P5.6.5--P5.6.9 remain blocked on a qualifying data/feature/calibration
 revision and the subsequent shadow safety checks.
+
+## P5.6D same-runtime evidence recollection (2026-08-19)
+
+The seed-11--30 rows above remain immutable audit artifacts, but their
+decision scene was synthetic and empty. They therefore exposed rehearsal
+evidence while perception, static verifier, and geometry dimensions were
+unknown. The resulting rank-two fit cannot establish whether real scene-grounded
+features improve calibration.
+
+P5.6D adds one `LiveLiberoEvidenceSession` per physical episode. It resets
+CAP-X/LIBERO, commits the version-one RGB-D/object scene, derives candidate
+perception/verifier/geometry evidence from that scene, merges isolated
+rehearsal evidence, then lets the Arbiter submit exactly one winner through the
+same retained runtime. A geometry or World Model error is explicit typed
+`unknown`, never a zero score. The collection runner records
+`evidence_mode=same_runtime` in suite and case provenance and defaults its CLI
+to that mode. `rehearsal_only` is retained solely for historical replay and
+test injection; it cannot produce new P5.6D qualification rows.
+
+P5.6D does not alter `p56.feature.v1`, the locked 12/4/4 split, calibration
+constants, calibration activation, Shadow Arbiter, or canary execution. A
+fresh pre-registered object-6 seed block and a verified GPU-5 transport smoke
+are required before a new offline fit; no older feature-poor row is relabelled
+or pooled into that collection.
+
+The first real same-runtime seed-31 retry completed at
+`outputs/phase5/P5.6D_same_runtime_collection/P5.6.2a_object6_collection/20260819_030619_suite_6d229e5c/`.
+Its manifest verified, it committed `decision_scene_version=1`, captured two
+candidate snapshots before the decision boundary, and submitted exactly one
+physical graph through that retained session. Perception, geometry, and
+isolated rehearsal evidence were present for both candidates; static verifier
+coverage was unknown because these candidate graphs expose no compile-time
+predicate, not because a verifier result was used after execution. The
+selected graph failed its placement freshness checkpoint, so
+`evaluator_success=false`; this is a task-policy/verification diagnostic, not
+a transport failure or a success-rate result.
+
+That run was created before signed smoke-purpose enforcement and remains an
+immutable diagnostic artifact. Current P5.6D smoke manifests use
+`p56.collection.v2` with `collection_purpose="transport_smoke"`; summaries
+retain their physical diagnostics but exclude them from the admissible Tier-A
+calibration count. Only a fresh `qualification` manifest can contribute to a
+future 20/5/5 fit.

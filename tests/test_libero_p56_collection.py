@@ -20,7 +20,10 @@ from capmas.contracts.calibration import (
     collection_manifest_sha256,
 )
 from capmas.evaluation.feature_snapshots import FEATURE_GROUPS_V1
-from scripts.create_p56_object6_manifests import create_object6_manifests
+from scripts.create_p56_object6_manifests import (
+    create_object6_manifests,
+    create_p56d_object6_seed31_manifest,
+)
 from scripts.run_libero_p56_collect import (
     CollectionRunConfig,
     resume_collection,
@@ -204,6 +207,33 @@ def test_object6_manifests_are_disjoint_complete_fixed_blocks() -> None:
     assert all(case.lineage_group_id == case.case_id for case in (*first.cases, *second.cases))
 
 
+def test_p56d_smoke_manifest_is_a_single_fresh_seed() -> None:
+    manifest = create_p56d_object6_seed31_manifest(ROOT)
+
+    assert tuple(case.seed for case in manifest.cases) == (31,)
+    assert manifest.cases[0].case_id == "object-6-id-seed31"
+    assert manifest.collection_purpose == "transport_smoke"
+
+
+def test_transport_smoke_is_excluded_from_qualification_summary(tmp_path) -> None:
+    manifest = create_p56d_object6_seed31_manifest(ROOT)
+    report = run_collection(
+        manifest,
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(),
+        online_runner=lambda **kwargs: _online_outcome(
+            success=False,
+            episode_id=kwargs["calibration_context"].episode_id,
+        ),
+        executor_factory=lambda **kwargs: object(),
+    )
+
+    summary = summarize_collection((report.suite_dir,))
+
+    assert report.tier_a_count == 1
+    assert summary.admissible_tier_a_count == 0
+
+
 def test_collection_manifest_round_trip_preserves_digest() -> None:
     first, _ = create_object6_manifests(ROOT)
     restored = CalibrationCollectionManifest.from_dict(first.to_dict())
@@ -308,6 +338,41 @@ def test_collection_captures_all_candidates_but_labels_only_selected(tmp_path) -
     assert (case_dirs[0] / "evidence" / "decision_snapshots.json").exists()
     assert (case_dirs[0] / "evidence" / "physical_payload.json").exists()
     assert (case_dirs[0] / "evidence" / "horizon.json").exists()
+
+
+def test_same_runtime_collection_passes_session_and_skips_independent_executor(tmp_path) -> None:
+    session = object()
+    built_sessions: list[dict[str, object]] = []
+    runner_kwargs: dict[str, object] = {}
+
+    def session_factory(**kwargs: object) -> object:
+        built_sessions.append(dict(kwargs))
+        return session
+
+    def fake_runner(**kwargs: object) -> dict[str, object]:
+        runner_kwargs.update(kwargs)
+        return _online_outcome_with_two_snapshots(
+            selected="candidate-a",
+            success=True,
+            episode_id=kwargs["calibration_context"].episode_id,
+        )
+
+    report = run_collection(
+        _collection_manifest(),
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(evidence_mode="same_runtime"),
+        online_runner=fake_runner,
+        executor_factory=lambda **_kwargs: pytest.fail("legacy executor must not be built"),
+        session_factory=session_factory,
+    )
+
+    assert built_sessions and built_sessions[0]["seed"] == 11
+    assert runner_kwargs["evidence_session"] is session
+    assert runner_kwargs["physical_executor"] is None
+    suite_config = json.loads((report.suite_dir / "run_config.json").read_text())
+    case_config = json.loads((report.cases[0].case_dir / "run_config.json").read_text())
+    assert suite_config["evidence_mode"] == "same_runtime"
+    assert case_config["evidence_mode"] == "same_runtime"
 
 
 def test_collection_persists_case_paths_relative_to_its_suite(tmp_path) -> None:

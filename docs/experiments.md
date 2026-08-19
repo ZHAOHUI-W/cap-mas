@@ -873,3 +873,35 @@ and `offline_qualification_passed=false`: the ECE gate passes, but the
 baseline-relative Brier gate fails. Both reports remain offline-only; there
 is no `CalibrationSnapshot`, active probability, Arbiter selection change, or
 physical Executor effect. Shadow/canary gates remain blocked.
+
+### P5.6D same-runtime evidence transport gate (2026-08-19)
+
+The completed seed-11--30 collection is retained for audit, not reused as a
+P5.6D feature source: its synthetic decision scene made perception, verifier,
+and geometry unavailable. The new collection path owns one CAP-X/LIBERO
+runtime from reset through a single selected execution. It commits a real
+version-one scene before arbitration, captures candidate-bound evidence before
+the decision boundary, merges only isolated rehearsal evidence, and records
+`evidence_mode=same_runtime` in the immutable suite/case artifacts. Geometry
+or World Model failure remains `unknown` rather than becoming a negative
+score.
+
+This is a transport and provenance correction, not a new calibration result.
+The CLI defaults to `same_runtime`; `rehearsal_only` is historical/test
+compatibility only. A fresh pre-registered seed manifest and a verified
+GPU-5 smoke are required before any new 20/5/5 collection or offline fit.
+
+The real seed-31 retry at
+`outputs/phase5/P5.6D_same_runtime_collection/P5.6.2a_object6_collection/20260819_030619_suite_6d229e5c/`
+verified its run manifest and completed the same-runtime path: a real
+`decision_scene_version=1`, two decision-time snapshots, and exactly one
+physical submission. The selected graph reached a failed placement freshness
+checkpoint (`POSTCONDITION_FAILED`, evaluator false), so it demonstrates
+transport/provenance only, not downstream task success. Perception, geometry,
+and rehearsal values were present; static verifier values correctly remained
+unknown where no compile-time predicate was available.
+
+P5.6D smoke manifests now use signed `p56.collection.v2`
+`collection_purpose="transport_smoke"`. The eligibility summarizer preserves
+their physical diagnostics but excludes them from the admissible Tier-A count;
+only a new signed `qualification` collection may be used for the 20/5/5 gate.

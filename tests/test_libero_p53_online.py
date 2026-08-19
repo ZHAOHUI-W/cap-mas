@@ -8,6 +8,13 @@ import pytest
 import scripts.run_libero_p53_online as online_module
 from capmas.contracts.action import SkillCall
 from capmas.contracts.calibration import CalibrationCollectionContext
+from capmas.contracts.candidates import (
+    CandidateEvidence,
+    EvidenceDimension,
+    GeometryEvidence,
+    PerceptionEvidence,
+    subgraph_fingerprint,
+)
 from capmas.contracts.core import SkillRef
 from capmas.contracts.graph import CheckpointSpec, MissionGraph, SubgraphNodeSpec, SubgraphSpec
 from capmas.contracts.scene import ObjectTrack, SceneSnapshot
@@ -21,6 +28,65 @@ from scripts.run_libero_p53_online import (
     load_online_candidates,
     run_online_experiment,
 )
+
+
+class _FakeEvidenceSession:
+    def __init__(
+        self,
+        *,
+        scene: SceneSnapshot,
+        execute_error: Exception | None = None,
+    ) -> None:
+        self.scene = scene
+        self.execute_error = execute_error
+        self.events: list[str] = []
+        self.closed = False
+
+    def start(self) -> SceneSnapshot:
+        self.events.append("start")
+        return self.scene
+
+    def candidate_evidence(self, candidate) -> CandidateEvidence:
+        self.events.append(f"evidence:{candidate.candidate_id}")
+        unknown = lambda name: EvidenceDimension(name, "unknown", None, None, "fake")
+        return CandidateEvidence(
+            perception=PerceptionEvidence(
+                scene_freshness=0.9,
+                scene_confidence=0.8,
+                target_visibility=1.0,
+                track_confidence=0.9,
+                identity_confidence=1.0,
+                pose_reliability=0.9,
+            ),
+            geometry=GeometryEvidence(
+                grasp_quality=unknown("grasp_quality"),
+                reachability=unknown("reachability"),
+                clearance=unknown("clearance"),
+                collision_risk=unknown("collision_risk"),
+                candidate_fingerprint=subgraph_fingerprint(candidate.subgraph),
+                scene_version=self.scene.scene_version,
+                map_version=None,
+                map_backend="fake",
+                provider="fake",
+                provider_version="1",
+                captured_at_ns=self.scene.publish_timestamp_ns,
+                latency_ms=0.0,
+            ),
+            available_metrics=("perception", "geometry"),
+            scene_version=self.scene.scene_version,
+            provider="fake",
+            captured_at_ns=self.scene.publish_timestamp_ns,
+        )
+
+    def execute(self, candidate, graph):
+        self.events.append(f"execute:{candidate.candidate_id}")
+        if self.execute_error is not None:
+            raise self.execute_error
+        return {"graph": graph.mission_id}
+
+    def close(self) -> None:
+        self.events.append("close")
+        self.closed = True
 
 
 def _graph_payload(description: str) -> dict[str, object]:
@@ -100,6 +166,79 @@ def _calibration_context() -> CalibrationCollectionContext:
         memory_skill_version="memory-v1",
         robot_skill_version="robot-v1",
     )
+
+
+def _session_scene(version: int = 4) -> SceneSnapshot:
+    return SceneSnapshot(
+        episode_id="live-episode",
+        episode_epoch=1,
+        scene_version=version,
+        sensor_timestamp_ns=10,
+        publish_timestamp_ns=11,
+        robot={},
+        objects=(
+            ObjectTrack(
+                track_id="bowl",
+                label="bowl",
+                pose_wxyz_xyz=(1.0, 0.0, 0.0, 0.0, 0.4, 0.0, 0.3),
+                confidence=0.9,
+                last_seen_ns=10,
+            ),
+        ),
+    )
+
+
+def test_online_runner_collects_session_evidence_before_execution(tmp_path) -> None:
+    candidates = load_online_candidates(_artifact(tmp_path))
+    session = _FakeEvidenceSession(scene=_session_scene())
+
+    outcome = run_online_experiment(
+        config_path="libero.yaml",
+        candidates=candidates,
+        seed=1,
+        scene_version=4,
+        mode="disabled",
+        output_root=tmp_path / "runs",
+        pool_config=RehearsalPoolConfig(max_workers=1, timeout_s=1.0),
+        calibration_context=_calibration_context(),
+        evidence_session=session,
+    )
+
+    assert session.events == [
+        "start",
+        "evidence:candidate-a",
+        "evidence:candidate-b",
+        "execute:candidate-b",
+        "close",
+    ]
+    assert outcome.physical_result == {"graph": "mission-second"}
+    assert all(
+        snapshot.features["scene_confidence"] is not None
+        for snapshot in outcome.feature_snapshots
+    )
+
+
+def test_online_runner_closes_session_after_execution_error(tmp_path) -> None:
+    candidates = load_online_candidates(_artifact(tmp_path))
+    session = _FakeEvidenceSession(
+        scene=_session_scene(),
+        execute_error=RuntimeError("live execution failed"),
+    )
+
+    with pytest.raises(RuntimeError, match="live execution failed"):
+        run_online_experiment(
+            config_path="libero.yaml",
+            candidates=candidates,
+            seed=1,
+            scene_version=4,
+            mode="disabled",
+            output_root=tmp_path / "runs",
+            pool_config=RehearsalPoolConfig(max_workers=1, timeout_s=1.0),
+            evidence_session=session,
+        )
+
+    assert session.closed is True
+    assert session.events[-1] == "close"
 
 
 def test_online_driver_writes_decision_snapshots_before_physical_execution(tmp_path) -> None:

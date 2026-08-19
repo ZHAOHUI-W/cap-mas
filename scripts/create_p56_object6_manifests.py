@@ -16,6 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from capmas.contracts.calibration import (
     COLLECTION_SCHEMA_VERSION,
     FEATURE_SCHEMA_VERSION,
+    TRANSPORT_SMOKE_COLLECTION_SCHEMA_VERSION,
     CalibrationCollectionCase,
     CalibrationCollectionManifest,
     collection_manifest_sha256,
@@ -30,6 +31,7 @@ PROMPT_VERSION = "p56-object6-prompt-v1"
 ENVIRONMENT_VERSION = "capx-libero-object6-nonprivileged-v1"
 FIRST_FILENAME = "p56_object6_id_seeds_11_20.json"
 SECOND_FILENAME = "p56_object6_id_seeds_21_30.json"
+P56D_SMOKE_FILENAME = "p56d_object6_id_seed_31.json"
 
 
 def _sha256(path: Path) -> str:
@@ -82,10 +84,17 @@ def _case(project_root: Path, seed: int) -> CalibrationCollectionCase:
     )
 
 
-def _manifest(project_root: Path, *, start: int, stop: int) -> CalibrationCollectionManifest:
+def _manifest(
+    project_root: Path,
+    *,
+    start: int,
+    stop: int,
+    schema_version: str = COLLECTION_SCHEMA_VERSION,
+    collection_purpose: str = "qualification",
+) -> CalibrationCollectionManifest:
     manifest = CalibrationCollectionManifest(
         manifest_id="",
-        schema_version=COLLECTION_SCHEMA_VERSION,
+        schema_version=schema_version,
         cases=tuple(_case(project_root, seed) for seed in range(start, stop + 1)),
         feature_schema_version=FEATURE_SCHEMA_VERSION,
         memory_skill_version=MEMORY_SKILL_VERSION,
@@ -93,6 +102,7 @@ def _manifest(project_root: Path, *, start: int, stop: int) -> CalibrationCollec
         prompt_version=PROMPT_VERSION,
         environment_version=ENVIRONMENT_VERSION,
         code_revision=CODE_REVISION,
+        collection_purpose=collection_purpose,
     )
     digest = collection_manifest_sha256(manifest)
     return replace(manifest, manifest_id=f"sha256:{digest}", manifest_sha256=digest)
@@ -107,6 +117,20 @@ def create_object6_manifests(
     return (
         _manifest(root, start=11, stop=20),
         _manifest(root, start=21, stop=30),
+    )
+
+
+def create_p56d_object6_seed31_manifest(
+    project_root: str | Path,
+) -> CalibrationCollectionManifest:
+    """Return the isolated pre-registered P5.6D transport-smoke case."""
+
+    return _manifest(
+        Path(project_root).resolve(),
+        start=31,
+        stop=31,
+        schema_version=TRANSPORT_SMOKE_COLLECTION_SCHEMA_VERSION,
+        collection_purpose="transport_smoke",
     )
 
 
@@ -153,22 +177,55 @@ def write_object6_manifests(
     return paths
 
 
+def write_p56d_object6_seed31_manifest(
+    project_root: str | Path,
+    *,
+    output_dir: str | Path | None = None,
+    check: bool = False,
+) -> Path:
+    """Write or verify the one-case P5.6D smoke manifest."""
+
+    root = Path(project_root).resolve()
+    destination = (
+        Path(output_dir).resolve()
+        if output_dir is not None
+        else root / "configs" / "phase5"
+    )
+    path = destination / P56D_SMOKE_FILENAME
+    encoded = _manifest_bytes(create_p56d_object6_seed31_manifest(root))
+    if check:
+        _validate_manifest_bytes(path, encoded)
+        return path
+    destination.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(encoded)
+    return path
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", default=PROJECT_ROOT)
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--p56d-smoke", action="store_true")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    paths = write_object6_manifests(
-        args.project_root,
-        output_dir=args.output_dir,
-        check=args.check,
-    )
-    manifests = create_object6_manifests(args.project_root)
+    if args.p56d_smoke:
+        paths = (write_p56d_object6_seed31_manifest(
+            args.project_root,
+            output_dir=args.output_dir,
+            check=args.check,
+        ),)
+        manifests = (create_p56d_object6_seed31_manifest(args.project_root),)
+    else:
+        paths = write_object6_manifests(
+            args.project_root,
+            output_dir=args.output_dir,
+            check=args.check,
+        )
+        manifests = create_object6_manifests(args.project_root)
     action = "validated" if args.check else "wrote"
     for path, manifest in zip(paths, manifests, strict=True):
         print(f"{action} {path} sha256={manifest.manifest_sha256}")

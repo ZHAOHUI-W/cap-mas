@@ -8,6 +8,7 @@ import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
+from functools import wraps
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
@@ -29,6 +30,7 @@ from capmas.evaluation.evidence_cache import VersionedEvidenceCache
 from capmas.evaluation.evidence_contracts import EvidenceRequestContext
 from capmas.evaluation.feature_snapshots import capture_feature_snapshot
 from capmas.evaluation.labels import extract_horizon
+from capmas.evaluation.libero_evidence_session import PreExecutionEvidenceSession
 from capmas.evaluation.libero_rehearsal import LiberoRehearsalConfig, LiberoRehearsalWorker
 from capmas.evaluation.online_rehearsal import (
     RehearsalArbitrationReport,
@@ -52,6 +54,23 @@ from scripts.run_libero_p53_rehearsal import (
 
 PhysicalExecutor = Callable[[GraphCandidate, MissionGraph], object]
 RehearsalRunFn = Callable[..., tuple[RehearsalResult, ...]]
+
+
+def _close_evidence_session(run: Callable[..., OnlineSelectionOutcome]):
+    """Close a supplied physical session across every online-runner outcome."""
+
+    @wraps(run)
+    def wrapped(*args: object, **kwargs: object) -> OnlineSelectionOutcome:
+        session = kwargs.get("evidence_session")
+        try:
+            return run(*args, **kwargs)
+        finally:
+            if session is not None:
+                close = getattr(session, "close", None)
+                if callable(close):
+                    close()
+
+    return wrapped
 
 
 @dataclass(frozen=True)
@@ -110,6 +129,7 @@ def load_online_candidates(path: str | Path) -> tuple[CandidateSpec, ...]:
     return tuple(normalized)
 
 
+@_close_evidence_session
 def run_online_experiment(
     *,
     config_path: str,
@@ -129,6 +149,7 @@ def run_online_experiment(
     run_fn: RehearsalRunFn = run_with_respawn,
     physical_executor: PhysicalExecutor | None = None,
     calibration_context: CalibrationCollectionContext | None = None,
+    evidence_session: PreExecutionEvidenceSession | None = None,
 ) -> OnlineSelectionOutcome:
     """Run rehearsal, select one live candidate, and execute it at most once."""
 
@@ -144,6 +165,10 @@ def run_online_experiment(
         raise ValueError("cache mode must be disabled or enabled")
     if selection_repeats <= 0:
         raise ValueError("selection repeats must be positive")
+    if evidence_session is not None and physical_executor is not None:
+        raise ValueError(
+            "same-runtime evidence sessions cannot use an independent physical executor"
+        )
 
     run_dir = Phase5RunDirectory.create(
         output_root,
@@ -173,6 +198,9 @@ def run_online_experiment(
         "feature_snapshot_count": 0,
         "decision_completed_at_ns": None,
         "physical_execution_started_at_ns": None,
+        "evidence_mode": "same_runtime" if evidence_session is not None else "synthetic",
+        "decision_scene_version": None,
+        "candidate_available_metrics": {},
     }
     run_dir.write_json("run_config.json", {**run_config, "status": "running"})
     rehearsal_results: list[RehearsalResult] = []
@@ -186,14 +214,30 @@ def run_online_experiment(
     stage = "candidate_validation"
 
     typed = _typed_candidates(candidates, scene_version)
-    scene = SceneSnapshot(
-        "p53-online",
-        1,
-        scene_version,
-        1,
-        1,
-        {},
-    )
+    if evidence_session is None:
+        scene = SceneSnapshot(
+            "p53-online",
+            1,
+            scene_version,
+            1,
+            1,
+            {},
+        )
+    else:
+        scene = evidence_session.start()
+        if scene.scene_version != scene_version:
+            raise ValueError(
+                f"candidate artifact scene {scene_version} does not match "
+                f"same-runtime decision scene {scene.scene_version}"
+            )
+        typed = replace(
+            typed,
+            candidates=tuple(
+                replace(candidate, evidence=evidence_session.candidate_evidence(candidate))
+                for candidate in typed.candidates
+            ),
+        )
+        run_config["decision_scene_version"] = scene.scene_version
     rehearsal_config = LiberoRehearsalConfig(
         config_path=config_path,
         object_name=object_name,
@@ -257,6 +301,12 @@ def run_online_experiment(
         )
     assert report is not None
     run_config["provider_call_count"] = provider_call_count
+    run_config["candidate_available_metrics"] = {
+        candidate.candidate_id: list(candidate.evidence.available_metrics)
+        if candidate.evidence is not None
+        else []
+        for candidate in report.evidence_candidates
+    }
 
     feature_snapshots: tuple[CandidateFeatureSnapshot, ...] = ()
     if calibration_context is not None:
@@ -280,7 +330,15 @@ def run_online_experiment(
     physical_execution_started_at_ns: int | None = None
     stage = "physical_execution"
     try:
-        if physical_candidate_id is not None and physical_executor is not None:
+        if physical_candidate_id is not None and evidence_session is not None:
+            selected = report.live.selected
+            assert selected is not None
+            physical_execution_started_at_ns = time.time_ns()
+            physical_result = evidence_session.execute(
+                selected,
+                typed.graphs[physical_candidate_id],
+            )
+        elif physical_candidate_id is not None and physical_executor is not None:
             selected = report.live.selected
             assert selected is not None
             physical_execution_started_at_ns = time.time_ns()
@@ -298,7 +356,7 @@ def run_online_experiment(
         raise
 
     run_config["physical_execution_started_at_ns"] = physical_execution_started_at_ns
-    run_config["physical_execution_count"] = int(physical_candidate_id is not None)
+    run_config["physical_execution_count"] = int(physical_execution_started_at_ns is not None)
     run_config["selection_latency_ms"] = selection_latency_ms
     run_dir.write_json("run_config.json", run_config)
     run_dir.write_json("results/rehearsal.json", [asdict(item) for item in rehearsal_results])
@@ -325,7 +383,9 @@ def run_online_experiment(
                 f"baseline_winner={_winner_id(report.baseline)}",
                 f"evidence_aware_winner={_winner_id(report.evidence_aware)}",
                 f"live_winner={physical_candidate_id}",
-                f"physical_execution_count={int(physical_candidate_id is not None)}",
+                f"physical_execution_count={int(physical_execution_started_at_ns is not None)}",
+                f"evidence_mode={run_config['evidence_mode']}",
+                f"decision_scene_version={run_config['decision_scene_version']}",
                 f"provider_call_count={provider_call_count}",
                 f"selection_latency_ms={selection_latency_ms:.3f}",
                 f"feature_schema_version={run_config['feature_schema_version']}",
@@ -348,7 +408,9 @@ def run_online_experiment(
             "baseline_winner": _winner_id(report.baseline),
             "live_winner": physical_candidate_id,
             "would_change_selection": report.would_change_selection,
-            "physical_execution_count": int(physical_candidate_id is not None),
+            "physical_execution_count": int(physical_execution_started_at_ns is not None),
+            "evidence_mode": run_config["evidence_mode"],
+            "decision_scene_version": run_config["decision_scene_version"],
             "provider_call_count": provider_call_count,
             "selection_latency_ms": selection_latency_ms,
             "feature_schema_version": run_config["feature_schema_version"],
@@ -372,7 +434,9 @@ def run_online_experiment(
         f"- selection_latency_ms: {selection_latency_ms:.3f}\n"
         f"- cache_hits: {report.cache_stats.hits if report.cache_stats else 0}\n"
         f"- cache_stores: {report.cache_stats.stores if report.cache_stats else 0}\n"
-        f"- physical_execution_count: {int(physical_candidate_id is not None)}\n",
+        f"- physical_execution_count: {int(physical_execution_started_at_ns is not None)}\n"
+        f"- evidence_mode: {run_config['evidence_mode']}\n"
+        f"- decision_scene_version: {run_config['decision_scene_version']}\n",
     )
     run_dir.finalize_manifest()
     return OnlineSelectionOutcome(
