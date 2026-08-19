@@ -1028,7 +1028,7 @@ physical episodes and supports only a safety/operability claim. Full details
 are in [the P5.6 design](superpowers/specs/2026-08-11-p5-6-evidence-calibration-design.md)
 and [ADR-0014](adr/0014-calibrated-evidence-and-snapshot-activation.md).
 
-## P5.6A data foundation status (2026-08-17)
+## P5.6A data foundation status (2026-08-19)
 
 P5.6A closes the contracts, execution telemetry, feature-snapshot, dataset,
 capability-diagnosis, compatibility-audit, and fixed-block collection gates.
@@ -1047,23 +1047,27 @@ P5.6A records or add a learned score.
 
 Historical object-6 data was rejected by the compatibility audit at
 `outputs/phase5/P5.6.2a_object6_history_audit/20260813_103434_history_a6bc49b1/`
-with zero admissible Tier A rows. Fresh immutable ID suites
-`20260814_022145_suite_85dd4d7d` (seeds 11-20) and
-`20260817_070047_suite_c966d81c` (seeds 21-30) under
+with zero admissible Tier A rows. The recollected immutable ID suites
+`20260818_090102_suite_63248cf1` (seeds 11-20) and
+`20260818_095350_suite_50dc9bd3` (seeds 21-30) under
 `outputs/phase5/P5.6.2a_object6_collection/` each completed 10 cases with
 five positive and five negative Tier A labels. Their combined 20 Tier A rows,
 10 positive and 10 negative, close the family-scoped 20/5/5 collection gate.
-The capability, history-audit, and both collection suites each contain
-`results/manifest_verification.json`; regenerated manifests have zero missing,
-size, SHA-256, or untracked-file mismatches.
+Both suites pass the Phase 5 manifest verifier. Every selected Tier-A row
+also satisfies the corrected decision-time contract
+`feature_snapshot.captured_at_ns <= lineage.decision_boundary_ns`; the
+observed minimum decision slack is positive in both blocks. The earlier
+future-state-invalid suites remain retained for audit and are not reused.
+The suite directories retain `results/manifest_verification.json`.
 
-This does not fit or activate a calibrator. P5.6B retains correlation
-reduction, constrained fitting, isotonic calibration, and immutable snapshots;
-P5.6C retains calibrated shadow arbitration, abstention/fallback integration,
-and bounded canary evaluation. There is no active `success_probability`, no
-new Arbiter ranking, and no claim of downstream task-success improvement.
+This closes the data-collection gate but does not activate a calibrator.
+P5.6B retains correlation reduction, constrained fitting, isotonic calibration,
+and immutable snapshots; P5.6C retains calibrated shadow arbitration,
+abstention/fallback integration, and bounded canary evaluation. There is no
+active `success_probability`, no new Arbiter ranking, and no claim of
+downstream task-success improvement.
 
-## P5.6C fit stability status (2026-08-18)
+## P5.6C fit stability and real offline calibration status (2026-08-19)
 
 The offline calibration implementation now has a V2 constrained-logistic
 stability layer. It derives rank and availability diagnostics from train rows
@@ -1073,11 +1077,29 @@ loss-delta condition before reporting convergence. A candidate whose reduced
 availability differs from an `all_present` or `all_unknown` train dimension
 abstains offline; `mixed` dimensions accept either availability state.
 
-This is not a calibrated shadow-Arbiter or canary result. The collection
-artifacts referenced by the P5.6A status are unavailable in this checkout, so
-the retained history audit with zero admitted rows is the only locally
-verifiable source. The new V2 code is covered by synthetic diagnostics only.
-No verified real 12-row calibration result, PAVA fit, Brier/ECE metric,
-`success_probability`, active evidence weight, or downstream task-success
-claim exists. Reinstating the collection artifacts requires a fresh manifest
-verification before P5.6B offline fitting can begin.
+The real-data offline run is
+`outputs/phase5/P5.6.4_offline_calibration/20260819_012907_p56b-object6-offline/`.
+Its manifest is verified with no missing files, digest mismatches, size
+mismatches, or untracked files. The locked splitter produced 12 train, 4
+calibration, and 4 test lineage groups. The V2 constrained-logistic fit
+converged at iteration 3,730 with final loss `0.41435925` and projected-KKT
+infinity norm `9.9696e-9` (tolerance `1e-8`). Because the recollected rows
+currently expose only `rehearsal_success_rate` as a present reduced feature,
+the train design correctly freezes all scene/risk/missingness coefficients and
+learns only the intercept and action-feasibility support weight.
+
+The frozen test report is descriptive only: Brier score is `0.1111` and ECE
+is `0.1667`. ECE therefore does not meet the predeclared `<= 0.10` offline
+target, and this run does not establish a calibrated-quality gate closure or
+a downstream success-rate improvement. The calibration split has only four
+rows, so the PAVA blocks have wide Wilson uncertainty (`0.7308` and `0.7935`)
+and must not be interpreted as a production-quality probability estimate.
+
+This is not a calibrated shadow-Arbiter or canary result. The report's
+predictions are explicitly offline-only (`online_effect=false` and
+`eligible_family=false`); no `CalibrationSnapshot` was published, no active
+evidence weight was changed, and no physical Executor or runtime Arbiter used
+the fitted model. P5.6B/C implementation and real-data fit gates are closed;
+the offline qualification gate remains open because ECE failed and a fixed
+weighted baseline comparison has not yet been produced. P5.6.5--P5.6.9 remain
+blocked on that qualification decision and subsequent shadow safety checks.

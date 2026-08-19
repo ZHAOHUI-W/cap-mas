@@ -3,7 +3,7 @@ from pathlib import Path
 _ROOT = Path(__file__).parents[1]
 
 
-def test_p56c_docs_preserve_offline_only_and_unverified_real_data_boundary() -> None:
+def test_p56c_docs_record_real_fit_boundary_and_offline_only_status() -> None:
     spec = (_ROOT / "docs/superpowers/specs/2026-08-18-p5-6c-fit-stability-design.md").read_text()
     roadmap = (_ROOT / "docs/implementation-roadmap.md").read_text()
     evidence = (_ROOT / "docs/phase5-evidence-evolution.md").read_text()
@@ -14,5 +14,6 @@ def test_p56c_docs_preserve_offline_only_and_unverified_real_data_boundary() -> 
     assert "P5.6C fit stability" in roadmap
     assert "P5.6C fit stability" in evidence
     assert "P5.6C fit stability" in experiments
-    assert "no verified real 12-row calibration result" in experiments
-    assert "collection artifacts are unavailable in this checkout" in roadmap
+    assert "P5.6.4_offline_calibration" in evidence
+    assert "P5.6.4_offline_calibration" in experiments
+    assert "collection artifacts are unavailable in this checkout" not in roadmap

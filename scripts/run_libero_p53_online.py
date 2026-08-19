@@ -258,7 +258,6 @@ def run_online_experiment(
     assert report is not None
     run_config["provider_call_count"] = provider_call_count
 
-    decision_completed_at_ns = time.time_ns()
     feature_snapshots: tuple[CandidateFeatureSnapshot, ...] = ()
     if calibration_context is not None:
         feature_snapshots = tuple(
@@ -269,6 +268,8 @@ def run_online_experiment(
             "evidence/calibration_feature_snapshots.json",
             [snapshot.to_dict() for snapshot in feature_snapshots],
         )
+    # This boundary commits the selected decision and its feature projection.
+    decision_completed_at_ns = time.time_ns()
     run_config["feature_snapshot_count"] = len(feature_snapshots)
     run_config["decision_completed_at_ns"] = decision_completed_at_ns
 

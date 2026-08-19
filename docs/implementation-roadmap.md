@@ -675,7 +675,7 @@ requires at least 20 independent Tier A physical outcomes for that family,
 including at least five positive and five negative `task_success` labels.
 Ineligible families abstain and use the fixed-weight Arbiter fallback.
 
-#### P5.6A data foundation status (2026-08-17)
+#### P5.6A data foundation status (2026-08-19)
 
 P5.6.0, P5.6.1, P5.6.2, and the collection portion of P5.6.2a are complete
 as a data foundation, not as an active calibration feature. The immutable
@@ -696,19 +696,26 @@ The historical compatibility audit at
 `outputs/phase5/P5.6.2a_object6_history_audit/20260813_103434_history_a6bc49b1/`
 accepted zero historical rows. Two complete, disjoint, frozen object-6 ID
 blocks were therefore executed: seeds 11-20 at
-`outputs/phase5/P5.6.2a_object6_collection/20260814_022145_suite_85dd4d7d/`
+`outputs/phase5/P5.6.2a_object6_collection/20260818_090102_suite_63248cf1/`
 and seeds 21-30 at
-`outputs/phase5/P5.6.2a_object6_collection/20260817_070047_suite_c966d81c/`.
+`outputs/phase5/P5.6.2a_object6_collection/20260818_095350_suite_50dc9bd3/`.
 Each block completed all 10 cases with 5 positive and 5 negative Tier A
 outcomes. Together they provide 20 Tier A outcomes, 10 positive and 10
 negative, closing the 20/5/5 data gate without adaptive seed selection.
-The capability, history-audit, and both collection run directories each retain
-`results/manifest_verification.json`; after regeneration, every listed file
-has zero missing-file, size, digest, and untracked-file mismatches.
+Both collection manifests verify cleanly. The selected Tier-A feature
+snapshots are decision-time snapshots: every row satisfies
+`captured_at_ns <= decision_boundary_ns`. The earlier invalid collection
+directories with future-state features remain retained for audit and are not
+used by calibration. Each suite retains `results/manifest_verification.json`.
 
-P5.6B/C remain open. No correlation-reduced model, fitted coefficient,
-calibration snapshot, `success_probability`, active evidence weight, or
-calibrated Arbiter selection is enabled by this result. P5.3.2 remains a
+The P5.6B/C implementation and real-data offline fit are now complete, but
+the offline qualification gate remains open. The run
+`outputs/phase5/P5.6.4_offline_calibration/20260819_012907_p56b-object6-offline/`
+has a verified manifest, a converged V2 model at iteration 3,730, and frozen
+offline predictions. Its descriptive test metrics are Brier `0.1111` and ECE
+`0.1667`; ECE misses the predeclared `<= 0.10` target, and the fixed-weight
+baseline comparison is still absent. No calibration snapshot, active
+evidence weight, or calibrated Arbiter selection is enabled. P5.3.2 remains a
 separate task-completion repair, and no all-family or downstream-success claim
 is justified.
 
@@ -763,7 +770,7 @@ improvement claim. See
 [`P5.6 design`](superpowers/specs/2026-08-11-p5-6-evidence-calibration-design.md)
 and [ADR-0014](adr/0014-calibrated-evidence-and-snapshot-activation.md).
 
-#### P5.6C fit stability status (2026-08-18)
+#### P5.6C fit stability status (2026-08-19)
 
 P5.6C adds an offline-only `p56b.constrained_logistic.v2` fitter. It records
 train-design rank and availability, freezes constant non-intercept columns,
@@ -772,15 +779,15 @@ scoring vector violates the train availability signature. It changes neither
 the evidence reducer, the locked `12/4/4` split, OOD policy, runtime Arbiter,
 nor physical execution.
 
-The collection artifacts are unavailable in this checkout: an Aug-18
-filesystem audit finds the retained P5.6.2a history audit but not the two
-collection directories cited above. Therefore their historical `20/5/5`
-claims are not treated as reproducible input to P5.6B/C. The history audit
-alone admits zero rows. P5.6C unit tests validate only synthetic train-design
-diagnostics; no verified real 12-row calibration result, PAVA transform,
-offline metric, active probability, or downstream success-rate improvement is
-claimed. A restored or recollected 20-row Tier A source must pass manifest
-verification before the offline runner may create a real fit artifact.
+The real recollection and offline run are now available and independently
+verified. The train design has rank 2 of 10 columns because all optional
+scene/risk dimensions are unknown and only action feasibility varies. The
+fit's projected-KKT residual is below tolerance, so the model is a valid
+offline artifact rather than a loss-only false-convergence result. The PAVA
+calibration and test prediction artifacts are also present, but their small
+calibration split yields wide uncertainty and ECE `0.1667`. Accordingly,
+P5.6C implementation/fit stability is complete while offline qualification,
+shadow activation, canary promotion, and causal evaluation remain open.
 
 ## Phase 6 — Memory Controller learning
 

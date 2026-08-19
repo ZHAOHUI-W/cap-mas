@@ -814,7 +814,7 @@ selections were ties. Realized horizon was not recorded, so no horizon bucket
 or stability claim is reported; adding that field and calibrated active
 evidence weighting is the P5.6 handoff.
 
-### P5.6A data foundation fixed-block collection (2026-08-17)
+### P5.6A data foundation fixed-block collection (2026-08-19)
 
 P5.6A records `p56.feature.v1` decision-time feature snapshots, typed physical
 outcomes, lineage, and planned/realized horizon before any calibration fit.
@@ -830,9 +830,9 @@ The history audit
 `outputs/phase5/P5.6.2a_object6_history_audit/20260813_103434_history_a6bc49b1/`
 accepted zero legacy rows. Consequently, immutable object-6 ID seed blocks
 11-20 and 21-30 ran at
-`outputs/phase5/P5.6.2a_object6_collection/20260814_022145_suite_85dd4d7d/`
+`outputs/phase5/P5.6.2a_object6_collection/20260818_090102_suite_63248cf1/`
 and
-`outputs/phase5/P5.6.2a_object6_collection/20260817_070047_suite_c966d81c/`.
+`outputs/phase5/P5.6.2a_object6_collection/20260818_095350_suite_50dc9bd3/`.
 Both completed 10/10 cases with no case-level infrastructure failure, each
 yielding 5 positive and 5 negative Tier A labels. The combined result is
 20 Tier A outcomes, 10 positive and 10 negative, satisfying the pre-registered
@@ -846,7 +846,7 @@ probabilities, change Arbiter ranking, or demonstrate a downstream success-rate
 gain. P5.6B/C calibration, shadow arbitration, and canary evaluation remain
 open.
 
-### P5.6C fit stability synthetic verification (2026-08-18)
+### P5.6C fit stability and real offline calibration (2026-08-19)
 
 P5.6C adds train-only design diagnostics, constant-column freezing,
 availability-pattern abstention, and projected-KKT convergence reporting to
@@ -855,11 +855,13 @@ six train rows and a rank-two design matrix after the constant columns are
 identified. It is an implementation regression test, not a physical
 calibration experiment.
 
-There is no verified real 12-row calibration result. The collection artifacts
-referenced by the earlier P5.6A entry are unavailable in this checkout; only
-the P5.6.2a history audit directory is present and that audit admitted zero
-legacy rows. Before reporting any real fit, the restored or recollected
-object-6 source must contain 20 independent Tier A physical outcomes with the
-locked lineage split, a verified manifest, train-design diagnostics, a model
-digest, convergence status, PAVA output, and held-out metrics. Until then,
-P5.6C emits no active probability or Arbiter selection change.
+The real-data offline run is
+`outputs/phase5/P5.6.4_offline_calibration/20260819_012907_p56b-object6-offline/`.
+Its manifest verifies cleanly. The locked split is 12/4/4; the V2 model
+converges at iteration 3,730 with projected-KKT norm `9.9696e-9`. The
+held-out descriptive metrics are Brier `0.1111` and ECE `0.1667`. ECE misses
+the predeclared `<= 0.10` target, while the four-row calibration split gives
+wide PAVA Wilson widths, so this does not close offline qualification.
+Predictions remain offline-only: there is no `CalibrationSnapshot`, active
+probability, Arbiter selection change, or physical Executor effect. The fixed
+weighted baseline comparison and later shadow/canary gates remain open.

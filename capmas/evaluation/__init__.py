@@ -88,10 +88,13 @@ from capmas.evaluation.dataset import (
     normalize_physical_outcomes,
 )
 from capmas.evaluation.offline import (
+    OFFLINE_REPORT_VERSION,
     OFFLINE_SPLITTER_VERSION,
     ExactQuotaSplitConfig,
+    OfflineCalibrationReport,
     OfflineExample,
     partition_tier_a_outcomes,
+    run_offline_calibration,
 )
 from capmas.evaluation.calibration import (
     CALIBRATION_MODEL_VERSION,
@@ -211,10 +214,13 @@ __all__ = [  # noqa: RUF022
     "audit_calibration_dataset",
     "build_calibration_dataset",
     "normalize_physical_outcomes",
+    "OFFLINE_REPORT_VERSION",
     "OFFLINE_SPLITTER_VERSION",
     "ExactQuotaSplitConfig",
+    "OfflineCalibrationReport",
     "OfflineExample",
     "partition_tier_a_outcomes",
+    "run_offline_calibration",
     "CALIBRATION_MODEL_VERSION",
     "CONVERGENCE_TOLERANCE",
     "INITIAL_LEARNING_RATE",

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import scripts.run_libero_p53_online as online_module
 from capmas.contracts.action import SkillCall
 from capmas.contracts.calibration import CalibrationCollectionContext
 from capmas.contracts.core import SkillRef
@@ -155,6 +156,39 @@ def test_online_driver_writes_decision_snapshots_before_physical_execution(tmp_p
     assert "physical_execution_started_at_ns=" in (
         outcome.run_dir.path / "logs" / "runner.log"
     ).read_text()
+
+
+def test_online_driver_sets_the_decision_boundary_after_snapshot_capture(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidates = load_online_candidates(_artifact(tmp_path))
+    original_capture = online_module.capture_feature_snapshot
+    timestamps = iter((100, 200, 300, 400))
+
+    def capture_at_controlled_time(candidate, context):
+        return original_capture(candidate, context, clock=online_module.time.time_ns)
+
+    monkeypatch.setattr(online_module, "capture_feature_snapshot", capture_at_controlled_time)
+    monkeypatch.setattr(online_module.time, "time_ns", lambda: next(timestamps))
+
+    outcome = run_online_experiment(
+        config_path="libero.yaml",
+        candidates=candidates,
+        seed=1,
+        scene_version=4,
+        mode="disabled",
+        output_root=tmp_path / "runs",
+        pool_config=RehearsalPoolConfig(max_workers=1, timeout_s=1.0),
+        calibration_context=_calibration_context(),
+        physical_executor=lambda _candidate, _graph: {"completed": True},
+    )
+
+    assert outcome.decision_completed_at_ns is not None
+    assert all(
+        snapshot.captured_at_ns <= outcome.decision_completed_at_ns
+        for snapshot in outcome.feature_snapshots
+    )
 
 
 def test_online_driver_without_calibration_context_keeps_empty_snapshot_provenance(tmp_path) -> None:

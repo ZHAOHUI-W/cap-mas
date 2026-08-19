@@ -13,6 +13,8 @@ from capmas.contracts.calibration import (
     CandidateFeatureSnapshot,
     HorizonLabel,
 )
+from capmas.evaluation import offline
+from capmas.evaluation.calibration import fit_constrained_logistic, fit_isotonic
 from capmas.evaluation.dataset import assign_lineage_splits, build_calibration_dataset
 from capmas.evaluation.feature_snapshots import FEATURE_GROUPS_V1
 from capmas.evaluation.offline import ExactQuotaSplitConfig, partition_tier_a_outcomes
@@ -194,3 +196,62 @@ def test_partition_config_and_examples_are_json_safe() -> None:
 
     assert list(config.to_dict()) == sorted(config.to_dict())
     assert example.to_dict()["lineage_group_id"] == example.lineage_group_id
+
+
+def test_offline_run_fits_only_train_and_calibrates_only_calibration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, tuple[str, ...]] = {}
+
+    def capture_fit(examples: tuple[offline.OfflineExample, ...]) -> object:
+        observed["fit"] = tuple(example.dataset_split for example in examples)
+        return replace(fit_constrained_logistic(examples), converged=True)
+
+    def capture_pava(model: object, examples: tuple[offline.OfflineExample, ...]) -> object:
+        observed["pava"] = tuple(example.dataset_split for example in examples)
+        return fit_isotonic(model, examples)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(offline, "fit_constrained_logistic", capture_fit, raising=False)
+    monkeypatch.setattr(offline, "fit_isotonic", capture_pava, raising=False)
+
+    report = offline.run_offline_calibration(_manifest(), ExactQuotaSplitConfig.object6_v1())
+
+    assert observed == {"fit": ("train",) * 12, "pava": ("calibration",) * 4}
+    assert report.split_counts == {"train": 12, "calibration": 4, "test": 4}
+    assert report.model is not None
+    assert report.isotonic is not None
+    assert len(report.predictions["test"]) == 4
+    assert report.online_effect is False
+    assert report.report_sha256
+
+
+def test_offline_run_fails_closed_when_the_fitter_does_not_converge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def nonconverged_fit(examples: tuple[offline.OfflineExample, ...]) -> object:
+        return replace(fit_constrained_logistic(examples), converged=False)
+
+    monkeypatch.setattr(offline, "fit_constrained_logistic", nonconverged_fit, raising=False)
+
+    report = offline.run_offline_calibration(_manifest(), ExactQuotaSplitConfig.object6_v1())
+
+    assert report.fit_reason == "fit_rejected_nonconverged"
+    assert report.model is None
+    assert report.isotonic is None
+    assert report.predictions == {"train": (), "calibration": (), "test": ()}
+    assert report.online_effect is False
+
+
+def test_offline_run_report_digest_is_deterministic() -> None:
+    first = offline.run_offline_calibration(_manifest(), ExactQuotaSplitConfig.object6_v1())
+    second = offline.run_offline_calibration(_manifest(), ExactQuotaSplitConfig.object6_v1())
+
+    assert first.report_sha256 == second.report_sha256
+    assert first.to_dict() == second.to_dict()
+
+
+def test_offline_orchestrator_is_exported_from_evaluation() -> None:
+    from capmas.evaluation import OfflineCalibrationReport, run_offline_calibration
+
+    assert OfflineCalibrationReport is offline.OfflineCalibrationReport
+    assert run_offline_calibration is offline.run_offline_calibration
