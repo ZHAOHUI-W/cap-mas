@@ -1170,3 +1170,24 @@ That qualification input is now fixed before collection at
 cannot be run in `rehearsal_only` mode. Its results will be reported as a new
 immutable collection family; no outcome-dependent seed substitution, early
 success stopping, or calibration activation is permitted.
+
+### Fixed qualification outcome (2026-08-19)
+
+The pre-registered block completed at
+`outputs/phase5/P5.6D_qualification_collection/P5.6.2a_object6_collection/20260819_033134_suite_2bc6e9a3/`.
+It contains all 20 native object-6 ID cases, uses `same_runtime` throughout,
+and its suite manifest verifies all 389 entries. The collection summarizer
+reports six admissible Tier-A labels: two positive and four negative.
+Consequently `eligible_20_5_5=false`; the data is insufficient for a P5.6D
+fit and must not create a `CalibrationSnapshot`, change Arbiter selection, or
+enter shadow/canary execution.
+
+Fourteen cases were Tier-C abstentions. They are not relabelled failures: both
+candidates received `clearance=0.0` and `collision_risk=1.0`, so the
+evidence-aware Arbiter submitted no physical graph. Conversely, all six
+physical submissions arose from equal candidate evidence and selected
+`policy-0` through `evidence_tie_break`. The observed issue is therefore not
+evidence transport but inadequate candidate-specific geometry/skill evidence
+and safe-submission coverage. These results close the fixed collection without
+post-hoc seed replacement; a later attempt requires a separate pre-registered
+block after that upstream issue is addressed.

@@ -914,3 +914,25 @@ The runner fails closed if that manifest is asked to use `rehearsal_only`.
 The block will run serially on GPU 5 with one retained same-runtime session
 per case; its aggregate 20/5/5 status is intentionally not inferred before
 the fixed block completes.
+
+#### Fixed qualification result (2026-08-19)
+
+The fixed block completed at
+`outputs/phase5/P5.6D_qualification_collection/P5.6.2a_object6_collection/20260819_033134_suite_2bc6e9a3/`.
+Its run configuration records 20 completed cases, `same_runtime`, GPU 5, one
+worker, no restarts, and no runner-level failed case. The suite manifest
+verified with 389 entries and no missing, untracked, size, or digest-mismatched
+files. The official summarizer reports six admissible Tier-A labels: two
+positive and four negative. This fails the pre-registered 20/5/5 data-count
+gate, so `eligible_20_5_5=false`; no offline fit, calibration snapshot, or
+Arbiter activation is permitted from this collection.
+
+The remaining 14 cases are proper Tier-C abstentions, not negative labels. In
+each, both candidates had `clearance=0.0` and `collision_risk=1.0`, and the
+evidence-aware Arbiter selected no physical candidate. In all six submitted
+cases, the two candidates had identical decision-time evidence and `policy-0`
+won only by `evidence_tie_break`. Thus the transport/provenance path is
+validated, while candidate-specific evidence and a sufficiently high safe
+submission rate remain separate unresolved problems. The block remains an
+immutable audit artifact; any replacement collection must be separately
+pre-registered rather than replacing selected seeds after the outcome.

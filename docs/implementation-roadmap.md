@@ -832,6 +832,23 @@ The v2 qualification purpose is fail-closed unless collection uses
 `same_runtime`; its aggregate outcome remains pending and cannot activate a
 calibrated probability or change Arbiter selection.
 
+The fixed seeds 32--51 block then completed at
+`outputs/phase5/P5.6D_qualification_collection/P5.6.2a_object6_collection/20260819_033134_suite_2bc6e9a3/`.
+The suite manifest verified all 389 entries. Its official aggregate is six
+admissible Tier-A rows (two positive, four negative) and 14 Tier-C
+abstentions, so `eligible_20_5_5=false` against the required 20 labels. The
+same-runtime transport path is therefore complete, but the P5.6D calibration
+qualification gate remains closed: do not fit, activate, shadow, or canary a
+calibrated model from these rows.
+
+All Tier-C cases abstained after both candidates received zero clearance and
+unit collision risk. All six submitted cases selected `policy-0` via an
+evidence tie-break because both candidates carried identical decision-time
+features. This is a policy/geometry candidate-diversity diagnostic, not a
+reason to relabel abstentions or alter the fixed block. Any follow-up must use
+a new pre-registered collection after addressing candidate-specific evidence
+and safe submission rate.
+
 ## Phase 6 — Memory Controller learning
 
 - Add verified terminal and intermediate learning-return calculation.
