@@ -92,3 +92,20 @@ def test_online_runner_closes_session_after_execution_error(tmp_path):
 - [x] Verify its directory with `python scripts/verify_phase5_manifest.py --run-dir <new-suite-dir>`; the retry manifest is verified.
 - [x] Inspect decision-time coverage and provenance without claiming qualification or success improvement. The real v1 decision scene and two pre-decision feature snapshots were recorded; the selected physical graph later failed its placement freshness checkpoint.
 - [ ] Commit source/tests/docs only with `git add capmas scripts tests docs configs/phase5/p56d_object6_id_seed_31.json && git commit -m "feat: record P5.6D same-runtime evidence transport gate"`.
+
+### Task 5: Fixed Qualification Collection
+
+**Produces:** a pre-registered same-runtime object-6 block before any P5.6D
+calibration eligibility decision.
+
+- [x] Generate and verify `configs/phase5/p56d_object6_id_seeds_32_51.json`.
+  It contains seeds 32--51 only, uses `p56.collection.v2`, signed
+  `collection_purpose="qualification"`, and SHA-256
+  `225e94ac02117104ce9fa6fa4db4433eed42fb5524c3771504d7d0ca8af67c06`.
+- [x] Reject `rehearsal_only` collection for that v2 qualification manifest.
+- [ ] Commit the pre-registered manifest, generator, contracts, tests, and
+  documentation before launching physical collection.
+- [ ] Run all 20 fixed cases serially with `CUDA_VISIBLE_DEVICES=5`,
+  `same_runtime`, one worker, and one log/manifest directory per case.
+- [ ] Verify every completed suite/case manifest and summarize the fixed
+  20/5/5 result without fitting or activating calibration in the same run.

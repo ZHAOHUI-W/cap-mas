@@ -905,3 +905,12 @@ P5.6D smoke manifests now use signed `p56.collection.v2`
 `collection_purpose="transport_smoke"`. The eligibility summarizer preserves
 their physical diagnostics but excludes them from the admissible Tier-A count;
 only a new signed `qualification` collection may be used for the 20/5/5 gate.
+
+The qualification collection is pre-registered before execution in
+`configs/phase5/p56d_object6_id_seeds_32_51.json`: 20 native object-6 ID
+cases, seeds 32--51, `p56.collection.v2`, purpose `qualification`, and
+SHA-256 `225e94ac02117104ce9fa6fa4db4433eed42fb5524c3771504d7d0ca8af67c06`.
+The runner fails closed if that manifest is asked to use `rehearsal_only`.
+The block will run serially on GPU 5 with one retained same-runtime session
+per case; its aggregate 20/5/5 status is intentionally not inferred before
+the fixed block completes.

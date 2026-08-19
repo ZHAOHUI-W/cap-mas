@@ -32,6 +32,7 @@ ENVIRONMENT_VERSION = "capx-libero-object6-nonprivileged-v1"
 FIRST_FILENAME = "p56_object6_id_seeds_11_20.json"
 SECOND_FILENAME = "p56_object6_id_seeds_21_30.json"
 P56D_SMOKE_FILENAME = "p56d_object6_id_seed_31.json"
+P56D_QUALIFICATION_FILENAME = "p56d_object6_id_seeds_32_51.json"
 
 
 def _sha256(path: Path) -> str:
@@ -134,6 +135,20 @@ def create_p56d_object6_seed31_manifest(
     )
 
 
+def create_p56d_object6_qualification_manifest(
+    project_root: str | Path,
+) -> CalibrationCollectionManifest:
+    """Return the fixed P5.6D same-runtime qualification block."""
+
+    return _manifest(
+        Path(project_root).resolve(),
+        start=32,
+        stop=51,
+        schema_version=TRANSPORT_SMOKE_COLLECTION_SCHEMA_VERSION,
+        collection_purpose="qualification",
+    )
+
+
 def _manifest_bytes(manifest: CalibrationCollectionManifest) -> bytes:
     return (
         json.dumps(manifest.to_dict(), indent=2, sort_keys=True, ensure_ascii=True)
@@ -201,17 +216,44 @@ def write_p56d_object6_seed31_manifest(
     return path
 
 
+def write_p56d_object6_qualification_manifest(
+    project_root: str | Path,
+    *,
+    output_dir: str | Path | None = None,
+    check: bool = False,
+) -> Path:
+    """Write or verify the fixed P5.6D qualification manifest."""
+
+    root = Path(project_root).resolve()
+    destination = (
+        Path(output_dir).resolve()
+        if output_dir is not None
+        else root / "configs" / "phase5"
+    )
+    path = destination / P56D_QUALIFICATION_FILENAME
+    encoded = _manifest_bytes(create_p56d_object6_qualification_manifest(root))
+    if check:
+        _validate_manifest_bytes(path, encoded)
+        return path
+    destination.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(encoded)
+    return path
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", default=PROJECT_ROOT)
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--p56d-smoke", action="store_true")
+    parser.add_argument("--p56d-qualification", action="store_true")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    if args.p56d_smoke and args.p56d_qualification:
+        raise SystemExit("--p56d-smoke and --p56d-qualification are mutually exclusive")
     if args.p56d_smoke:
         paths = (write_p56d_object6_seed31_manifest(
             args.project_root,
@@ -219,6 +261,13 @@ def main() -> None:
             check=args.check,
         ),)
         manifests = (create_p56d_object6_seed31_manifest(args.project_root),)
+    elif args.p56d_qualification:
+        paths = (write_p56d_object6_qualification_manifest(
+            args.project_root,
+            output_dir=args.output_dir,
+            check=args.check,
+        ),)
+        manifests = (create_p56d_object6_qualification_manifest(args.project_root),)
     else:
         paths = write_object6_manifests(
             args.project_root,

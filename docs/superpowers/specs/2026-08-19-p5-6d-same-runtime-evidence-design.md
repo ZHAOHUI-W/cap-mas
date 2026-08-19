@@ -155,6 +155,14 @@ summary preserves a smoke's physical execution diagnostics but excludes its
 Tier-A row from the admissible calibration count. This prevents a smoke from
 being accidentally reused as one of the 20/5/5 rows.
 
+The first P5.6D qualification block is pre-registered as
+`configs/phase5/p56d_object6_id_seeds_32_51.json`. It contains exactly the
+native object-6 ID seeds 32--51, uses `p56.collection.v2` with signed
+`collection_purpose="qualification"`, and has manifest SHA-256
+`225e94ac02117104ce9fa6fa4db4433eed42fb5524c3771504d7d0ca8af67c06`.
+This v2 qualification purpose requires `same_runtime`; the runner rejects a
+legacy rehearsal-only collection attempt before an episode starts.
+
 ## 7. Safety and Leakage Invariants
 
 - Every `feature_snapshot.captured_at_ns <= decision_boundary_ns <=

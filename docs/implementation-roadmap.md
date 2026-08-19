@@ -823,6 +823,15 @@ purpose is `transport_smoke`, so collection summaries exclude it from
 admissible calibration rows while retaining the physical trace. A new
 `qualification` seed block remains required for P5.6D offline fitting.
 
+The qualification block is pre-registered at
+`configs/phase5/p56d_object6_id_seeds_32_51.json` before physical collection:
+20 native object-6 ID cases, seeds 32--51, signed
+`collection_purpose="qualification"`, and manifest SHA-256
+`225e94ac02117104ce9fa6fa4db4433eed42fb5524c3771504d7d0ca8af67c06`.
+The v2 qualification purpose is fail-closed unless collection uses
+`same_runtime`; its aggregate outcome remains pending and cannot activate a
+calibrated probability or change Arbiter selection.
+
 ## Phase 6 — Memory Controller learning
 
 - Add verified terminal and intermediate learning-return calculation.

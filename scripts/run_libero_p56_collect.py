@@ -1072,6 +1072,12 @@ def run_collection(
     os.environ["CUDA_VISIBLE_DEVICES"] = run_config.gpu
     finalized = _preflight_manifest(manifest)
     evidence_mode = _effective_evidence_mode(run_config, session_factory)
+    if (
+        finalized.schema_version == "p56.collection.v2"
+        and finalized.collection_purpose == "qualification"
+        and evidence_mode != "same_runtime"
+    ):
+        raise ValueError("P5.6D qualification requires same_runtime evidence mode")
     suite_dir = Phase5RunDirectory.create(
         output_root,
         EXPERIMENT_NAME,
@@ -1165,6 +1171,12 @@ def resume_collection(
     os.environ["CUDA_VISIBLE_DEVICES"] = run_config.gpu
     finalized = _preflight_manifest(manifest)
     evidence_mode = _effective_evidence_mode(run_config, session_factory)
+    if (
+        finalized.schema_version == "p56.collection.v2"
+        and finalized.collection_purpose == "qualification"
+        and evidence_mode != "same_runtime"
+    ):
+        raise ValueError("P5.6D qualification requires same_runtime evidence mode")
     existing_path = Path(suite_dir).resolve(strict=True)
     existing_dir = Phase5RunDirectory(existing_path)
     persisted = _load_persisted_manifest(existing_path)

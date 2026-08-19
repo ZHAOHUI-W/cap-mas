@@ -1161,3 +1161,12 @@ immutable diagnostic artifact. Current P5.6D smoke manifests use
 retain their physical diagnostics but exclude them from the admissible Tier-A
 calibration count. Only a fresh `qualification` manifest can contribute to a
 future 20/5/5 fit.
+
+That qualification input is now fixed before collection at
+`configs/phase5/p56d_object6_id_seeds_32_51.json`: native object-6 ID seeds
+32--51, 20 cases, `p56.collection.v2`, and signed
+`collection_purpose="qualification"` (SHA-256
+`225e94ac02117104ce9fa6fa4db4433eed42fb5524c3771504d7d0ca8af67c06`). It
+cannot be run in `rehearsal_only` mode. Its results will be reported as a new
+immutable collection family; no outcome-dependent seed substitution, early
+success stopping, or calibration activation is permitted.

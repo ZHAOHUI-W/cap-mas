@@ -22,6 +22,7 @@ from capmas.contracts.calibration import (
 from capmas.evaluation.feature_snapshots import FEATURE_GROUPS_V1
 from scripts.create_p56_object6_manifests import (
     create_object6_manifests,
+    create_p56d_object6_qualification_manifest,
     create_p56d_object6_seed31_manifest,
 )
 from scripts.run_libero_p56_collect import (
@@ -226,12 +227,37 @@ def test_transport_smoke_is_excluded_from_qualification_summary(tmp_path) -> Non
             episode_id=kwargs["calibration_context"].episode_id,
         ),
         executor_factory=lambda **kwargs: object(),
+        session_factory=lambda **kwargs: object(),
     )
 
     summary = summarize_collection((report.suite_dir,))
 
     assert report.tier_a_count == 1
     assert summary.admissible_tier_a_count == 0
+
+
+def test_p56d_qualification_manifest_is_a_fresh_signed_seed_block(tmp_path) -> None:
+    manifest = create_p56d_object6_qualification_manifest(ROOT)
+
+    assert tuple(case.seed for case in manifest.cases) == tuple(range(32, 52))
+    assert manifest.collection_purpose == "qualification"
+
+    report = run_collection(
+        manifest,
+        output_root=tmp_path,
+        run_config=CollectionRunConfig(),
+        online_runner=lambda **kwargs: _online_outcome(
+            success=True,
+            episode_id=kwargs["calibration_context"].episode_id,
+        ),
+        executor_factory=lambda **kwargs: object(),
+        session_factory=lambda **kwargs: object(),
+    )
+    summary = summarize_collection((report.suite_dir,))
+
+    assert report.tier_a_count == 20
+    assert summary.admissible_tier_a_count == 20
+    assert summary.excluded_transport_smoke_suites == ()
 
 
 def test_collection_manifest_round_trip_preserves_digest() -> None:
