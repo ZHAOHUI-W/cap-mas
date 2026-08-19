@@ -858,10 +858,18 @@ calibration experiment.
 The real-data offline run is
 `outputs/phase5/P5.6.4_offline_calibration/20260819_012907_p56b-object6-offline/`.
 Its manifest verifies cleanly. The locked split is 12/4/4; the V2 model
-converges at iteration 3,730 with projected-KKT norm `9.9696e-9`. The
-held-out descriptive metrics are Brier `0.1111` and ECE `0.1667`. ECE misses
-the predeclared `<= 0.10` target, while the four-row calibration split gives
-wide PAVA Wilson widths, so this does not close offline qualification.
-Predictions remain offline-only: there is no `CalibrationSnapshot`, active
-probability, Arbiter selection change, or physical Executor effect. The fixed
-weighted baseline comparison and later shadow/canary gates remain open.
+converges at iteration 3,730 with projected-KKT norm `9.9696e-9`. Its first
+held-out report had Brier `0.1111` and ECE `0.1667`, so ECE missed the
+predeclared `<= 0.10` target. The four-row calibration split also gives wide
+PAVA Wilson widths.
+
+The corrected baseline comparison is retained at
+`outputs/phase5/P5.6.4_offline_calibration/20260819_014928_p56b-object6-offline-baseline-v2/`.
+It pairs predictions to test rows in lineage order, avoiding repeated
+`candidate_id` overwrite. The calibrated model scores Brier `0.02778` and
+ECE `0.08333`; the frozen fixed-weight/PAVA baseline scores Brier `0.00826`
+and ECE `0.04545`. Consequently calibrated Brier improvement is `-2.3611`
+and `offline_qualification_passed=false`: the ECE gate passes, but the
+baseline-relative Brier gate fails. Both reports remain offline-only; there
+is no `CalibrationSnapshot`, active probability, Arbiter selection change, or
+physical Executor effect. Shadow/canary gates remain blocked.

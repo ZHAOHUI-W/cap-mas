@@ -224,10 +224,25 @@ def _write_report_artifacts(
         None if report.isotonic is None else report.isotonic.to_dict(),
     )
     run_dir.write_json(
+        "artifacts/fixed_weight_baseline.json",
+        None if report.baseline is None else report.baseline.to_dict(),
+    )
+    run_dir.write_json(
+        "artifacts/fixed_weight_baseline_pava.json",
+        None if report.baseline_isotonic is None else report.baseline_isotonic.to_dict(),
+    )
+    run_dir.write_json(
         "results/predictions.json",
         {
             split: [prediction.to_dict() for prediction in predictions]
             for split, predictions in report.predictions.items()
+        },
+    )
+    run_dir.write_json(
+        "results/baseline_predictions.json",
+        {
+            split: [prediction.to_dict() for prediction in predictions]
+            for split, predictions in report.baseline_predictions.items()
         },
     )
     run_dir.write_json("results/offline_calibration_report.json", report.to_dict())

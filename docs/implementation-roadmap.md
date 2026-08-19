@@ -709,15 +709,16 @@ directories with future-state features remain retained for audit and are not
 used by calibration. Each suite retains `results/manifest_verification.json`.
 
 The P5.6B/C implementation and real-data offline fit are now complete, but
-the offline qualification gate remains open. The run
-`outputs/phase5/P5.6.4_offline_calibration/20260819_012907_p56b-object6-offline/`
-has a verified manifest, a converged V2 model at iteration 3,730, and frozen
-offline predictions. Its descriptive test metrics are Brier `0.1111` and ECE
-`0.1667`; ECE misses the predeclared `<= 0.10` target, and the fixed-weight
-baseline comparison is still absent. No calibration snapshot, active
-evidence weight, or calibrated Arbiter selection is enabled. P5.3.2 remains a
-separate task-completion repair, and no all-family or downstream-success claim
-is justified.
+the offline qualification gate remains open. The corrected baseline run
+`outputs/phase5/P5.6.4_offline_calibration/20260819_014928_p56b-object6-offline-baseline-v2/`
+has a verified manifest and frozen predictions paired by test-row lineage.
+The calibrated model scores Brier `0.02778` and ECE `0.08333`; the
+fixed-weight/PAVA baseline scores Brier `0.00826` and ECE `0.04545`.
+Therefore ECE passes but calibrated Brier improvement is `-2.3611`, below
+the required `>= 0.10`. No calibration snapshot, active evidence weight, or
+calibrated Arbiter selection is enabled. P5.3.2 remains a separate
+task-completion repair, and no all-family or downstream-success claim is
+justified.
 
 The current object-6 suite contains 20 physical outcomes: 14 positive and six
 negative. It meets the numerical 20/5/5 gate, but the records predate P5.6
@@ -770,7 +771,7 @@ improvement claim. See
 [`P5.6 design`](superpowers/specs/2026-08-11-p5-6-evidence-calibration-design.md)
 and [ADR-0014](adr/0014-calibrated-evidence-and-snapshot-activation.md).
 
-#### P5.6C fit stability status (2026-08-19)
+#### P5.6C fit stability and baseline comparison status (2026-08-19)
 
 P5.6C adds an offline-only `p56b.constrained_logistic.v2` fitter. It records
 train-design rank and availability, freezes constant non-intercept columns,
@@ -784,10 +785,16 @@ verified. The train design has rank 2 of 10 columns because all optional
 scene/risk dimensions are unknown and only action feasibility varies. The
 fit's projected-KKT residual is below tolerance, so the model is a valid
 offline artifact rather than a loss-only false-convergence result. The PAVA
-calibration and test prediction artifacts are also present, but their small
-calibration split yields wide uncertainty and ECE `0.1667`. Accordingly,
-P5.6C implementation/fit stability is complete while offline qualification,
-shadow activation, canary promotion, and causal evaluation remain open.
+calibration and test prediction artifacts are also present. The corrected test
+pairing handles repeated candidate IDs without overwriting labels. On the
+locked `12/4/4` split, the calibrated model obtains Brier `0.02778` and ECE
+`0.08333`; the fixed-weight/PAVA baseline obtains Brier `0.00826` and ECE
+`0.04545`. Thus ECE passes, but calibrated Brier improvement is `-2.3611`,
+below the required `>= 0.10`, and `offline_qualification_passed=false`.
+P5.6C implementation and fit stability are complete, while calibrated
+activation, shadow arbitration, canary promotion, and causal evaluation
+remain blocked. The fitted artifact remains offline-only and must not change
+runtime Arbiter selection.
 
 ## Phase 6 — Memory Controller learning
 

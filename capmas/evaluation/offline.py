@@ -7,7 +7,7 @@ import json
 import math
 from collections import Counter, defaultdict
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import Literal
 
@@ -15,6 +15,10 @@ from capmas.contracts.calibration import (
     CalibrationDatasetManifest,
     CalibrationOutcome,
     CalibrationPrediction,
+)
+from capmas.evaluation.baseline import (
+    FixedWeightBaseline,
+    fit_fixed_weight_mapping,
 )
 from capmas.evaluation.calibration import (
     ConstrainedLogisticModel,
@@ -135,6 +139,12 @@ class OfflineCalibrationReport:
     abstention_counts: Mapping[str, int]
     fit_reason: str | None
     online_effect: bool = False
+    baseline: FixedWeightBaseline | None = None
+    baseline_isotonic: IsotonicCalibration | None = None
+    baseline_predictions: Mapping[str, tuple[CalibrationPrediction, ...]] = field(
+        default_factory=dict
+    )
+    qualification: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.report_version != OFFLINE_REPORT_VERSION:
@@ -151,17 +161,33 @@ class OfflineCalibrationReport:
             raise ValueError("offline calibration reports must have no online effect")
         if (self.model is None) != (self.isotonic is None):
             raise ValueError("offline model and isotonic artifacts must be both present or absent")
+        if (self.baseline is None) != (self.baseline_isotonic is None):
+            raise ValueError("baseline and baseline isotonic artifacts must be both present or absent")
         if self.model is None and any(self.predictions.get(split) for split in _OFFLINE_SPLITS):
             raise ValueError("rejected offline fit must not publish predictions")
         object.__setattr__(self, "split_counts", _freeze_int_mapping(self.split_counts))
         object.__setattr__(self, "label_counts", _freeze_label_counts(self.label_counts))
         object.__setattr__(self, "predictions", _freeze_predictions(self.predictions))
+        object.__setattr__(self, "baseline_predictions", _freeze_predictions(self.baseline_predictions))
         object.__setattr__(self, "metrics", _freeze_metrics(self.metrics))
         object.__setattr__(self, "abstention_counts", _freeze_int_mapping(self.abstention_counts))
+        object.__setattr__(
+            self,
+            "qualification",
+            MappingProxyType(dict(sorted(self.qualification.items()))),
+        )
 
     def to_dict(self) -> dict[str, object]:
         return {
             "abstention_counts": dict(self.abstention_counts),
+            "baseline": None if self.baseline is None else self.baseline.to_dict(),
+            "baseline_isotonic": (
+                None if self.baseline_isotonic is None else self.baseline_isotonic.to_dict()
+            ),
+            "baseline_predictions": {
+                split: [prediction.to_dict() for prediction in predictions]
+                for split, predictions in self.baseline_predictions.items()
+            },
             "fit_reason": self.fit_reason,
             "isotonic": None if self.isotonic is None else self.isotonic.to_dict(),
             "label_counts": {
@@ -181,6 +207,7 @@ class OfflineCalibrationReport:
             "source_manifest_sha256": self.source_manifest_sha256,
             "split_config": self.split_config.to_dict(),
             "split_counts": dict(self.split_counts),
+            "qualification": dict(self.qualification),
         }
 
 
@@ -266,6 +293,32 @@ def run_offline_calibration(
             fit_reason=rejection,
         )
 
+    baseline = FixedWeightBaseline.object6_v1()
+    baseline_rows = tuple(
+        (example.reduced, bool(example.outcome.task_success))
+        for split in ("train", "calibration")
+        for example in eligible_by_split[split]
+        if example.reduced is not None
+    )
+    try:
+        baseline_isotonic = fit_fixed_weight_mapping(baseline, baseline_rows)
+    except ValueError as error:
+        return _report(
+            manifest=manifest,
+            config=config,
+            split_counts=split_counts,
+            label_counts=label_counts,
+            reduced_rows=reduced_rows,
+            fit_reason=_fit_exception_reason(error, stage="baseline"),
+        )
+    baseline_predictions = {
+        split: tuple(
+            _predict_baseline(baseline, baseline_isotonic, example)
+            for example in rows
+        )
+        for split, rows in _rows_by_split(reduced_rows).items()
+    }
+
     try:
         model = fit_constrained_logistic(eligible_by_split["train"])
     except ValueError as error:
@@ -275,6 +328,9 @@ def run_offline_calibration(
             split_counts=split_counts,
             label_counts=label_counts,
             reduced_rows=reduced_rows,
+            baseline=baseline,
+            baseline_isotonic=baseline_isotonic,
+            baseline_predictions=baseline_predictions,
             fit_reason=_fit_exception_reason(error),
         )
     if not model.converged:
@@ -284,6 +340,9 @@ def run_offline_calibration(
             split_counts=split_counts,
             label_counts=label_counts,
             reduced_rows=reduced_rows,
+            baseline=baseline,
+            baseline_isotonic=baseline_isotonic,
+            baseline_predictions=baseline_predictions,
             fit_reason="fit_rejected_nonconverged",
         )
 
@@ -296,6 +355,9 @@ def run_offline_calibration(
             split_counts=split_counts,
             label_counts=label_counts,
             reduced_rows=reduced_rows,
+            baseline=baseline,
+            baseline_isotonic=baseline_isotonic,
+            baseline_predictions=baseline_predictions,
             fit_reason=_fit_exception_reason(error, stage="isotonic"),
         )
 
@@ -312,6 +374,9 @@ def run_offline_calibration(
         model=model,
         isotonic=isotonic,
         predictions=predictions,
+        baseline=baseline,
+        baseline_isotonic=baseline_isotonic,
+        baseline_predictions=baseline_predictions,
     )
 
 
@@ -408,8 +473,15 @@ def _report(
     isotonic: IsotonicCalibration | None = None,
     predictions: Mapping[str, tuple[CalibrationPrediction, ...]] | None = None,
     fit_reason: str | None = None,
+    baseline: FixedWeightBaseline | None = None,
+    baseline_isotonic: IsotonicCalibration | None = None,
+    baseline_predictions: Mapping[str, tuple[CalibrationPrediction, ...]] | None = None,
 ) -> OfflineCalibrationReport:
     normalized_predictions = predictions or {split: () for split in _OFFLINE_SPLITS}
+    normalized_baseline_predictions = baseline_predictions or {
+        split: () for split in _OFFLINE_SPLITS
+    }
+    metrics = _combined_metrics(normalized_predictions, normalized_baseline_predictions, reduced_rows)
     report = OfflineCalibrationReport(
         report_version=OFFLINE_REPORT_VERSION,
         report_sha256="0" * 64,
@@ -422,9 +494,13 @@ def _report(
         model=model,
         isotonic=isotonic,
         predictions=normalized_predictions,
-        metrics=_test_metrics(normalized_predictions, reduced_rows),
+        metrics=metrics,
         abstention_counts=_abstention_counts(normalized_predictions),
         fit_reason=fit_reason,
+        baseline=baseline,
+        baseline_isotonic=baseline_isotonic,
+        baseline_predictions=normalized_baseline_predictions,
+        qualification=_qualification(metrics, fit_reason),
     )
     digest = _sha256_payload(report.to_dict())
     return replace(report, report_sha256=digest)
@@ -434,16 +510,92 @@ def _test_metrics(
     predictions: Mapping[str, tuple[CalibrationPrediction, ...]],
     rows: tuple[OfflineExample, ...],
 ) -> dict[str, float | None]:
-    labels = {row.outcome.candidate_id: row.outcome.task_success for row in rows}
+    test_rows = tuple(row for row in rows if row.dataset_split == "test")
+    test_predictions = predictions.get("test", ())
+    if test_predictions and len(test_predictions) != len(test_rows):
+        raise ValueError("test predictions must align one-to-one with test rows")
     pairs = tuple(
-        (prediction.success_probability, labels[prediction.candidate_id])
-        for prediction in predictions.get("test", ())
+        (prediction.success_probability, row.outcome.task_success)
+        for prediction, row in zip(test_predictions, test_rows)
         if not prediction.abstained and prediction.success_probability is not None
     )
     return {
         "test_brier_score": brier_score(pairs),
         "test_expected_calibration_error": expected_calibration_error(pairs),
     }
+
+
+def _combined_metrics(
+    predictions: Mapping[str, tuple[CalibrationPrediction, ...]],
+    baseline_predictions: Mapping[str, tuple[CalibrationPrediction, ...]],
+    rows: tuple[OfflineExample, ...],
+) -> dict[str, float | None]:
+    calibrated = _test_metrics(predictions, rows)
+    baseline = _test_metrics(baseline_predictions, rows)
+    baseline_brier = baseline["test_brier_score"]
+    calibrated_brier = calibrated["test_brier_score"]
+    improvement = None
+    if baseline_brier is not None and calibrated_brier is not None and baseline_brier > 0.0:
+        improvement = (baseline_brier - calibrated_brier) / baseline_brier
+    return {
+        "baseline_test_brier_score": baseline_brier,
+        "baseline_test_expected_calibration_error": baseline[
+            "test_expected_calibration_error"
+        ],
+        "test_brier_score": calibrated_brier,
+        "test_expected_calibration_error": calibrated["test_expected_calibration_error"],
+        "test_brier_improvement": improvement,
+    }
+
+
+def _qualification(
+    metrics: Mapping[str, float | None], fit_reason: str | None
+) -> dict[str, object]:
+    improvement = metrics["test_brier_improvement"]
+    ece = metrics["test_expected_calibration_error"]
+    brier_met = improvement is not None and improvement >= 0.10
+    ece_met = ece is not None and ece <= 0.10
+    return {
+        "brier_improvement_target": 0.10,
+        "brier_target_met": brier_met,
+        "ece_target": 0.10,
+        "ece_target_met": ece_met,
+        "offline_qualification_passed": fit_reason is None and brier_met and ece_met,
+    }
+
+
+def _predict_baseline(
+    baseline: FixedWeightBaseline,
+    isotonic: IsotonicCalibration,
+    example: OfflineExample,
+) -> CalibrationPrediction:
+    if example.reduced is None or example.reduced.dimension("action_feasibility").value is None:
+        return CalibrationPrediction(
+            candidate_id=example.outcome.candidate_id,
+            rank_score=None,
+            success_probability=None,
+            uncertainty=1.0,
+            abstained=True,
+            reason="baseline_abstained_missing_required_evidence",
+            model_version=baseline.baseline_version,
+            feature_schema_version=baseline.feature_schema_version,
+            snapshot_id=None,
+            eligible_family=False,
+        )
+    score = baseline.score(example.reduced)
+    probability, uncertainty = isotonic.calibrate(score)
+    return CalibrationPrediction(
+        candidate_id=example.outcome.candidate_id,
+        rank_score=score,
+        success_probability=probability,
+        uncertainty=uncertainty,
+        abstained=False,
+        reason="offline_fixed_weight_baseline",
+        model_version=baseline.baseline_version,
+        feature_schema_version=baseline.feature_schema_version,
+        snapshot_id=None,
+        eligible_family=False,
+    )
 
 
 def _abstention_counts(
@@ -511,7 +663,14 @@ def _freeze_predictions(
 
 
 def _freeze_metrics(raw: Mapping[str, float | None]) -> Mapping[str, float | None]:
-    if set(raw) != {"test_brier_score", "test_expected_calibration_error"}:
+    expected = {
+        "baseline_test_brier_score",
+        "baseline_test_expected_calibration_error",
+        "test_brier_improvement",
+        "test_brier_score",
+        "test_expected_calibration_error",
+    }
+    if set(raw) != expected:
         raise ValueError("offline report metrics must use the fixed test-only keys")
     normalized: dict[str, float | None] = {}
     for name, value in sorted(raw.items()):

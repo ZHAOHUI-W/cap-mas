@@ -172,7 +172,10 @@ def test_offline_cli_writes_a_complete_verified_phase5_run(
     assert (run_dir / "artifacts/reduced_features.json").is_file()
     assert (run_dir / "artifacts/constrained_logistic_model.json").is_file()
     assert (run_dir / "artifacts/isotonic_calibration.json").is_file()
+    assert (run_dir / "artifacts/fixed_weight_baseline.json").is_file()
+    assert (run_dir / "artifacts/fixed_weight_baseline_pava.json").is_file()
     assert (run_dir / "results/predictions.json").is_file()
+    assert (run_dir / "results/baseline_predictions.json").is_file()
     assert (run_dir / "results/offline_calibration_report.json").is_file()
     assert inspect_manifest(run_dir)["verified"] is True
 

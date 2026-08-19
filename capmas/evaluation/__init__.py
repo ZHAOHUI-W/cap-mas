@@ -78,6 +78,12 @@ from capmas.evaluation.correlation import (
     ReducedFeatureVector,
     reduce_feature_snapshot,
 )
+from capmas.evaluation.baseline import (
+    BASELINE_PAVA_VERSION,
+    BASELINE_VERSION,
+    FixedWeightBaseline,
+    fit_fixed_weight_mapping,
+)
 from capmas.evaluation.dataset import (
     DatasetAudit,
     LeakageFinding,
@@ -207,6 +213,10 @@ __all__ = [  # noqa: RUF022
     "ReducedDimension",
     "ReducedFeatureVector",
     "reduce_feature_snapshot",
+    "BASELINE_PAVA_VERSION",
+    "BASELINE_VERSION",
+    "FixedWeightBaseline",
+    "fit_fixed_weight_mapping",
     "DatasetAudit",
     "LeakageFinding",
     "assert_dataset_eligible",

@@ -10,6 +10,7 @@ from capmas.contracts.calibration import (
     CalibrationDatasetManifest,
     CalibrationLineage,
     CalibrationOutcome,
+    CalibrationPrediction,
     CandidateFeatureSnapshot,
     HorizonLabel,
 )
@@ -248,6 +249,58 @@ def test_offline_run_report_digest_is_deterministic() -> None:
 
     assert first.report_sha256 == second.report_sha256
     assert first.to_dict() == second.to_dict()
+
+
+def test_offline_report_contains_fixed_baseline_comparison() -> None:
+    report = offline.run_offline_calibration(_manifest(), ExactQuotaSplitConfig.object6_v1())
+
+    assert report.baseline is not None
+    assert report.baseline_isotonic is not None
+    assert len(report.baseline_predictions["test"]) == 4
+    assert "baseline_test_brier_score" in report.metrics
+    assert "test_brier_improvement" in report.metrics
+    assert report.qualification["offline_qualification_passed"] is False
+
+
+def test_test_metrics_pair_rows_when_candidate_ids_repeat() -> None:
+    rows = partition_tier_a_outcomes(_manifest(), ExactQuotaSplitConfig.object6_v1())
+    test_rows = tuple(row for row in rows if row.dataset_split == "test")
+    duplicate_rows = tuple(
+        replace(
+            row,
+            outcome=replace(
+                row.outcome,
+                candidate_id="same-candidate",
+                feature_snapshot=replace(
+                    row.outcome.feature_snapshot,
+                    candidate_id="same-candidate",
+                ),
+            ),
+        )
+        for row in test_rows
+    )
+    predictions = tuple(
+        CalibrationPrediction(
+            candidate_id="same-candidate",
+            rank_score=0.9 if row.outcome.task_success else 0.1,
+            success_probability=0.9 if row.outcome.task_success else 0.1,
+            uncertainty=0.1,
+            abstained=False,
+            reason="offline_calibrated",
+            model_version="model-v1",
+            feature_schema_version=FEATURE_SCHEMA_VERSION,
+            snapshot_id=None,
+            eligible_family=False,
+        )
+        for row in duplicate_rows
+    )
+
+    metrics = offline._test_metrics({"test": predictions}, duplicate_rows)
+
+    assert metrics == {
+        "test_brier_score": pytest.approx(0.01),
+        "test_expected_calibration_error": pytest.approx(0.1),
+    }
 
 
 def test_offline_orchestrator_is_exported_from_evaluation() -> None:

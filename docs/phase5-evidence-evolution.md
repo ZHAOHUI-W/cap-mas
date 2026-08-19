@@ -1088,18 +1088,33 @@ currently expose only `rehearsal_success_rate` as a present reduced feature,
 the train design correctly freezes all scene/risk/missingness coefficients and
 learns only the intercept and action-feasibility support weight.
 
-The frozen test report is descriptive only: Brier score is `0.1111` and ECE
-is `0.1667`. ECE therefore does not meet the predeclared `<= 0.10` offline
-target, and this run does not establish a calibrated-quality gate closure or
-a downstream success-rate improvement. The calibration split has only four
-rows, so the PAVA blocks have wide Wilson uncertainty (`0.7308` and `0.7935`)
-and must not be interpreted as a production-quality probability estimate.
+The first frozen test report was descriptive only: Brier score was `0.1111`
+and ECE was `0.1667`, so ECE missed the predeclared `<= 0.10` offline target.
+The calibration split has only four rows, so the PAVA blocks have wide Wilson
+uncertainty and must not be interpreted as a production-quality probability
+estimate.
 
-This is not a calibrated shadow-Arbiter or canary result. The report's
-predictions are explicitly offline-only (`online_effect=false` and
-`eligible_family=false`); no `CalibrationSnapshot` was published, no active
-evidence weight was changed, and no physical Executor or runtime Arbiter used
-the fitted model. P5.6B/C implementation and real-data fit gates are closed;
-the offline qualification gate remains open because ECE failed and a fixed
-weighted baseline comparison has not yet been produced. P5.6.5--P5.6.9 remain
-blocked on that qualification decision and subsequent shadow safety checks.
+### P5.6.4 fixed-weight baseline comparison (2026-08-19)
+
+The corrected offline runner evaluates the fitted model and a frozen
+fixed-weight/PAVA baseline on the same four test rows. The new run is
+`outputs/phase5/P5.6.4_offline_calibration/20260819_014928_p56b-object6-offline-baseline-v2/`;
+its manifest verifies with zero missing files, digest mismatches, size
+mismatches, or untracked files. Predictions are paired with test rows in
+lineage order, so repeated `candidate_id` values cannot overwrite labels.
+
+The calibrated model's test Brier is `0.02778` and ECE is `0.08333`; ECE now
+passes its target. However, the fixed-weight baseline reaches Brier `0.00826`
+and ECE `0.04545`, so calibrated Brier improvement is `-2.3611`, below the
+required `>= 0.10`. The complete offline qualification result is therefore
+`false`: passing ECE alone is insufficient, and the fitted model must not
+emit an active `success_probability` or alter Arbiter ranking.
+
+This is not a calibrated shadow-Arbiter or canary result. The report remains
+offline-only (`online_effect=false` and `eligible_family=false`); no
+`CalibrationSnapshot` was published, no active evidence weight was changed,
+and no physical Executor or runtime Arbiter used the fitted model. P5.6B/C
+implementation and fit-stability gates are closed, while the offline
+qualification gate remains open because the baseline-relative Brier target
+failed. P5.6.5--P5.6.9 remain blocked on a qualifying data/feature/calibration
+revision and the subsequent shadow safety checks.
