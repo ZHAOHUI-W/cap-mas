@@ -105,3 +105,32 @@ def test_geometry_evidence_preserves_candidate_scene_map_and_provider_provenance
 
     with pytest.raises(ValueError, match="geometry evidence"):
         CandidateEvidence(available_metrics=("geometry",))
+
+
+def test_geometry_evidence_validates_optional_program_provenance() -> None:
+    dimension = EvidenceDimension("grasp_quality", "pass", 0.8, 0.5, "aligned")
+    geometry = GeometryEvidence(
+        grasp_quality=dimension,
+        reachability=EvidenceDimension("reachability", "pass", 1.0, 0.5, "reachable"),
+        clearance=EvidenceDimension("clearance", "pass", 0.7, 0.5, "clear"),
+        collision_risk=EvidenceDimension("collision_risk", "pass", 0.0, 0.5, "clear"),
+        candidate_fingerprint="candidate-fingerprint",
+        scene_version=7,
+        map_version=3,
+        map_backend="sparse_voxel",
+        provider="reference_motion_preview",
+        provider_version="1",
+        captured_at_ns=123,
+        latency_ms=2.5,
+        execution_graph_fingerprint="graph-fingerprint",
+        program_fingerprint="program-fingerprint",
+        program_scope="mission_suffix",
+    )
+
+    assert geometry.program_scope == "mission_suffix"
+    assert geometry.execution_graph_fingerprint == "graph-fingerprint"
+
+    with pytest.raises(ValueError, match="program fingerprint"):
+        GeometryEvidence(
+            **{**geometry.__dict__, "program_fingerprint": "", "program_scope": "mission_suffix"}
+        )

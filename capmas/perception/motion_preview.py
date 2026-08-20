@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from capmas.contracts.core import ArtifactRef
 from capmas.contracts.graph import MotionIntent
 from capmas.contracts.scene import ObjectTrack, SceneSnapshot
+from capmas.perception.effective_motion import EffectiveMotionProgram, EffectiveMotionSegment
 from capmas.perception.local_map import LocalMapBackend, MapRegion
 
 
@@ -24,6 +25,39 @@ class MotionPreview:
     reason: str = ""
     backend: str = ""
     backend_version: str = ""
+
+
+@dataclass(frozen=True)
+class SegmentMotionPreview:
+    """Read-only map/IK result for one bound motion segment."""
+
+    segment_id: str
+    ik_valid: bool | None
+    collision_free: bool | None
+    clearance_m: float | None
+    path_length_m: float | None
+    reason: str
+    start_pose_wxyz_xyz: tuple[float, ...] | None
+    end_pose_wxyz_xyz: tuple[float, ...] | None
+    sampled_points_xyz: tuple[tuple[float, float, float], ...] = ()
+    occupied_points_xyz: tuple[tuple[float, float, float], ...] = ()
+
+
+@dataclass(frozen=True)
+class ProgramMotionPreview:
+    """Segment-level preview plus conservative program-level status."""
+
+    segments: tuple[SegmentMotionPreview, ...]
+    aggregate_status: Literal["feasible", "infeasible", "unknown"]
+    scene_version: int
+    map_version: int | None
+    corridor_radius_m: float
+
+    def by_segment(self, segment_id: str) -> SegmentMotionPreview:
+        for segment in self.segments:
+            if segment.segment_id == segment_id:
+                return segment
+        raise KeyError(f"unknown program preview segment: {segment_id}")
 
 
 class MotionPreviewBackend(Protocol):
@@ -173,6 +207,44 @@ class ReferenceMotionPreview:
             backend_version=self.backend_version,
         )
 
+    def preview_program(
+        self,
+        program: EffectiveMotionProgram,
+        scene: SceneSnapshot,
+        local_map: LocalMapBackend | None,
+    ) -> ProgramMotionPreview:
+        """Preview every explicit program segment without robot side effects."""
+
+        if scene.freshness_ms > self.target_freshness_ms:
+            segments = tuple(
+                self._unknown_segment(segment, "scene is stale")
+                for segment in program.segments
+            )
+        else:
+            segments = tuple(
+                self._preview_segment(segment, scene, local_map)
+                for segment in program.segments
+            )
+        if any(
+            segment.ik_valid is False or segment.collision_free is False
+            for segment in segments
+        ):
+            status: Literal["feasible", "infeasible", "unknown"] = "infeasible"
+        elif segments and all(
+            segment.ik_valid is True and segment.collision_free is True
+            for segment in segments
+        ):
+            status = "feasible"
+        else:
+            status = "unknown"
+        return ProgramMotionPreview(
+            segments=segments,
+            aggregate_status=status,
+            scene_version=scene.scene_version,
+            map_version=local_map.map_version() if local_map is not None else None,
+            corridor_radius_m=self.corridor_radius_m,
+        )
+
     def _target_track(self, intent: MotionIntent, scene: SceneSnapshot) -> ObjectTrack | None:
         track_id = intent.object_track_id if intent.kind == "grasp" else intent.target_track_id
         if track_id is None:
@@ -180,6 +252,109 @@ class ReferenceMotionPreview:
         if track_id is None:
             return None
         return next((track for track in scene.objects if track.track_id == track_id), None)
+
+    def _preview_segment(
+        self,
+        segment: EffectiveMotionSegment,
+        scene: SceneSnapshot,
+        local_map: LocalMapBackend | None,
+    ) -> SegmentMotionPreview:
+        if segment.start_pose_wxyz_xyz is None or segment.end_pose_wxyz_xyz is None:
+            return self._unknown_segment(segment, "segment endpoints are unavailable")
+        start = tuple(segment.start_pose_wxyz_xyz[4:7])
+        end = tuple(segment.end_pose_wxyz_xyz[4:7])
+        if not self._in_workspace(start) or not self._in_workspace(end):
+            return SegmentMotionPreview(
+                segment.segment_id,
+                False,
+                None,
+                None,
+                _distance(start, end),
+                "segment endpoint is outside conservative workspace",
+                segment.start_pose_wxyz_xyz,
+                segment.end_pose_wxyz_xyz,
+            )
+        samples = _line_samples(start, end, max(2, self.corridor_samples))
+        path_length = _distance(start, end)
+        if local_map is None:
+            return SegmentMotionPreview(
+                segment.segment_id,
+                True,
+                None,
+                None,
+                path_length,
+                "local map is unavailable",
+                segment.start_pose_wxyz_xyz,
+                segment.end_pose_wxyz_xyz,
+                samples,
+            )
+
+        minimum_clearance: float | None = None
+        occupied: list[tuple[float, float, float]] = []
+        for point in samples:
+            result = local_map.query(
+                MapRegion(
+                    center_xyz=point,
+                    extents_xyz=(self.corridor_radius_m,) * 3,
+                )
+            )
+            if result.snapshot_timestamp_ns and result.snapshot_timestamp_ns < scene.sensor_timestamp_ns:
+                return self._unknown_segment(
+                    segment,
+                    "local map is stale",
+                    path_length=path_length,
+                    samples=samples,
+                )
+            if result.occupied:
+                occupied.append(point)
+                minimum_clearance = 0.0
+                continue
+            if result.clearance_m is not None:
+                minimum_clearance = (
+                    result.clearance_m
+                    if minimum_clearance is None
+                    else min(minimum_clearance, result.clearance_m)
+                )
+        if minimum_clearance is None:
+            return self._unknown_segment(
+                segment,
+                "local map has no clearance measurement",
+                path_length=path_length,
+                samples=samples,
+            )
+        collision_free = not occupied
+        return SegmentMotionPreview(
+            segment.segment_id,
+            True,
+            collision_free,
+            minimum_clearance,
+            path_length,
+            "corridor is clear" if collision_free else "corridor is occupied",
+            segment.start_pose_wxyz_xyz,
+            segment.end_pose_wxyz_xyz,
+            samples,
+            tuple(occupied),
+        )
+
+    @staticmethod
+    def _unknown_segment(
+        segment: EffectiveMotionSegment,
+        reason: str,
+        *,
+        path_length: float | None = None,
+        samples: tuple[tuple[float, float, float], ...] = (),
+    ) -> SegmentMotionPreview:
+        return SegmentMotionPreview(
+            segment.segment_id,
+            None,
+            None,
+            None,
+            path_length,
+            reason,
+            segment.start_pose_wxyz_xyz,
+            segment.end_pose_wxyz_xyz,
+            samples,
+        )
 
     def _in_workspace(self, position: tuple[float, float, float]) -> bool:
         return all(
@@ -203,3 +378,24 @@ def _normalize(vector: tuple[float, float, float] | None) -> tuple[float, float,
     if norm <= 1e-9:
         return None
     return tuple(value / norm for value in vector)
+
+
+def _distance(
+    first: tuple[float, float, float],
+    second: tuple[float, float, float],
+) -> float:
+    return math.sqrt(sum((first[index] - second[index]) ** 2 for index in range(3)))
+
+
+def _line_samples(
+    start: tuple[float, float, float],
+    end: tuple[float, float, float],
+    count: int,
+) -> tuple[tuple[float, float, float], ...]:
+    return tuple(
+        tuple(
+            start[axis] + (end[axis] - start[axis]) * index / (count - 1)
+            for axis in range(3)
+        )
+        for index in range(count)
+    )

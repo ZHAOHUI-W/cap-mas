@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import time
 
-from capmas.contracts.candidates import GraphCandidate
+from capmas.contracts.candidates import GraphCandidate, subgraph_fingerprint
 from capmas.contracts.graph import CheckpointSpec, MotionIntent, SubgraphNodeSpec, SubgraphSpec
 from capmas.contracts.scene import ObjectTrack, SceneSnapshot
+from capmas.perception.effective_motion import EffectiveMotionProgram, EffectiveMotionSegment
 from capmas.perception.geometry import GeometryUpdate
 from capmas.perception.geometry_evidence import candidate_geometry_evidence
 from capmas.perception.local_map import SparseVoxelMap
@@ -71,6 +72,88 @@ def _map() -> SparseVoxelMap:
     return local_map
 
 
+def _map_with_place_obstacle() -> SparseVoxelMap:
+    local_map = SparseVoxelMap(voxel_size_m=0.02, local_radius_m=2.0)
+    local_map.integrate(
+        GeometryUpdate(
+            timestamp_ns=100,
+            camera_poses={},
+            points_world=((0.60, 0.25, 0.13),),
+        ),
+        100,
+    )
+    return local_map
+
+
+def _program(candidate: GraphCandidate, *, place_approach_m: float) -> EffectiveMotionProgram:
+    segments = (
+        EffectiveMotionSegment(
+            "grasp_approach",
+            "grasp_approach",
+            "pick",
+            "pick-action",
+            (1.0, 0.0, 0.0, 0.0, 0.40, 0.00, 0.35),
+            (1.0, 0.0, 0.0, 0.0, 0.40, 0.00, 0.30),
+            (0.0, 0.0, -1.0),
+            0.05,
+            "bowl",
+        ),
+        EffectiveMotionSegment(
+            "lift",
+            "lift",
+            "pick",
+            "pick-action",
+            (1.0, 0.0, 0.0, 0.0, 0.40, 0.00, 0.30),
+            (1.0, 0.0, 0.0, 0.0, 0.40, 0.00, 0.42),
+            (0.0, 0.0, 1.0),
+            0.12,
+            "bowl",
+        ),
+        EffectiveMotionSegment(
+            "transfer",
+            "transfer",
+            "place",
+            "place-action",
+            (1.0, 0.0, 0.0, 0.0, 0.40, 0.00, 0.42),
+            (0.0, 1.0, 0.0, 0.0, 0.60, 0.25, 0.04 + place_approach_m),
+            None,
+            0.31,
+            "bowl",
+        ),
+        EffectiveMotionSegment(
+            "place_approach",
+            "place_approach",
+            "place",
+            "place-action",
+            (0.0, 1.0, 0.0, 0.0, 0.60, 0.25, 0.04 + place_approach_m),
+            (0.0, 1.0, 0.0, 0.0, 0.60, 0.25, 0.04),
+            (0.0, 0.0, -1.0),
+            place_approach_m,
+            "bowl",
+        ),
+        EffectiveMotionSegment(
+            "release",
+            "release",
+            "place",
+            "place-action",
+            (0.0, 1.0, 0.0, 0.0, 0.60, 0.25, 0.04),
+            (0.0, 1.0, 0.0, 0.0, 0.60, 0.25, 0.04),
+            None,
+            0.0,
+            "bowl",
+        ),
+    )
+    return EffectiveMotionProgram(
+        candidate_fingerprint=subgraph_fingerprint(candidate.subgraph),
+        execution_graph_fingerprint="graph-fingerprint",
+        program_fingerprint=f"program-{place_approach_m}",
+        decision_scene_version=7,
+        selected_subgraph_id="pick",
+        segments=segments,
+        semantic_signature=f"semantic-{place_approach_m}",
+    )
+
+
 def test_reference_preview_distinguishes_approach_clearance_without_execution() -> None:
     scene = _scene()
     local_map = _map()
@@ -120,3 +203,54 @@ def test_reference_preview_does_not_need_or_call_an_executor() -> None:
     )
 
     assert result.backend == "reference_motion_preview"
+
+
+def test_program_preview_distinguishes_place_approach_lengths() -> None:
+    candidate = _candidate((0.0, 0.0, -1.0))
+    preview = ReferenceMotionPreview(corridor_samples=5)
+
+    short = preview.preview_program(
+        _program(candidate, place_approach_m=0.05),
+        _scene(),
+        _map_with_place_obstacle(),
+    )
+    long = preview.preview_program(
+        _program(candidate, place_approach_m=0.20),
+        _scene(),
+        _map_with_place_obstacle(),
+    )
+
+    assert short.by_segment("place_approach").collision_free is True
+    assert long.by_segment("place_approach").collision_free is False
+
+
+def test_program_geometry_is_conservative_and_has_program_lineage() -> None:
+    candidate = _candidate((0.0, 0.0, -1.0))
+    program = _program(candidate, place_approach_m=0.20)
+
+    evidence = candidate_geometry_evidence(
+        candidate,
+        _scene(),
+        _map_with_place_obstacle(),
+        ReferenceMotionPreview(),
+        deadline_ns=time.monotonic_ns() + 50_000_000,
+        program=program,
+    )
+
+    assert evidence.program_scope == "mission_suffix"
+    assert evidence.clearance.score == 0.0
+    assert evidence.collision_risk.score == 1.0
+    assert evidence.program_fingerprint == program.program_fingerprint
+
+
+def test_legacy_geometry_keeps_default_program_provenance() -> None:
+    evidence = candidate_geometry_evidence(
+        _candidate((0.0, 0.0, -1.0)),
+        _scene(),
+        _map(),
+        ReferenceMotionPreview(),
+        deadline_ns=time.monotonic_ns() + 50_000_000,
+    )
+
+    assert evidence.program_scope == "subgraph"
+    assert evidence.execution_graph_fingerprint is None

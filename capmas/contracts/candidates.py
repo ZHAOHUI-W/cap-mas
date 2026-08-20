@@ -101,6 +101,10 @@ class GeometryEvidence:
     latency_ms: float
     used_privileged_state: bool = False
     artifact_refs: tuple[ArtifactRef, ...] = ()
+    execution_graph_fingerprint: str | None = None
+    program_fingerprint: str | None = None
+    program_scope: Literal["subgraph", "mission_suffix"] = "subgraph"
+    segment_artifact_refs: tuple[ArtifactRef, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.candidate_fingerprint:
@@ -117,6 +121,14 @@ class GeometryEvidence:
             raise ValueError("geometry capture timestamp must not be negative")
         if self.latency_ms < 0:
             raise ValueError("geometry latency must not be negative")
+        if self.execution_graph_fingerprint is not None and not self.execution_graph_fingerprint:
+            raise ValueError("geometry execution graph fingerprint must not be empty")
+        if self.program_scope not in {"subgraph", "mission_suffix"}:
+            raise ValueError("geometry program scope must be subgraph or mission_suffix")
+        if self.program_scope == "mission_suffix" and not self.program_fingerprint:
+            raise ValueError("mission-suffix geometry program fingerprint is required")
+        if self.program_fingerprint is not None and not self.program_fingerprint:
+            raise ValueError("geometry program fingerprint must not be empty")
         expected = {
             "grasp_quality",
             "reachability",
