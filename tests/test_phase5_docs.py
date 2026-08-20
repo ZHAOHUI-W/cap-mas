@@ -131,3 +131,20 @@ def test_phase5_docs_record_p55_matched_provenance_failure_semantics():
     assert "graph_failure_classes" in specification
     assert "verifier_false_negative_classes" in specification
     assert "must not be described as downstream task failures" in specification
+
+
+def test_phase5_docs_record_effective_motion_capability_boundary():
+    documents = [
+        (ROOT / name).read_text(encoding="utf-8")
+        for name in (
+            "docs/phase5-evidence-evolution.md",
+            "docs/implementation-roadmap.md",
+            "docs/experiments.md",
+        )
+    ]
+
+    for document in documents:
+        assert "EffectiveMotionProgram" in document
+        assert "candidate_semantic_equivalence" in document
+        assert "P5.6D" in document and "immutable" in document
+        assert "P5.3.2 ten-seed capability gate is unrun" in document

@@ -1205,3 +1205,28 @@ duplicate candidate waves before evidence scoring. The design is documented in
 [`2026-08-20-p5-3-2-object6-effective-motion-design.md`](superpowers/specs/2026-08-20-p5-3-2-object6-effective-motion-design.md).
 It does not modify P5.6D rows, calibration, or the separate spatial-0/goal-1
 P5.3.2 handoffs.
+
+### P5.3.2 implemented capability boundary (2026-08-20)
+
+`EffectiveMotionProgram` is now implemented as the decision-time contract for
+the selected object-6 mission suffix. It binds and materializes the same
+grasp-approach, lift, transfer, place-approach, and release poses; the
+reference preview aggregates that full path conservatively rather than scoring
+only the first local motion intent. The retained live session prepares this
+program before arbitration and executes only the provenance-checked,
+materialized graph.
+
+The online runner exposes this route only through
+`effective_motion_scope="mission_suffix"`. It writes program/graph lineage,
+per-candidate identifiability, and bounded regeneration audit artifacts. A
+wave whose programs are semantically duplicate receives
+`candidate_semantic_equivalence` and no physical submission after at most one
+regeneration. Different programs with equal evidence remain explicitly
+non-identifiable; they are not reported as an evidence-selected Arbiter gain.
+
+The P5.6D seed-32--51 qualification artifacts remain immutable and are not
+inputs to this work. The P5.3.2 ten-seed capability gate is unrun: the code
+provides a SHA-256-checked manifest schema and GPU-free dry-run, but no
+concrete P5.3.2 manifest has been written and no CAP-X/LIBERO case has been
+executed. Calibration, Shadow Arbiter, canary, TSDF, semantic adapters, and
+learned grasp selection remain outside this increment.

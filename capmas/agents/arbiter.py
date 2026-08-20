@@ -352,10 +352,10 @@ class CandidateArbiter:
 
 def _geometry_score(geometry: object) -> float | None:
     dimensions = (
-        (getattr(geometry, "grasp_quality"), 0.30, False),
-        (getattr(geometry, "reachability"), 0.30, False),
-        (getattr(geometry, "clearance"), 0.25, False),
-        (getattr(geometry, "collision_risk"), 0.15, True),
+        (geometry.grasp_quality, 0.30, False),
+        (geometry.reachability, 0.30, False),
+        (geometry.clearance, 0.25, False),
+        (geometry.collision_risk, 0.15, True),
     )
     weighted = 0.0
     total_weight = 0.0

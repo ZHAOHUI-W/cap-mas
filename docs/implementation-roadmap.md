@@ -858,6 +858,23 @@ regeneration request or a typed abstention rather than an evidence tie-break.
 The implementation boundary and later ten-seed capability gate are specified
 in [`2026-08-20-p5-3-2-object6-effective-motion-design.md`](superpowers/specs/2026-08-20-p5-3-2-object6-effective-motion-design.md).
 
+### P5.3.2 implementation status (2026-08-20)
+
+The object-6 repair implementation now includes `EffectiveMotionProgram`,
+full-suffix segment preview, `PreparedCandidate` same-session execution,
+`CandidateDiversityValidator`, typed
+`candidate_semantic_equivalence` abstention, and mission-suffix selection
+artifacts. The default subgraph-only APIs remain compatible; only the explicit
+`mission_suffix` scope uses the new binding path.
+
+`scripts/create_p532_object6_manifest.py` defines the separate ten-case
+pre-registration contract and rejects non-GPU-5, restartable, duplicate-seed,
+or byte-different manifests. `scripts/run_libero_p532_object6.py` defaults to
+a dry-run that does not import CAP-X or allocate a GPU. The P5.3.2 ten-seed capability gate is unrun
+pending a separately approved seed range. The P5.6D
+qualification artifacts remain immutable; no P5.6 calibration, shadow, or
+canary behavior is changed by P5.3.2.
+
 ## Phase 6 — Memory Controller learning
 
 - Add verified terminal and intermediate learning-return calculation.

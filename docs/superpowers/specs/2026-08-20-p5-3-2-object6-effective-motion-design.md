@@ -290,7 +290,23 @@ trial itself remains a capability and alignment test.
    `git diff --check`. Only then pre-register and run the separate ten-seed
    capability experiment.
 
-## 9. Non-goals and Rollback
+## 9. Implementation Status (2026-08-20)
+
+The pure `EffectiveMotionProgram` binding/materialization path, full-program
+reference preview, optional geometry provenance, candidate diversity audit,
+same-session prepared execution, and mission-suffix online runner are
+implemented. The runner persists `candidate_identifiability.json`,
+`effective_motion_programs.json`, and selection lineage before the optional
+single physical submission. Its default subgraph route remains unchanged.
+
+The capability harness is implemented as a strict ten-case, SHA-256-bound
+manifest contract and a GPU-free dry-run. A live run requires the explicit
+`--execute` CLI flag and a future independently approved seed block. The
+P5.3.2 ten-seed capability gate is unrun. The P5.6D qualification rows remain
+immutable and cannot be used for new qualification, calibration, Shadow
+Arbiter, or canary conclusions.
+
+## 10. Non-goals and Rollback
 
 This design does not make rehearsal synchronous, loosen hard safety gates, or
 turn a policy-name tie into evidence. The single-intent P5.2 provider remains

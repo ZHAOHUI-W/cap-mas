@@ -943,3 +943,21 @@ integration validation of full-graph, decision-time motion binding. The P5.6D
 qualification artifacts are not input rows for that experiment and must remain
 unchanged; its diagnostic fields are captured in
 [`2026-08-20-p5-3-2-object6-effective-motion-design.md`](superpowers/specs/2026-08-20-p5-3-2-object6-effective-motion-design.md).
+
+### P5.3.2 effective-motion capability boundary (2026-08-20)
+
+The implementation now binds each selected local candidate to an
+`EffectiveMotionProgram` over its full successful mission suffix, previews
+the same materialized graph that the retained live session may execute, and
+records graph/program fingerprints with the decision. Candidate waves are
+audited before submission: semantic duplicates produce the typed
+`candidate_semantic_equivalence` abstention after at most one regeneration;
+different programs with equal evidence remain an explicit non-identifiable
+tie rather than an evidence-selected result.
+
+The separate P5.3.2 harness has only been tested in manifest preflight and
+GPU-free dry-run mode. The P5.3.2 ten-seed capability gate is unrun: there is
+no concrete P5.3.2 seed manifest, no physical output directory, and no new
+success-rate claim. P5.6D remains immutable and is neither relabelled nor
+reused for calibration; calibration, Shadow Arbiter, canary, TSDF, semantic
+adapters, and learned grasp selection are unchanged.
