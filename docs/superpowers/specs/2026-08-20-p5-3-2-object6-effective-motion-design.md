@@ -107,7 +107,8 @@ class EffectiveMotionSegment:
     kind: Literal["grasp_approach", "lift", "transfer", "place_approach", "release"]
     source_subgraph_id: str
     source_node_id: str
-    target_pose_wxyz_xyz: tuple[float, ...] | None
+    start_pose_wxyz_xyz: tuple[float, ...] | None
+    end_pose_wxyz_xyz: tuple[float, ...] | None
     approach_vector_xyz: tuple[float, float, float] | None
     approach_distance_m: float | None
     payload_track_id: str | None
@@ -155,8 +156,12 @@ execution.
 `ReferenceMotionPreview` will implement a new read-only
 `preview_program(program, scene, local_map)` operation while retaining its
 existing single-intent method for compatibility. It will derive each segment's
-corridor start/end and sample count from the effective segment rather than its
-global fixed approach distance.
+corridor start/end and sample count from each effective segment's explicit
+poses rather than its global fixed approach distance. `grasp_approach` begins
+at its approach-offset pose and ends at the bound grasp pose; `lift` begins at
+that grasp pose; `transfer` starts at the lifted pose; and `place_approach`
+ends at the bound release pose. This makes the previewed swept path
+reconstructable from the decision artifact.
 
 The preview result contains one status for every segment:
 
