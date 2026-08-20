@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -10,7 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
 from functools import wraps
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 from uuid import uuid4
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +19,10 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from capmas.agents.arbiter import CandidateArbiter
+from capmas.agents.candidate_diversity import (
+    CandidateDiversityDecision,
+    CandidateDiversityValidator,
+)
 from capmas.contracts.calibration import CalibrationCollectionContext, CandidateFeatureSnapshot
 from capmas.contracts.candidates import GraphCandidate, rewrite_report_for, subgraph_fingerprint
 from capmas.contracts.graph import MissionGraph
@@ -30,7 +35,11 @@ from capmas.evaluation.evidence_cache import VersionedEvidenceCache
 from capmas.evaluation.evidence_contracts import EvidenceRequestContext
 from capmas.evaluation.feature_snapshots import capture_feature_snapshot
 from capmas.evaluation.labels import extract_horizon
-from capmas.evaluation.libero_evidence_session import PreExecutionEvidenceSession
+from capmas.evaluation.libero_evidence_session import (
+    EffectiveMotionEvidenceSession,
+    PreExecutionEvidenceSession,
+    PreparedCandidate,
+)
 from capmas.evaluation.libero_rehearsal import LiberoRehearsalConfig, LiberoRehearsalWorker
 from capmas.evaluation.online_rehearsal import (
     RehearsalArbitrationReport,
@@ -45,7 +54,7 @@ from capmas.evaluation.rehearsal_evidence import (
     rehearsal_result_to_evidence,
     run_with_respawn,
 )
-from capmas.graph.serialization import mission_graph_from_dict
+from capmas.graph.serialization import mission_graph_from_dict, mission_graph_to_dict
 from scripts.run_libero_p53_rehearsal import (
     CandidateSpec,
     build_rehearsal_jobs,
@@ -54,6 +63,10 @@ from scripts.run_libero_p53_rehearsal import (
 
 PhysicalExecutor = Callable[[GraphCandidate, MissionGraph], object]
 RehearsalRunFn = Callable[..., tuple[RehearsalResult, ...]]
+CandidateRegenerator = Callable[
+    [Sequence[CandidateSpec], CandidateDiversityDecision],
+    Sequence[CandidateSpec] | None,
+]
 
 
 def _close_evidence_session(run: Callable[..., OnlineSelectionOutcome]):
@@ -94,10 +107,15 @@ class _TypedCandidateSet:
     specs: Mapping[str, CandidateSpec]
 
 
+@dataclass(frozen=True)
+class _PreparedCandidateSet:
+    typed: _TypedCandidateSet
+    prepared: Mapping[str, PreparedCandidate]
+    decision: CandidateDiversityDecision
+
+
 def load_online_candidates(path: str | Path) -> tuple[CandidateSpec, ...]:
     """Load the same graph-scoped candidate artifact used by P5.3 rehearsal."""
-
-    import json
 
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
     candidates = parse_candidate_mapping(raw)
@@ -150,6 +168,8 @@ def run_online_experiment(
     physical_executor: PhysicalExecutor | None = None,
     calibration_context: CalibrationCollectionContext | None = None,
     evidence_session: PreExecutionEvidenceSession | None = None,
+    effective_motion_scope: Literal["subgraph", "mission_suffix"] = "subgraph",
+    candidate_regenerator: CandidateRegenerator | None = None,
 ) -> OnlineSelectionOutcome:
     """Run rehearsal, select one live candidate, and execute it at most once."""
 
@@ -169,6 +189,15 @@ def run_online_experiment(
         raise ValueError(
             "same-runtime evidence sessions cannot use an independent physical executor"
         )
+    if effective_motion_scope not in {"subgraph", "mission_suffix"}:
+        raise ValueError("effective motion scope must be subgraph or mission_suffix")
+    if effective_motion_scope == "mission_suffix":
+        if evidence_session is None:
+            raise ValueError("mission_suffix scope requires an effective-motion evidence session")
+        if not callable(getattr(evidence_session, "prepare_candidate", None)) or not callable(
+            getattr(evidence_session, "execute_prepared", None)
+        ):
+            raise ValueError("mission_suffix scope requires an effective-motion evidence session")
 
     run_dir = Phase5RunDirectory.create(
         output_root,
@@ -201,6 +230,10 @@ def run_online_experiment(
         "evidence_mode": "same_runtime" if evidence_session is not None else "synthetic",
         "decision_scene_version": None,
         "candidate_available_metrics": {},
+        "effective_motion_scope": effective_motion_scope,
+        "regeneration_count": 0,
+        "identifiability_counts": {},
+        "program_fingerprints": {},
     }
     run_dir.write_json("run_config.json", {**run_config, "status": "running"})
     rehearsal_results: list[RehearsalResult] = []
@@ -214,6 +247,8 @@ def run_online_experiment(
     stage = "candidate_validation"
 
     typed = _typed_candidates(candidates, scene_version)
+    prepared_candidates: Mapping[str, PreparedCandidate] = {}
+    diversity_decision: CandidateDiversityDecision | None = None
     if evidence_session is None:
         scene = SceneSnapshot(
             "p53-online",
@@ -230,14 +265,33 @@ def run_online_experiment(
                 f"candidate artifact scene {scene_version} does not match "
                 f"same-runtime decision scene {scene.scene_version}"
             )
-        typed = replace(
-            typed,
-            candidates=tuple(
-                replace(candidate, evidence=evidence_session.candidate_evidence(candidate))
-                for candidate in typed.candidates
-            ),
-        )
         run_config["decision_scene_version"] = scene.scene_version
+        if effective_motion_scope == "mission_suffix":
+            assert evidence_session is not None
+            prepared_set = _prepare_effective_candidates(evidence_session, typed)
+            typed = prepared_set.typed
+            prepared_candidates = prepared_set.prepared
+            diversity_decision = prepared_set.decision
+            if diversity_decision.requires_regeneration and candidate_regenerator is not None:
+                regenerated = candidate_regenerator(tuple(candidates), diversity_decision)
+                if not regenerated or _candidate_wave_signature(regenerated) == _candidate_wave_signature(candidates):
+                    raise ValueError("candidate regenerator must return a changed non-empty candidate wave")
+                typed = _typed_candidates(regenerated, scene_version)
+                prepared_set = _prepare_effective_candidates(evidence_session, typed)
+                typed = prepared_set.typed
+                prepared_candidates = prepared_set.prepared
+                diversity_decision = prepared_set.decision
+                run_config["regeneration_count"] = 1
+            elif diversity_decision.requires_regeneration:
+                run_config["regeneration_count"] = 0
+        else:
+            typed = replace(
+                typed,
+                candidates=tuple(
+                    replace(candidate, evidence=evidence_session.candidate_evidence(candidate))
+                    for candidate in typed.candidates
+                ),
+            )
     rehearsal_config = LiberoRehearsalConfig(
         config_path=config_path,
         object_name=object_name,
@@ -281,24 +335,46 @@ def run_online_experiment(
     provider_fn: RehearsalEvidenceProvider | None = provider if mode != "disabled" else None
     report: RehearsalArbitrationReport | None = None
     selection_history: list[dict[str, object]] = []
-    for request_index in range(selection_repeats):
-        selection_started = time.perf_counter()
-        report = select_with_rehearsal(
+    if diversity_decision is not None and diversity_decision.requires_regeneration:
+        reason = diversity_decision.reason or "candidate programs are semantically equivalent"
+        abstention = CandidateArbiter().abstain(
             typed.candidates,
-            scene,
-            CandidateArbiter(),
-            mode=mode,
-            provider=provider_fn,
-            evidence_cache=evidence_cache,
+            "CANDIDATE_SEMANTIC_EQUIVALENCE",
+            reason,
         )
-        selection_latency_ms += (time.perf_counter() - selection_started) * 1000.0
+        report = RehearsalArbitrationReport(
+            mode=mode,
+            baseline=abstention,
+            evidence_aware=None,
+            live=abstention,
+            evidence_candidates=typed.candidates,
+        )
         selection_history.append(
             {
-                "request_index": request_index,
+                "request_index": 0,
                 "provider_call_count": provider_call_count,
                 **_selection_payload(report, None),
             }
         )
+    else:
+        for request_index in range(selection_repeats):
+            selection_started = time.perf_counter()
+            report = select_with_rehearsal(
+                typed.candidates,
+                scene,
+                CandidateArbiter(),
+                mode=mode,
+                provider=provider_fn,
+                evidence_cache=evidence_cache,
+            )
+            selection_latency_ms += (time.perf_counter() - selection_started) * 1000.0
+            selection_history.append(
+                {
+                    "request_index": request_index,
+                    "provider_call_count": provider_call_count,
+                    **_selection_payload(report, None),
+                }
+            )
     assert report is not None
     run_config["provider_call_count"] = provider_call_count
     run_config["candidate_available_metrics"] = {
@@ -307,11 +383,29 @@ def run_online_experiment(
         else []
         for candidate in report.evidence_candidates
     }
+    if diversity_decision is not None:
+        run_config["identifiability_counts"] = _identifiability_counts(diversity_decision)
+        run_config["program_fingerprints"] = {
+            candidate_id: prepared.program.program_fingerprint
+            for candidate_id, prepared in prepared_candidates.items()
+        }
+        run_dir.write_json(
+            "results/candidate_identifiability.json",
+            [asdict(item) for item in diversity_decision.identifiability],
+        )
+        run_dir.write_json(
+            "results/effective_motion_programs.json",
+            [prepared.program.to_dict() for prepared in prepared_candidates.values()],
+        )
 
     feature_snapshots: tuple[CandidateFeatureSnapshot, ...] = ()
     if calibration_context is not None:
         feature_snapshots = tuple(
-            capture_feature_snapshot(candidate, calibration_context)
+            _capture_decision_snapshot(
+                candidate,
+                calibration_context,
+                prepared_candidates.get(candidate.candidate_id),
+            )
             for candidate in report.evidence_candidates
         )
         run_dir.write_json(
@@ -334,10 +428,16 @@ def run_online_experiment(
             selected = report.live.selected
             assert selected is not None
             physical_execution_started_at_ns = time.time_ns()
-            physical_result = evidence_session.execute(
-                selected,
-                typed.graphs[physical_candidate_id],
-            )
+            if effective_motion_scope == "mission_suffix":
+                effective_session = cast(EffectiveMotionEvidenceSession, evidence_session)
+                physical_result = effective_session.execute_prepared(
+                    prepared_candidates[physical_candidate_id]
+                )
+            else:
+                physical_result = evidence_session.execute(
+                    selected,
+                    typed.graphs[physical_candidate_id],
+                )
         elif physical_candidate_id is not None and physical_executor is not None:
             selected = report.live.selected
             assert selected is not None
@@ -365,10 +465,22 @@ def run_online_experiment(
             "results/cache_events.json",
             [asdict(event) for event in evidence_cache.events()],
         )
-    selection_payload = _selection_payload(report, physical_candidate_id)
+    selection_payload = _selection_payload(
+        report,
+        physical_candidate_id,
+        selected_program_fingerprint=(
+            prepared_candidates[physical_candidate_id].program.program_fingerprint
+            if physical_candidate_id is not None and physical_candidate_id in prepared_candidates
+            else None
+        ),
+    )
     selection_payload["provider_call_count"] = provider_call_count
     selection_payload["selection_latency_ms"] = selection_latency_ms
     selection_payload["selection_history"] = selection_history
+    selection_payload["effective_motion_scope"] = effective_motion_scope
+    selection_payload["regeneration_count"] = run_config["regeneration_count"]
+    selection_payload["identifiability_counts"] = run_config["identifiability_counts"]
+    selection_payload["program_fingerprints"] = run_config["program_fingerprints"]
     run_dir.write_json(
         "results/selection.json",
         selection_payload,
@@ -385,6 +497,10 @@ def run_online_experiment(
                 f"live_winner={physical_candidate_id}",
                 f"physical_execution_count={int(physical_execution_started_at_ns is not None)}",
                 f"evidence_mode={run_config['evidence_mode']}",
+                f"effective_motion_scope={effective_motion_scope}",
+                f"regeneration_count={run_config['regeneration_count']}",
+                f"identifiability_counts={json.dumps(run_config['identifiability_counts'], sort_keys=True)}",
+                f"program_fingerprints={json.dumps(run_config['program_fingerprints'], sort_keys=True)}",
                 f"decision_scene_version={run_config['decision_scene_version']}",
                 f"provider_call_count={provider_call_count}",
                 f"selection_latency_ms={selection_latency_ms:.3f}",
@@ -410,6 +526,10 @@ def run_online_experiment(
             "would_change_selection": report.would_change_selection,
             "physical_execution_count": int(physical_execution_started_at_ns is not None),
             "evidence_mode": run_config["evidence_mode"],
+            "effective_motion_scope": effective_motion_scope,
+            "regeneration_count": run_config["regeneration_count"],
+            "identifiability_counts": run_config["identifiability_counts"],
+            "program_fingerprints": run_config["program_fingerprints"],
             "decision_scene_version": run_config["decision_scene_version"],
             "provider_call_count": provider_call_count,
             "selection_latency_ms": selection_latency_ms,
@@ -436,6 +556,9 @@ def run_online_experiment(
         f"- cache_stores: {report.cache_stats.stores if report.cache_stats else 0}\n"
         f"- physical_execution_count: {int(physical_execution_started_at_ns is not None)}\n"
         f"- evidence_mode: {run_config['evidence_mode']}\n"
+        f"- effective_motion_scope: {effective_motion_scope}\n"
+        f"- regeneration_count: {run_config['regeneration_count']}\n"
+        f"- identifiability_counts: {run_config['identifiability_counts']}\n"
         f"- decision_scene_version: {run_config['decision_scene_version']}\n",
     )
     run_dir.finalize_manifest()
@@ -568,9 +691,91 @@ def _typed_candidates(
     return _TypedCandidateSet(tuple(typed), graphs, by_id)
 
 
+def _prepare_effective_candidates(
+    evidence_session: object,
+    typed: _TypedCandidateSet,
+) -> _PreparedCandidateSet:
+    """Prepare every candidate before selection in the retained live session."""
+
+    prepare = getattr(evidence_session, "prepare_candidate", None)
+    if not callable(prepare):
+        raise TypeError("mission_suffix scope requires an effective-motion evidence session")
+    prepared: dict[str, PreparedCandidate] = {}
+    candidates: list[GraphCandidate] = []
+    graphs: dict[str, MissionGraph] = {}
+    specs: dict[str, CandidateSpec] = {}
+    programs = []
+    for candidate in typed.candidates:
+        result = prepare(candidate, typed.graphs[candidate.candidate_id])
+        if not isinstance(result, PreparedCandidate):
+            raise TypeError("effective-motion evidence session must return PreparedCandidate")
+        if result.context.candidate != candidate:
+            raise ValueError("prepared candidate context does not match submitted candidate")
+        if result.evidence.geometry is None:
+            raise ValueError("prepared candidate requires geometry evidence")
+        prepared[candidate.candidate_id] = result
+        candidates.append(replace(candidate, evidence=result.evidence))
+        graphs[candidate.candidate_id] = result.materialized_graph
+        specs[candidate.candidate_id] = replace(
+            typed.specs[candidate.candidate_id],
+            graph=mission_graph_to_dict(result.materialized_graph),
+        )
+        programs.append(result.program)
+    prepared_typed = _TypedCandidateSet(tuple(candidates), graphs, specs)
+    decision = CandidateDiversityValidator().inspect(tuple(programs), prepared_typed.candidates)
+    return _PreparedCandidateSet(prepared_typed, prepared, decision)
+
+
+def _candidate_wave_signature(candidates: Sequence[CandidateSpec]) -> tuple[tuple[str, str], ...]:
+    """Compare regenerated proposals structurally without trusting their agent labels."""
+
+    return tuple(
+        (
+            candidate.candidate_id,
+            json.dumps(candidate.graph, sort_keys=True, separators=(",", ":")),
+        )
+        for candidate in candidates
+    )
+
+
+def _identifiability_counts(decision: CandidateDiversityDecision) -> dict[str, int]:
+    values = decision.identifiability
+    return {
+        "candidate_count": len(values),
+        "semantic_equivalent_count": sum(
+            value.candidate_semantic_equivalent for value in values
+        ),
+        "evidence_identical_count": sum(
+            value.candidate_evidence_identical for value in values
+        ),
+        "selection_identifiable_count": sum(
+            value.selection_identifiable for value in values
+        ),
+    }
+
+
+def _capture_decision_snapshot(
+    candidate: GraphCandidate,
+    context: CalibrationCollectionContext,
+    prepared: PreparedCandidate | None,
+) -> CandidateFeatureSnapshot:
+    """Preserve the legacy call shape unless full-program provenance is required."""
+
+    if prepared is None:
+        return capture_feature_snapshot(candidate, context)
+    return capture_feature_snapshot(
+        candidate,
+        context,
+        execution_graph_fingerprint=prepared.program.execution_graph_fingerprint,
+        program_fingerprint=prepared.program.program_fingerprint,
+    )
+
+
 def _selection_payload(
     report: RehearsalArbitrationReport,
     physical_candidate_id: str | None,
+    *,
+    selected_program_fingerprint: str | None = None,
 ) -> dict[str, object]:
     return {
         "mode": report.mode,
@@ -585,6 +790,7 @@ def _selection_payload(
         "live_winner": _winner_id(report.live),
         "live_selection_basis": report.live.selection_basis,
         "physical_candidate_id": physical_candidate_id,
+        "selected_program_fingerprint": selected_program_fingerprint,
         "would_change_selection": report.would_change_selection,
         "attached_candidate_ids": report.attached_candidate_ids,
         "evidence_rejections": report.evidence_rejections,
@@ -996,6 +1202,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-root", default="outputs/phase5")
     parser.add_argument("--object-name", default="akita black bowl")
     parser.add_argument("--target-name", default="plate")
+    parser.add_argument(
+        "--effective-motion-scope",
+        choices=("subgraph", "mission_suffix"),
+        default="subgraph",
+    )
     parser.add_argument("--skip-api-servers", action="store_true")
     return parser.parse_args()
 
@@ -1013,6 +1224,31 @@ def main() -> None:
 
             config = DictLoader.load(args.config_path)
             servers = _start_api_servers(config.get("api_servers"))
+        session: PreExecutionEvidenceSession | None = None
+        executor: PhysicalExecutor | None = None
+        if args.effective_motion_scope == "mission_suffix":
+            from capmas.evaluation.libero_evidence_session import (
+                LiveLiberoEvidenceSession,
+                LiveLiberoEvidenceSessionConfig,
+            )
+
+            session = LiveLiberoEvidenceSession(
+                LiveLiberoEvidenceSessionConfig(
+                    config_path=args.config_path,
+                    object_name=args.object_name,
+                    target_name=args.target_name,
+                    seed=args.seed,
+                    max_steps=args.max_steps,
+                )
+            )
+        else:
+            executor = _build_live_executor(
+                config_path=args.config_path,
+                object_name=args.object_name,
+                target_name=args.target_name,
+                max_steps=args.max_steps,
+                seed=args.seed,
+            )
         outcome = run_online_experiment(
             config_path=args.config_path,
             candidates=candidates,
@@ -1031,13 +1267,9 @@ def main() -> None:
             object_name=args.object_name,
             target_name=args.target_name,
             gpu=args.gpu,
-            physical_executor=_build_live_executor(
-                config_path=args.config_path,
-                object_name=args.object_name,
-                target_name=args.target_name,
-                max_steps=args.max_steps,
-                seed=args.seed,
-            ),
+            physical_executor=executor,
+            evidence_session=session,
+            effective_motion_scope=args.effective_motion_scope,
         )
     finally:
         for process in servers:

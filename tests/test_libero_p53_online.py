@@ -12,15 +12,30 @@ from capmas.contracts.candidates import (
     CandidateEvidence,
     EvidenceDimension,
     GeometryEvidence,
+    GraphCandidate,
     PerceptionEvidence,
     subgraph_fingerprint,
 )
 from capmas.contracts.core import SkillRef
-from capmas.contracts.graph import CheckpointSpec, MissionGraph, SubgraphNodeSpec, SubgraphSpec
+from capmas.contracts.graph import (
+    CheckpointSpec,
+    MissionEdge,
+    MissionGraph,
+    MotionIntent,
+    SubgraphNodeSpec,
+    SubgraphSpec,
+)
 from capmas.contracts.scene import ObjectTrack, SceneSnapshot
+from capmas.evaluation.libero_evidence_session import PreparedCandidate
 from capmas.evaluation.rehearsal import RehearsalResult
 from capmas.evaluation.rehearsal_evidence import RehearsalPoolConfig
 from capmas.graph.serialization import mission_graph_to_dict
+from capmas.perception.effective_motion import (
+    CandidateExecutionContext,
+    bind_effective_motion,
+    execution_graph_fingerprint,
+    materialize_execution_graph,
+)
 from scripts.run_libero_p53_online import (
     _physical_result_payload,
     _scene_debug_payload,
@@ -28,6 +43,7 @@ from scripts.run_libero_p53_online import (
     load_online_candidates,
     run_online_experiment,
 )
+from scripts.run_libero_p53_rehearsal import CandidateSpec
 
 
 class _FakeEvidenceSession:
@@ -87,6 +103,67 @@ class _FakeEvidenceSession:
     def close(self) -> None:
         self.events.append("close")
         self.closed = True
+
+
+class _EffectiveSession:
+    """Simulator-free mission-suffix session used by the online runner tests."""
+
+    def __init__(self, scene: SceneSnapshot) -> None:
+        self.scene = scene
+        self.events: list[str] = []
+
+    def start(self) -> SceneSnapshot:
+        self.events.append("start")
+        return self.scene
+
+    def prepare_candidate(
+        self,
+        candidate: GraphCandidate,
+        graph: MissionGraph,
+    ) -> PreparedCandidate:
+        self.events.append(f"prepare:{candidate.candidate_id}")
+        context = CandidateExecutionContext(
+            candidate=candidate,
+            mission_graph=graph,
+            selected_subgraph_id=candidate.subgraph.subgraph_id,
+            execution_graph_fingerprint=execution_graph_fingerprint(graph),
+        )
+        program = bind_effective_motion(context, self.scene)
+        unknown = lambda name: EvidenceDimension(name, "unknown", None, None, "fake")
+        geometry = GeometryEvidence(
+            grasp_quality=unknown("grasp_quality"),
+            reachability=unknown("reachability"),
+            clearance=unknown("clearance"),
+            collision_risk=unknown("collision_risk"),
+            candidate_fingerprint=subgraph_fingerprint(candidate.subgraph),
+            scene_version=self.scene.scene_version,
+            map_version=None,
+            map_backend="fake",
+            provider="fake",
+            provider_version="1",
+            captured_at_ns=self.scene.publish_timestamp_ns,
+            latency_ms=0.0,
+            execution_graph_fingerprint=program.execution_graph_fingerprint,
+            program_fingerprint=program.program_fingerprint,
+            program_scope="mission_suffix",
+        )
+        return PreparedCandidate(
+            context=context,
+            program=program,
+            materialized_graph=materialize_execution_graph(program, graph),
+            evidence=CandidateEvidence(
+                geometry=geometry,
+                available_metrics=("geometry",),
+                scene_version=self.scene.scene_version,
+            ),
+        )
+
+    def execute_prepared(self, prepared: PreparedCandidate) -> object:
+        self.events.append(f"execute:{prepared.context.candidate.candidate_id}")
+        return {"graph": prepared.materialized_graph.mission_id}
+
+    def close(self) -> None:
+        self.events.append("close")
 
 
 def _graph_payload(description: str) -> dict[str, object]:
@@ -186,6 +263,191 @@ def _session_scene(version: int = 4) -> SceneSnapshot:
             ),
         ),
     )
+
+
+def _effective_candidate_specs(*, distinct: bool = False) -> tuple[CandidateSpec, CandidateSpec]:
+    def spec(candidate_id: str, description: str, z_approach: float) -> CandidateSpec:
+        pick = SubgraphSpec(
+            subgraph_id="sg_pick",
+            subgoal_id="pick_bowl",
+            description=description,
+            nodes=(
+                SubgraphNodeSpec(
+                    node_id="pick",
+                    description=description,
+                    skill_calls=(
+                        SkillCall(SkillRef("sample_grasp_pose", "capx-compat-1"), {"object_name": "bowl"}),
+                        SkillCall(
+                            SkillRef("goto_pose", "capx-compat-1"),
+                            {
+                                "position": {"call_index": 0, "path": ["result", 0]},
+                                "quaternion_wxyz": {"call_index": 0, "path": ["result", 1]},
+                                "z_approach": z_approach,
+                            },
+                        ),
+                        SkillCall(SkillRef("close_gripper", "capx-compat-1"), {}),
+                        SkillCall(
+                            SkillRef("lift_after_grasp", "capx-compat-1"),
+                            {
+                                "position": {"call_index": 0, "path": ["result", 0]},
+                                "quaternion_wxyz": {"call_index": 0, "path": ["result", 1]},
+                                "z_lift": 0.12,
+                            },
+                        ),
+                    ),
+                    postconditions=("object_in_gripper(bowl)",),
+                    motion_intent=MotionIntent(
+                        "grasp",
+                        object_track_id="bowl",
+                        target_track_id="bowl",
+                        approach_vector_xyz=(0.0, 0.0, -1.0),
+                        target_pose_wxyz_xyz=(1.0, 0.0, 0.0, 0.0, 0.4, 0.0, 0.3),
+                    ),
+                ),
+            ),
+            edges=(),
+            entry_node="pick",
+            success_nodes=("pick",),
+            failure_nodes=("pick",),
+            checkpoints=(CheckpointSpec("pick_check", ("object_in_gripper(bowl)",)),),
+        )
+        place = SubgraphSpec(
+            subgraph_id="sg_place",
+            subgoal_id="place_bowl",
+            description="Place bowl.",
+            nodes=(
+                SubgraphNodeSpec(
+                    node_id="place",
+                    description="Place bowl.",
+                    skill_calls=(
+                        SkillCall(
+                            SkillRef("goto_pose", "capx-compat-1"),
+                            {
+                                "position": [0.6, 0.25, 0.04],
+                                "quaternion_wxyz": [1.0, 0.0, 0.0, 0.0],
+                                "z_approach": 0.08,
+                            },
+                        ),
+                        SkillCall(SkillRef("open_gripper", "capx-compat-1"), {}),
+                    ),
+                    postconditions=("object_at_target(bowl,plate)",),
+                    motion_intent=MotionIntent(
+                        "place",
+                        object_track_id="bowl",
+                        target_track_id="plate",
+                        approach_vector_xyz=(0.0, 0.0, -1.0),
+                        target_pose_wxyz_xyz=(1.0, 0.0, 0.0, 0.0, 0.6, 0.25, 0.04),
+                    ),
+                ),
+            ),
+            edges=(),
+            entry_node="place",
+            success_nodes=("place",),
+            failure_nodes=("place",),
+            checkpoints=(CheckpointSpec("place_check", ("object_at_target(bowl,plate)",)),),
+        )
+        graph = MissionGraph(
+            mission_id=f"mission-{candidate_id}",
+            task="Put the bowl on the plate.",
+            subgraphs=(pick, place),
+            edges=(MissionEdge("sg_pick", "sg_place", "success"),),
+            bindings=(),
+            entry_subgraph="sg_pick",
+            success_subgraphs=("sg_place",),
+            failure_subgraphs=("sg_pick",),
+            parent_scene_version=4,
+        )
+        raw_graph = mission_graph_to_dict(graph)
+        parsed_graph = online_module.mission_graph_from_dict(raw_graph)
+        return CandidateSpec(
+            candidate_id=candidate_id,
+            graph=raw_graph,
+            task_id="object-6",
+            scene_version=4,
+            candidate_fingerprint=subgraph_fingerprint(parsed_graph.subgraph("sg_pick")),
+        )
+
+    return (
+        spec("candidate-a", "candidate a", 0.05),
+        spec("candidate-b", "candidate b", 0.10 if distinct else 0.05),
+    )
+
+
+def test_duplicate_programs_abstain_without_physical_execution(tmp_path) -> None:
+    session = _EffectiveSession(_session_scene())
+
+    outcome = run_online_experiment(
+        config_path="libero.yaml",
+        candidates=_effective_candidate_specs(),
+        seed=7,
+        scene_version=4,
+        mode="disabled",
+        output_root=tmp_path / "runs",
+        pool_config=RehearsalPoolConfig(max_workers=1, timeout_s=1.0),
+        evidence_session=session,
+        effective_motion_scope="mission_suffix",
+    )
+
+    identifiability = json.loads(
+        (outcome.run_dir.path / "results/candidate_identifiability.json").read_text()
+    )
+    run_config = json.loads((outcome.run_dir.path / "run_config.json").read_text())
+    selection = json.loads((outcome.run_dir.path / "results/selection.json").read_text())
+    summary = json.loads((outcome.run_dir.path / "summary.json").read_text())
+    runner_log = (outcome.run_dir.path / "logs/runner.log").read_text()
+    assert outcome.physical_candidate_id is None
+    assert outcome.report.live.selection_basis == "candidate_semantic_equivalence"
+    assert identifiability[0]["candidate_semantic_equivalent"] is True
+    assert selection["effective_motion_scope"] == "mission_suffix"
+    assert selection["regeneration_count"] == 0
+    assert selection["program_fingerprints"] == run_config["program_fingerprints"]
+    assert summary["identifiability_counts"] == run_config["identifiability_counts"]
+    assert "identifiability_counts=" in runner_log
+    assert not any(event.startswith("execute:") for event in session.events)
+
+
+def test_one_regenerated_wave_executes_prepared_winner(tmp_path) -> None:
+    session = _EffectiveSession(_session_scene())
+    regeneration_calls: list[object] = []
+
+    outcome = run_online_experiment(
+        config_path="libero.yaml",
+        candidates=_effective_candidate_specs(),
+        seed=7,
+        scene_version=4,
+        mode="disabled",
+        output_root=tmp_path / "runs",
+        pool_config=RehearsalPoolConfig(max_workers=1, timeout_s=1.0),
+        evidence_session=session,
+        effective_motion_scope="mission_suffix",
+        candidate_regenerator=lambda specs, decision: (
+            regeneration_calls.append((specs, decision)),
+            _effective_candidate_specs(distinct=True),
+        )[1],
+    )
+
+    selection = json.loads((outcome.run_dir.path / "results/selection.json").read_text())
+    assert len(regeneration_calls) == 1
+    assert outcome.physical_candidate_id is not None
+    assert selection["selected_program_fingerprint"]
+    assert any(event.startswith("execute:") for event in session.events)
+
+
+def test_online_cli_exposes_mission_suffix_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_libero_p53_online.py",
+            "--config-path",
+            "libero.yaml",
+            "--candidate-artifact",
+            "candidates.json",
+            "--effective-motion-scope",
+            "mission_suffix",
+        ],
+    )
+
+    assert online_module.parse_args().effective_motion_scope == "mission_suffix"
 
 
 def test_online_runner_collects_session_evidence_before_execution(tmp_path) -> None:

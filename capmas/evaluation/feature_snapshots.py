@@ -51,6 +51,8 @@ def capture_feature_snapshot(
     context: CalibrationCollectionContext,
     *,
     map_version: int | None = None,
+    execution_graph_fingerprint: str | None = None,
+    program_fingerprint: str | None = None,
     clock: Callable[[], int] = time.time_ns,
 ) -> CandidateFeatureSnapshot:
     """Project only evidence available when the Arbiter made its decision."""
@@ -91,6 +93,21 @@ def capture_feature_snapshot(
             _validate_evidence_scene(geometry.scene_version, candidate.parent_scene_version)
             if geometry.candidate_fingerprint != fingerprint:
                 raise ValueError("geometry candidate fingerprint does not match candidate")
+            if geometry.program_scope == "mission_suffix":
+                if not execution_graph_fingerprint:
+                    raise ValueError(
+                        "mission-suffix geometry requires an execution graph fingerprint"
+                    )
+                if not program_fingerprint:
+                    raise ValueError("mission-suffix geometry requires a program fingerprint")
+                if geometry.execution_graph_fingerprint != execution_graph_fingerprint:
+                    raise ValueError(
+                        "geometry execution graph fingerprint does not match prepared graph"
+                    )
+                if geometry.program_fingerprint != program_fingerprint:
+                    raise ValueError(
+                        "geometry program fingerprint does not match prepared program"
+                    )
             if map_version is not None and geometry.map_version != map_version:
                 raise ValueError("geometry map version does not match collection context")
             if effective_map_version is None:
@@ -98,6 +115,7 @@ def capture_feature_snapshot(
             providers["geometry"] = geometry.provider
             providers["geometry_version"] = geometry.provider_version
             refs.extend(reference.uri for reference in geometry.artifact_refs)
+            refs.extend(reference.uri for reference in geometry.segment_artifact_refs)
             for name in _GEOMETRY_FEATURES:
                 dimension = getattr(geometry, name)
                 features[name] = dimension.score if dimension.status != "unknown" else None
@@ -156,6 +174,13 @@ def capture_feature_snapshot(
             "changed": rewrite.changed,
             "rewrite_count": rewrite.rewrite_count,
             "operations": list(rewrite.operations),
+            "program_scope": (
+                evidence.geometry.program_scope
+                if evidence is not None and evidence.geometry is not None
+                else "subgraph"
+            ),
+            "execution_graph_fingerprint": execution_graph_fingerprint,
+            "program_fingerprint": program_fingerprint,
         },
     )
 

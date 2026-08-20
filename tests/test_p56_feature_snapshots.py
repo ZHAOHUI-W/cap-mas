@@ -230,6 +230,32 @@ def test_snapshot_geometry_lineage_inherits_map_and_preserves_provider_version()
     assert snapshot.evidence_providers["geometry_version"] == "1.0"
 
 
+def test_snapshot_requires_and_records_mission_suffix_geometry_provenance() -> None:
+    evidence = _mixed_evidence()
+    assert evidence.geometry is not None
+    geometry = replace(
+        evidence.geometry,
+        execution_graph_fingerprint="execution-graph",
+        program_fingerprint="effective-program",
+        program_scope="mission_suffix",
+    )
+    candidate = _candidate(replace(evidence, geometry=geometry))
+
+    with pytest.raises(ValueError, match="execution graph fingerprint"):
+        capture_feature_snapshot(candidate, _context())
+
+    snapshot = capture_feature_snapshot(
+        candidate,
+        _context(),
+        execution_graph_fingerprint="execution-graph",
+        program_fingerprint="effective-program",
+    )
+
+    assert snapshot.rewrite_metadata["program_scope"] == "mission_suffix"
+    assert snapshot.rewrite_metadata["execution_graph_fingerprint"] == "execution-graph"
+    assert snapshot.rewrite_metadata["program_fingerprint"] == "effective-program"
+
+
 def test_snapshot_rejects_declared_evidence_without_aggregate_scene_version() -> None:
     evidence = CandidateEvidence(
         available_metrics=("rehearsal",),
