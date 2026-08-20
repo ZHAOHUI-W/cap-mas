@@ -286,6 +286,33 @@ class CandidateRejection:
 
 
 @dataclass(frozen=True)
+class CandidateIdentifiability:
+    """Whether one candidate differs materially from its proposal peers."""
+
+    candidate_id: str
+    semantic_signature: str
+    program_fingerprint: str | None
+    candidate_semantic_equivalent: bool
+    candidate_evidence_identical: bool
+    selection_identifiable: bool
+    abstention_reason: str | None
+
+    def __post_init__(self) -> None:
+        if not self.candidate_id:
+            raise ValueError("identifiability candidate id must not be empty")
+        if not self.semantic_signature:
+            raise ValueError("identifiability semantic signature must not be empty")
+        if self.program_fingerprint is not None and not self.program_fingerprint:
+            raise ValueError("identifiability program fingerprint must not be empty")
+        if self.selection_identifiable and (
+            self.candidate_semantic_equivalent or self.candidate_evidence_identical
+        ):
+            raise ValueError("identifiable candidate must differ in semantics and evidence")
+        if self.abstention_reason is not None and not self.abstention_reason:
+            raise ValueError("identifiability abstention reason must not be empty")
+
+
+@dataclass(frozen=True)
 class ArbitrationResult:
     selected: GraphCandidate | None
     considered: tuple[GraphCandidate, ...] = ()
@@ -298,6 +325,7 @@ class ArbitrationResult:
 __all__ = [
     "ArbitrationResult",
     "CandidateEvidence",
+    "CandidateIdentifiability",
     "CandidateRejection",
     "CandidateRewriteReport",
     "EvidenceDimension",

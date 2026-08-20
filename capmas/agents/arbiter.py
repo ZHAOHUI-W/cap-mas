@@ -184,6 +184,31 @@ class CandidateArbiter:
             score_breakdowns=score_breakdowns,
         )
 
+    @staticmethod
+    def abstain(
+        candidates: Iterable[GraphCandidate],
+        code: str,
+        reason: str,
+    ) -> ArbitrationResult:
+        """Return a typed no-submit result without validating or ranking candidates."""
+
+        if not code:
+            raise ValueError("abstention code must not be empty")
+        if not reason:
+            raise ValueError("abstention reason must not be empty")
+        proposals = tuple(candidates)
+        return ArbitrationResult(
+            selected=None,
+            considered=proposals,
+            rejections=(CandidateRejection("candidate-wave", code, reason),),
+            selection_basis=(
+                "candidate_semantic_equivalence"
+                if code == "CANDIDATE_SEMANTIC_EQUIVALENCE"
+                else "typed_abstention"
+            ),
+            tie_broken=False,
+        )
+
     def score(self, candidate: GraphCandidate) -> float:
         return self._score_breakdown(candidate)[0]
 

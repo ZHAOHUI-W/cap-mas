@@ -112,6 +112,22 @@ def test_collision_failure_is_a_hard_gate_before_soft_scoring() -> None:
     assert result.rejections[0].code == "GEOMETRY_GATE"
 
 
+def test_typed_semantic_abstention_selects_nothing() -> None:
+    candidates = (_candidate("policy-0"), _candidate("safety"))
+
+    result = CandidateArbiter().abstain(
+        candidates,
+        "CANDIDATE_SEMANTIC_EQUIVALENCE",
+        "duplicate motion program",
+    )
+
+    assert result.selected is None
+    assert result.considered == candidates
+    assert result.selection_basis == "candidate_semantic_equivalence"
+    assert result.rejections[0].candidate_id == "candidate-wave"
+    assert result.rejections[0].code == "CANDIDATE_SEMANTIC_EQUIVALENCE"
+
+
 def test_unknown_geometry_dimension_is_excluded_not_converted_to_zero() -> None:
     candidate = _candidate("unknown")
     geometry = _geometry(

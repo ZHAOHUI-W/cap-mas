@@ -1,7 +1,11 @@
 """Agent role interfaces and deterministic/LLM proposal implementations."""
 
 from capmas.agents.arbiter import CandidateArbiter
-from capmas.agents.manager import LLMTopologyManager, LLMMissionManager, SimpleMissionManager
+from capmas.agents.candidate_diversity import (
+    CandidateDiversityDecision,
+    CandidateDiversityValidator,
+)
+from capmas.agents.manager import LLMMissionManager, LLMTopologyManager, SimpleMissionManager
 from capmas.agents.policy import (
     CallableGraphPolicyAgent,
     CallablePolicyAgent,
@@ -10,12 +14,14 @@ from capmas.agents.policy import (
 )
 
 __all__ = [
-    "CandidateArbiter",
     "CallableGraphPolicyAgent",
     "CallablePolicyAgent",
+    "CandidateArbiter",
+    "CandidateDiversityDecision",
+    "CandidateDiversityValidator",
     "LLMGraphPolicyAgent",
-    "LLMStagedGraphPolicyAgent",
     "LLMMissionManager",
+    "LLMStagedGraphPolicyAgent",
     "LLMTopologyManager",
     "SimpleMissionManager",
 ]
