@@ -849,6 +849,15 @@ reason to relabel abstentions or alter the fixed block. Any follow-up must use
 a new pre-registered collection after addressing candidate-specific evidence
 and safe submission rate.
 
+The accepted first repair is object-6 P5.3.2: a pure effective motion program
+will bind the full selected mission graph at the decision boundary, preview
+its grasp/lift/transfer/place/release segments, and materialize those same
+poses for execution. Candidate semantic equivalence and evidence identity
+become explicit audit fields; a duplicate candidate wave receives one bounded
+regeneration request or a typed abstention rather than an evidence tie-break.
+The implementation boundary and later ten-seed capability gate are specified
+in [`2026-08-20-p5-3-2-object6-effective-motion-design.md`](superpowers/specs/2026-08-20-p5-3-2-object6-effective-motion-design.md).
+
 ## Phase 6 — Memory Controller learning
 
 - Add verified terminal and intermediate learning-return calculation.

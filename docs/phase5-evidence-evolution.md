@@ -1191,3 +1191,17 @@ evidence transport but inadequate candidate-specific geometry/skill evidence
 and safe-submission coverage. These results close the fixed collection without
 post-hoc seed replacement; a later attempt requires a separate pre-registered
 block after that upstream issue is addressed.
+
+### P5.3.2 object-6 motion/evidence repair (accepted design)
+
+The qualification diagnosis also exposed a scope mismatch: the Arbiter scored
+the local pick candidate while the label came from the complete pick-and-place
+graph. The accepted object-6 P5.3.2 design introduces a decision-time,
+read-only effective motion program that binds the entire candidate execution
+graph, previews grasp through release segments, and materializes the same
+bound poses for CAP-X execution. It also records semantic equivalence,
+evidence identity, and selection identifiability, and rejects semantically
+duplicate candidate waves before evidence scoring. The design is documented in
+[`2026-08-20-p5-3-2-object6-effective-motion-design.md`](superpowers/specs/2026-08-20-p5-3-2-object6-effective-motion-design.md).
+It does not modify P5.6D rows, calibration, or the separate spatial-0/goal-1
+P5.3.2 handoffs.

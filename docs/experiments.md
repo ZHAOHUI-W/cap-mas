@@ -936,3 +936,10 @@ validated, while candidate-specific evidence and a sufficiently high safe
 submission rate remain separate unresolved problems. The block remains an
 immutable audit artifact; any replacement collection must be separately
 pre-registered rather than replacing selected seeds after the outcome.
+
+The next work package is the object-6 P5.3.2 effective-motion repair. It will
+use a new independently pre-registered capability manifest only after unit and
+integration validation of full-graph, decision-time motion binding. The P5.6D
+qualification artifacts are not input rows for that experiment and must remain
+unchanged; its diagnostic fields are captured in
+[`2026-08-20-p5-3-2-object6-effective-motion-design.md`](superpowers/specs/2026-08-20-p5-3-2-object6-effective-motion-design.md).
