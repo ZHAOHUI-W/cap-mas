@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import SimpleNamespace
 
 import pytest
 
+from capmas.contracts.action import SkillCall, SkillOutputRef
 from capmas.contracts.candidates import (
     CandidateEvidence,
     EvidenceDimension,
@@ -13,8 +14,14 @@ from capmas.contracts.candidates import (
     PerceptionEvidence,
     rewrite_report_for,
 )
-from capmas.contracts.core import EpisodeHandle
-from capmas.contracts.graph import MissionGraph, SubgraphNodeSpec, SubgraphSpec
+from capmas.contracts.core import EpisodeHandle, SkillRef
+from capmas.contracts.graph import (
+    MissionEdge,
+    MissionGraph,
+    MotionIntent,
+    SubgraphNodeSpec,
+    SubgraphSpec,
+)
 from capmas.contracts.scene import EpisodeStart, ObjectTrack, SceneSnapshot
 from capmas.contracts.trace import GraphExecutionEvent
 from capmas.evaluation.libero_evidence_session import (
@@ -89,6 +96,106 @@ def _graph() -> MissionGraph:
         failure_subgraphs=("sg_pick",),
         parent_scene_version=1,
     )
+
+
+def _pick_place_candidate_and_graph(scene_version: int) -> tuple[GraphCandidate, MissionGraph]:
+    pick = SubgraphSpec(
+        subgraph_id="sg_pick",
+        subgoal_id="pick_butter",
+        description="Pick butter.",
+        nodes=(
+            SubgraphNodeSpec(
+                node_id="pick",
+                description="Sample, grasp, and lift butter.",
+                skill_calls=(
+                    SkillCall(SkillRef("sample_grasp_pose", "capx-compat-1"), {"object_name": "butter"}),
+                    SkillCall(
+                        SkillRef("goto_pose", "capx-compat-1"),
+                        {
+                            "position": SkillOutputRef(0, ("result", 0)),
+                            "quaternion_wxyz": SkillOutputRef(0, ("result", 1)),
+                            "z_approach": 0.05,
+                        },
+                    ),
+                    SkillCall(SkillRef("close_gripper", "capx-compat-1"), {}),
+                    SkillCall(
+                        SkillRef("lift_after_grasp", "capx-compat-1"),
+                        {
+                            "position": SkillOutputRef(0, ("result", 0)),
+                            "quaternion_wxyz": SkillOutputRef(0, ("result", 1)),
+                            "z_lift": 0.12,
+                        },
+                    ),
+                ),
+                postconditions=("object_in_gripper(butter)",),
+                motion_intent=MotionIntent(
+                    "grasp",
+                    object_track_id="butter",
+                    target_track_id="butter",
+                    approach_vector_xyz=(0.0, 0.0, -1.0),
+                    target_pose_wxyz_xyz=(1.0, 0.0, 0.0, 0.0, 0.5, 0.2, 0.1),
+                ),
+            ),
+        ),
+        edges=(),
+        entry_node="pick",
+        success_nodes=("pick",),
+        failure_nodes=("pick",),
+    )
+    place = SubgraphSpec(
+        subgraph_id="sg_place",
+        subgoal_id="place_butter",
+        description="Place butter.",
+        nodes=(
+            SubgraphNodeSpec(
+                node_id="place",
+                description="Move and release butter.",
+                skill_calls=(
+                    SkillCall(
+                        SkillRef("goto_pose", "capx-compat-1"),
+                        {
+                            "position": [0.6, 0.25, 0.04],
+                            "quaternion_wxyz": [0.0, 1.0, 0.0, 0.0],
+                            "z_approach": 0.08,
+                        },
+                    ),
+                    SkillCall(SkillRef("open_gripper", "capx-compat-1"), {}),
+                ),
+                postconditions=("object_at_target(butter,basket)", "gripper_open()"),
+                motion_intent=MotionIntent(
+                    "place",
+                    object_track_id="butter",
+                    target_track_id="basket",
+                    approach_vector_xyz=(0.0, 0.0, -1.0),
+                    target_pose_wxyz_xyz=(0.0, 1.0, 0.0, 0.0, 0.6, 0.25, 0.04),
+                ),
+            ),
+        ),
+        edges=(),
+        entry_node="place",
+        success_nodes=("place",),
+        failure_nodes=("place",),
+    )
+    graph = MissionGraph(
+        mission_id="pick-place-butter",
+        task="Put the butter in the basket.",
+        subgraphs=(pick, place),
+        edges=(MissionEdge("sg_pick", "sg_place", "success"),),
+        bindings=(),
+        entry_subgraph="sg_pick",
+        success_subgraphs=("sg_place",),
+        failure_subgraphs=(),
+        parent_scene_version=scene_version,
+    )
+    candidate = GraphCandidate(
+        candidate_id="pick:policy-0:0",
+        subgraph=pick,
+        parent_scene_version=scene_version,
+        producer_agent="policy-0",
+        raw_subgraph=pick,
+        rewrite_report=rewrite_report_for(pick, pick),
+    )
+    return candidate, graph
 
 
 @dataclass
@@ -245,6 +352,31 @@ def test_session_executes_once_and_closes_idempotently() -> None:
     session.close()
 
     assert backend.stopped is True
+
+
+def test_session_prepares_geometry_and_executes_the_same_materialized_graph() -> None:
+    session, _backend = _session()
+    scene = session.start()
+    candidate, graph = _pick_place_candidate_and_graph(scene.scene_version)
+
+    prepared = session.prepare_candidate(candidate, graph)
+    result = session.execute_prepared(prepared)
+
+    assert prepared.evidence.geometry is not None
+    assert prepared.evidence.geometry.program_fingerprint == prepared.program.program_fingerprint
+    assert result["graph"] == prepared.materialized_graph
+
+
+def test_session_rejects_tampered_prepared_graph() -> None:
+    session, _backend = _session()
+    scene = session.start()
+    candidate, graph = _pick_place_candidate_and_graph(scene.scene_version)
+    prepared = session.prepare_candidate(candidate, graph)
+
+    with pytest.raises(ValueError, match="execution graph fingerprint"):
+        session.execute_prepared(
+            replace(prepared, materialized_graph=replace(prepared.materialized_graph, task="tampered"))
+        )
 
 
 def test_execution_payload_uses_graph_events_for_realized_horizon() -> None:

@@ -13,6 +13,10 @@ from capmas.evaluation.candidate_identity import (
     candidate_identity_from_raw_graph,
     raw_graph_fingerprint,
 )
+from capmas.evaluation.libero_evidence_session import (
+    EffectiveMotionEvidenceSession,
+    PreparedCandidate,
+)
 from capmas.evaluation.capability import (
     CapabilityCase,
     CapabilityDiagnosticReport,
@@ -161,6 +165,8 @@ __all__ = [  # noqa: RUF022
     "CandidateIdentity",
     "candidate_identity_from_raw_graph",
     "raw_graph_fingerprint",
+    "EffectiveMotionEvidenceSession",
+    "PreparedCandidate",
     "CapabilityCase",
     "CapabilityDiagnosticReport",
     "CapabilityRunResult",

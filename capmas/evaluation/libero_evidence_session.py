@@ -22,6 +22,13 @@ from capmas.contracts.candidates import (
 )
 from capmas.contracts.graph import MissionGraph
 from capmas.contracts.scene import EpisodeStart, SceneSnapshot
+from capmas.perception.effective_motion import (
+    CandidateExecutionContext,
+    EffectiveMotionProgram,
+    bind_effective_motion,
+    execution_graph_fingerprint,
+    materialize_execution_graph,
+)
 
 
 class PreExecutionEvidenceSession(Protocol):
@@ -34,6 +41,28 @@ class PreExecutionEvidenceSession(Protocol):
     def execute(self, candidate: GraphCandidate, graph: MissionGraph) -> object: ...
 
     def close(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class PreparedCandidate:
+    """One candidate whose program, evidence, and execution graph are bound together."""
+
+    context: CandidateExecutionContext
+    program: EffectiveMotionProgram
+    materialized_graph: MissionGraph
+    evidence: CandidateEvidence
+
+
+class EffectiveMotionEvidenceSession(PreExecutionEvidenceSession, Protocol):
+    """A session that can bind preview evidence to the exact executed graph."""
+
+    def prepare_candidate(
+        self,
+        candidate: GraphCandidate,
+        graph: MissionGraph,
+    ) -> PreparedCandidate: ...
+
+    def execute_prepared(self, prepared: PreparedCandidate) -> object: ...
 
 
 @dataclass(frozen=True)
@@ -141,6 +170,79 @@ class LiveLiberoEvidenceSession:
 
         scene = self._require_decision_scene()
         self._require_decision_version(candidate, scene)
+        return self._collect_candidate_evidence(candidate, scene)
+
+    def prepare_candidate(
+        self,
+        candidate: GraphCandidate,
+        graph: MissionGraph,
+    ) -> PreparedCandidate:
+        """Bind the full success path used for both preview and physical execution."""
+
+        scene = self._require_decision_scene()
+        self._require_decision_version(candidate, scene)
+        context = CandidateExecutionContext(
+            candidate=candidate,
+            mission_graph=graph,
+            selected_subgraph_id=candidate.subgraph.subgraph_id,
+            execution_graph_fingerprint=execution_graph_fingerprint(graph),
+        )
+        program = bind_effective_motion(context, scene)
+        evidence = self._collect_candidate_evidence(candidate, scene, program=program)
+        materialized_graph = materialize_execution_graph(program, graph)
+        return PreparedCandidate(context, program, materialized_graph, evidence)
+
+    def execute_prepared(self, prepared: PreparedCandidate) -> object:
+        """Execute exactly the graph whose motion program was previewed."""
+
+        scene = self._require_decision_scene()
+        candidate = prepared.context.candidate
+        self._require_decision_version(candidate, scene)
+        if prepared.program.decision_scene_version != scene.scene_version:
+            raise ValueError("prepared program decision scene does not match retained decision scene")
+        if (
+            prepared.program.execution_graph_fingerprint
+            != prepared.context.execution_graph_fingerprint
+        ):
+            raise ValueError("prepared program execution graph fingerprint does not match context")
+        if (
+            execution_graph_fingerprint(prepared.context.mission_graph)
+            != prepared.context.execution_graph_fingerprint
+        ):
+            raise ValueError("prepared context execution graph fingerprint does not match graph")
+        if prepared.materialized_graph.parent_scene_version != scene.scene_version:
+            raise ValueError("prepared materialized graph does not match decision scene")
+        expected_graph = materialize_execution_graph(
+            prepared.program,
+            prepared.context.mission_graph,
+        )
+        if prepared.materialized_graph != expected_graph:
+            raise ValueError("prepared materialized graph does not match execution graph fingerprint")
+        geometry = prepared.evidence.geometry
+        if geometry is None:
+            raise ValueError("prepared candidate requires geometry evidence")
+        if geometry.candidate_fingerprint != subgraph_fingerprint(candidate.subgraph):
+            raise ValueError("prepared geometry evidence does not match candidate fingerprint")
+        if geometry.scene_version != scene.scene_version:
+            raise ValueError("prepared geometry evidence does not match decision scene")
+        if geometry.program_scope != "mission_suffix":
+            raise ValueError("prepared geometry evidence does not cover the mission suffix")
+        if geometry.program_fingerprint != prepared.program.program_fingerprint:
+            raise ValueError("prepared geometry evidence program fingerprint does not match program")
+        if (
+            geometry.execution_graph_fingerprint
+            != prepared.program.execution_graph_fingerprint
+        ):
+            raise ValueError("prepared geometry evidence execution graph fingerprint does not match program")
+        return self._execute_graph(prepared.materialized_graph)
+
+    def _collect_candidate_evidence(
+        self,
+        candidate: GraphCandidate,
+        scene: SceneSnapshot,
+        *,
+        program: EffectiveMotionProgram | None = None,
+    ) -> CandidateEvidence:
         base = self._evidence_collector(candidate, scene)
         if not isinstance(base, CandidateEvidence):
             raise TypeError("candidate evidence collector must return CandidateEvidence")
@@ -149,15 +251,25 @@ class LiveLiberoEvidenceSession:
             self._preview_backend = _build_preview_backend()
         deadline_ns = time.monotonic_ns() + int(self._config.geometry_deadline_ms * 1_000_000)
         try:
-            geometry = self._geometry_collector(
-                candidate,
-                scene,
-                self._resources.geometry_local_map if self._resources is not None else None,
-                self._preview_backend,
-                deadline_ns,
-            )
+            if program is None:
+                geometry = self._geometry_collector(
+                    candidate,
+                    scene,
+                    self._resources.geometry_local_map if self._resources is not None else None,
+                    self._preview_backend,
+                    deadline_ns,
+                )
+            else:
+                geometry = _collect_program_geometry_evidence(
+                    candidate,
+                    scene,
+                    self._resources.geometry_local_map if self._resources is not None else None,
+                    self._preview_backend,
+                    deadline_ns,
+                    program,
+                )
         except Exception as exc:  # noqa: BLE001 - geometry must fail open as typed unknown evidence.
-            geometry = _unknown_geometry(candidate, scene, str(exc))
+            geometry = _unknown_geometry(candidate, scene, str(exc), program=program)
         if not isinstance(geometry, GeometryEvidence):
             raise TypeError("geometry collector must return GeometryEvidence")
         expected_fingerprint = subgraph_fingerprint(candidate.subgraph)
@@ -165,6 +277,13 @@ class LiveLiberoEvidenceSession:
             raise ValueError("geometry evidence does not match candidate fingerprint")
         if geometry.scene_version != scene.scene_version:
             raise ValueError("geometry evidence does not match decision scene")
+        if program is not None:
+            if geometry.program_scope != "mission_suffix":
+                raise ValueError("program geometry evidence must cover the mission suffix")
+            if geometry.program_fingerprint != program.program_fingerprint:
+                raise ValueError("geometry evidence does not match effective motion program")
+            if geometry.execution_graph_fingerprint != program.execution_graph_fingerprint:
+                raise ValueError("geometry evidence does not match execution graph")
 
         return replace(
             base,
@@ -185,6 +304,10 @@ class LiveLiberoEvidenceSession:
 
         scene = self._require_decision_scene()
         self._require_decision_version(candidate, scene)
+        return self._execute_graph(graph)
+
+    def _execute_graph(self, graph: MissionGraph) -> object:
+        scene = self._require_decision_scene()
         if self._executed:
             raise RuntimeError("same-runtime session has already executed a candidate")
         assert self._resources is not None
@@ -293,10 +416,32 @@ def _collect_geometry_evidence(
     )
 
 
+def _collect_program_geometry_evidence(
+    candidate: GraphCandidate,
+    scene: SceneSnapshot,
+    local_map: object | None,
+    preview_backend: object,
+    deadline_ns: int,
+    program: EffectiveMotionProgram,
+) -> GeometryEvidence:
+    from capmas.perception.geometry_evidence import candidate_geometry_evidence
+
+    return candidate_geometry_evidence(
+        candidate,
+        scene,
+        local_map,
+        preview_backend,
+        deadline_ns,
+        program=program,
+    )
+
+
 def _unknown_geometry(
     candidate: GraphCandidate,
     scene: SceneSnapshot,
     error: str,
+    *,
+    program: EffectiveMotionProgram | None = None,
 ) -> GeometryEvidence:
     reason = f"geometry provider failed: {error}"
 
@@ -316,6 +461,11 @@ def _unknown_geometry(
         provider_version="unknown",
         captured_at_ns=time.time_ns(),
         latency_ms=0.0,
+        execution_graph_fingerprint=(
+            program.execution_graph_fingerprint if program is not None else None
+        ),
+        program_fingerprint=program.program_fingerprint if program is not None else None,
+        program_scope="mission_suffix" if program is not None else "subgraph",
     )
 
 
@@ -376,8 +526,10 @@ def _execution_payload(
 
 
 __all__ = [
+    "EffectiveMotionEvidenceSession",
     "LiveLiberoEvidenceResources",
     "LiveLiberoEvidenceSession",
     "LiveLiberoEvidenceSessionConfig",
     "PreExecutionEvidenceSession",
+    "PreparedCandidate",
 ]
