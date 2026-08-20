@@ -78,6 +78,23 @@ def test_policy_names_do_not_make_duplicate_programs_diverse() -> None:
     )
 
 
+def test_identical_local_graphs_are_a_semantic_abstention_not_an_input_error() -> None:
+    from capmas.agents.candidate_diversity import CandidateDiversityValidator
+
+    first = _candidate("policy-0", "policy-0", "same local graph")
+    second = _candidate("safety", "safety", "same local graph")
+    decision = CandidateDiversityValidator().inspect(
+        (
+            _program(first, semantic_signature="same-motion"),
+            _program(second, semantic_signature="same-motion"),
+        ),
+        (first, second),
+    )
+
+    assert decision.requires_regeneration is True
+    assert all(item.candidate_semantic_equivalent for item in decision.identifiability)
+
+
 def test_different_programs_with_equal_evidence_are_not_identifiable() -> None:
     from capmas.agents.candidate_diversity import CandidateDiversityValidator
 

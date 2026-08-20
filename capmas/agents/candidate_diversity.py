@@ -60,19 +60,19 @@ class CandidateDiversityValidator:
         if len(bound_programs) != len(proposals):
             raise ValueError("candidate diversity programs must align one-to-one with candidates")
 
-        programs_by_fingerprint: dict[str, EffectiveMotionProgram] = {}
-        for program in bound_programs:
-            if program.candidate_fingerprint in programs_by_fingerprint:
-                raise ValueError("effective motion programs must have unique candidate fingerprints")
-            programs_by_fingerprint[program.candidate_fingerprint] = program
-
         candidate_fingerprints = tuple(subgraph_fingerprint(candidate.subgraph) for candidate in proposals)
-        if len(set(candidate_fingerprints)) != len(candidate_fingerprints):
-            raise ValueError("candidate diversity requires unique candidate fingerprints")
-        if set(programs_by_fingerprint) != set(candidate_fingerprints):
-            raise ValueError("effective motion programs do not match candidate fingerprints")
+        for candidate, program, fingerprint in zip(
+            proposals,
+            bound_programs,
+            candidate_fingerprints,
+            strict=True,
+        ):
+            if program.candidate_fingerprint != fingerprint:
+                raise ValueError(
+                    f"effective motion program does not match candidate {candidate.candidate_id!r}"
+                )
 
-        ordered_programs = tuple(programs_by_fingerprint[fingerprint] for fingerprint in candidate_fingerprints)
+        ordered_programs = bound_programs
         semantic_counts = Counter(program.semantic_signature for program in ordered_programs)
         evidence_signatures = tuple(_evidence_signature(candidate.evidence) for candidate in proposals)
         evidence_counts = Counter(evidence_signatures)
