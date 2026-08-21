@@ -955,9 +955,77 @@ audited before submission: semantic duplicates produce the typed
 different programs with equal evidence remain an explicit non-identifiable
 tie rather than an evidence-selected result.
 
-The separate P5.3.2 harness has only been tested in manifest preflight and
-GPU-free dry-run mode. The P5.3.2 ten-seed capability gate is unrun: there is
-no concrete P5.3.2 seed manifest, no physical output directory, and no new
-success-rate claim. P5.6D remains immutable and is neither relabelled nor
-reused for calibration; calibration, Shadow Arbiter, canary, TSDF, semantic
-adapters, and learned grasp selection are unchanged.
+The separately approved P5.3.2 seeds 52--61 have a preserved v1 GPU-Molmo
+manifest and two infrastructure-only live attempts. The first failed before
+CAP-X import-path setup; the second reached the API services but exhausted GPU
+5 while `FrankaLiberoApi` constructed Molmo. Neither attempt reset LIBERO nor
+submitted a candidate, so their ten seeds remain unconsumed and neither is an
+execution or success-rate result.
+
+The replacement block used an independently hashed v2 CPU-Molmo manifest for
+the same seeds. It kept the CAP-X API, Molmo model, prompts, and fallback
+semantics, while placing Molmo on CPU before every CAP-X import; CAP-X services
+and LIBERO remained constrained to GPU 5. The completed artifact is
+`outputs/phase5/P5.3.2_object6_capability/20260820_081203_3c028a8f/`, bound to
+manifest SHA-256 `3c028a8f169e46f9992f0d1551809e12726127a83bd3cb250cf0a87beda9f508`.
+The P5.3.2 ten-seed capability gate is closed: the 2/10 infrastructure-unknown
+cases are seeds 54 and 58, due to uniformly invalid depth from both cameras,
+and the 4/10 physical-execution reach is below the 80 percent requirement. Of four
+physical submissions, one reached evaluator success but none completed the
+graph; all four preserve matching preview/execution fingerprints. The decision
+ledger is three evidence-score selections, one evidence tie-break, four safety
+abstentions, and zero semantic-equivalence abstentions. The output manifest
+verifies all 118 tracked files.
+
+The historical top-level `run_config.json` still says `status="running"`: the
+pre-run value was not replaced by the earlier runner after its normal loop.
+Per-case terminal logs, aggregate counts, and the verified manifest establish
+completion. The runner is now regression-tested to persist
+`status="completed"` for future live blocks; this artifact is not rewritten.
+P5.6D remains immutable and is neither relabelled nor reused for calibration;
+calibration, Shadow Arbiter, canary, TSDF, semantic adapters, and learned grasp
+selection are unchanged.
+
+### P5.3.2.1 Diagnostic Observability (2026-08-21)
+
+The frozen object-6 P5.3.2 capability block is followed only by isolated
+diagnostics, written beneath `outputs/phase5/P5.3.2.1_diagnostics/`. Each run
+has `run_config.json`, mode stdout/stderr, `results/diagnostic.json`, and a
+manifest; the configuration must state `diagnostic_only=true` and
+`eligible_for_evaluation=false`. These are not success-rate, calibration, or
+Arbiter-effect experiments.
+
+The protocol assigns seed 53 to an `execute` reproduction with at most one
+same-runtime physical submission, seeds 54 and 58 to zero-submit `depth`
+probes, and seed 57 to the initial zero-submit `preview` probe. The preview
+lane preserves the candidate-bound effective program plus segment/map-query
+occupancy, clearance, confidence, version, and timestamp data; seeds 59--61
+are reserved for identical no-submit geometry follow-ups. The depth lane
+captures raw and metric depth statistics and rendering metadata without API
+servers or candidate action. The execute lane preserves graph events,
+predicate reports, full skill traces, scene transitions, and raw physical
+pose diagnostics.
+
+No diagnostic output is eligible for a frozen-manifest replacement or a P5.6
+feature row. A later task-completion or geometry repair requires a confirmed single root cause,
+captured by its assigned lane, in a separately reviewed design.
+
+#### Diagnostic result
+
+The seed-53 execution produced `evaluator_success=true` but
+`verifier_success=false`. The pick action and its postconditions completed;
+the place action released the gripper successfully, while the post-action
+snapshot measured the butter-to-basket distance as `0.0694 m`, just above the
+current `0.06 m` `object_at_target` threshold. This is retained as a
+verifier false-negative reproduction. It does not authorize a threshold
+change because the diagnostic does not establish that the sensor pose is the
+correct reference for all layouts.
+
+The seed-54 and seed-58 depth probes both found valid, non-uniform metric depth
+for both cameras, so the prior uniform `529.771 m` observation was not
+reproduced after a bare low-level reset. The seed-57 preview found distinct
+candidate programs but identical grasp/lift/transfer occupancy and aggregate
+geometry outcomes. The result is therefore mixed rather than a single repair
+root cause: keep the historical artifact immutable, keep the capability gate
+closed, and route any verifier, map, or task-capability changes to separately
+reviewed work packages.

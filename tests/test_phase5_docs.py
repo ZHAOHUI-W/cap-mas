@@ -147,4 +147,28 @@ def test_phase5_docs_record_effective_motion_capability_boundary():
         assert "EffectiveMotionProgram" in document
         assert "candidate_semantic_equivalence" in document
         assert "P5.6D" in document and "immutable" in document
-        assert "P5.3.2 ten-seed capability gate is unrun" in document
+        assert "20260820_081203_3c028a8f" in document
+        assert "P5.3.2 ten-seed capability gate is closed" in document
+        assert "2/10 infrastructure-unknown" in document
+        assert "4/10 physical-execution reach" in document
+
+
+def test_phase5_docs_record_p532_diagnostic_only_promotion_boundary():
+    documents = [
+        (ROOT / name).read_text(encoding="utf-8")
+        for name in (
+            "docs/phase5-evidence-evolution.md",
+            "docs/implementation-roadmap.md",
+            "docs/experiments.md",
+            "docs/superpowers/specs/2026-08-20-p5-3-2-object6-effective-motion-design.md",
+        )
+    ]
+
+    for document in documents:
+        assert "P5.3.2.1 Diagnostic Observability" in document
+        assert "diagnostic_only=true" in document
+        assert "eligible_for_evaluation=false" in document
+        assert "confirmed single root cause" in document
+    assert "seed 53" in documents[3]
+    assert "seeds 54 and 58" in documents[3]
+    assert "seed 57" in documents[3]

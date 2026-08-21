@@ -1225,8 +1225,68 @@ regeneration. Different programs with equal evidence remain explicitly
 non-identifiable; they are not reported as an evidence-selected Arbiter gain.
 
 The P5.6D seed-32--51 qualification artifacts remain immutable and are not
-inputs to this work. The P5.3.2 ten-seed capability gate is unrun: the code
-provides a SHA-256-checked manifest schema and GPU-free dry-run, but no
-concrete P5.3.2 manifest has been written and no CAP-X/LIBERO case has been
-executed. Calibration, Shadow Arbiter, canary, TSDF, semantic adapters, and
-learned grasp selection remain outside this increment.
+inputs to this work. The CPU-Molmo P5.3.2 block completed at
+`outputs/phase5/P5.3.2_object6_capability/20260820_081203_3c028a8f/` under the
+hash-bound v2 manifest `3c028a8f169e46f9992f0d1551809e12726127a83bd3cb250cf0a87beda9f508`.
+The P5.3.2 ten-seed capability gate is closed: the 2/10 infrastructure-unknown
+cases are seeds 54 and 58, from uniformly invalid depth on both cameras; the
+4/10 physical-execution reach (4/8 live sessions) is below the required 80
+percent. The four submissions yielded one evaluator success but no graph
+completion, with zero preview/execution fingerprint mismatches. There were
+three evidence-score selections, one evidence tie-break, four safety
+abstentions, and zero semantic-equivalence abstentions. The final artifact
+manifest verifies all 118 entries.
+
+The initial runner wrote `status="running"` before the loop and did not update
+it after normal completion. Case terminal logs, `results/counts.json`, and the
+verified manifest establish the result; the historical artifact is not
+rewritten. The runner now records `status="completed"` after a normal live
+loop. This closed gate neither retries nor replaces its frozen seeds and does
+not enable calibration, Shadow Arbiter, canary, TSDF, semantic adapters, or
+learned grasp selection.
+
+### P5.3.2.1 Diagnostic Observability (2026-08-21)
+
+P5.3.2.1 adds observability only after the P5.3.2 ten-seed capability gate is
+closed. Its separate run directories live under
+`outputs/phase5/P5.3.2.1_diagnostics/` and retain terminal logs,
+`results/diagnostic.json`, and a manifest. Each config records
+`diagnostic_only=true`, `eligible_for_evaluation=false`, and an enforced
+physical execution budget. A diagnostic output cannot become a P5.6 feature
+row, replace an immutable seed, or affect Arbiter/calibration behavior.
+
+The lanes partition the known failures. Seed 53 permits one same-runtime
+`execute` reproduction with detailed postcondition, trace, graph-event, scene,
+robot, and object-pose evidence. Seeds 54 and 58 run zero-submit `depth`
+probes over a bare low-level CAP-X reset, recording raw and converted RGB-D
+ranges and camera render metadata. Seed 57 runs the initial zero-submit
+`preview` lane; it binds all candidates and records program segments plus
+per-query map occupancy, clearance, confidence, frame/version, and timestamp.
+Seeds 59--61 remain reserved for more no-submit geometry previews. These
+lanes do not alter prompt, typed skills, safety thresholds, TSDF, semantic
+adapters, or the memory/controller path.
+
+Promotion remains fail-closed: a subsequent repair must cite a confirmed single root cause
+supported by the dedicated lane's retained evidence. A
+mixed or unresolved result is documented as diagnostic-only and cannot be
+converted into a calibrated score or a new capability claim.
+
+#### Diagnostic outcome
+
+The execute reproduction on seed 53 shows that the physical environment can
+accept the placement while the CAP-MAS postcondition verifier rejects it:
+LIBERO reported evaluator success, `gripper_open()` passed, and the measured
+`object_at_target(butter,basket)` distance was `0.0694 m` against the existing
+`0.06 m` threshold. The pick transition passed, and all recorded skill calls
+completed. This is a typed verifier false-negative observation, not a basis
+for changing the threshold or relabeling the frozen capability block.
+
+The reset-only depth captures for seeds 54 and 58 were finite and non-uniform
+for both cameras, so the historical uniform-depth failure remains
+unresolved and cannot be assigned to the bare simulator reset. The seed-57
+preview retained distinct candidate programs, but both candidates shared
+occupied grasp/lift/transfer queries and the same aggregate geometry result.
+Consequently P5.3.2.1 ends with mixed evidence: verifier disagreement is
+confirmed for one episode, while the depth and candidate-geometry hypotheses
+remain open. No diagnostic artifact is eligible for calibration or for a
+policy/threshold/TSDF repair without a new scoped design.

@@ -312,7 +312,7 @@ def _session(scene_version: int = 1) -> tuple[LiveLiberoEvidenceSession, _FakeBa
         config,
         resources_factory=lambda _config: LiveLiberoEvidenceResources(
             runtime=runtime,
-            geometry_local_map=object(),
+            geometry_local_map=None,
         ),
         evidence_collector=_base_evidence,
         geometry_collector=_geometry,
@@ -365,6 +365,25 @@ def test_session_prepares_geometry_and_executes_the_same_materialized_graph() ->
     assert prepared.evidence.geometry is not None
     assert prepared.evidence.geometry.program_fingerprint == prepared.program.program_fingerprint
     assert result["graph"] == prepared.materialized_graph
+
+
+def test_session_previews_prepared_program_without_physical_execution() -> None:
+    session, backend = _session()
+    scene = session.start()
+    candidate, graph = _pick_place_candidate_and_graph(scene.scene_version)
+
+    prepared = session.prepare_candidate(candidate, graph)
+    preview = session.preview_prepared(prepared)
+
+    assert preview.scene_version == scene.scene_version
+    assert [segment.segment_id for segment in preview.segments] == [
+        "grasp_approach",
+        "lift",
+        "transfer",
+        "place_approach",
+        "release",
+    ]
+    assert backend.stopped is False
 
 
 def test_session_rejects_tampered_prepared_graph() -> None:

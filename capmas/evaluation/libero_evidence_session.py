@@ -64,6 +64,8 @@ class EffectiveMotionEvidenceSession(PreExecutionEvidenceSession, Protocol):
 
     def execute_prepared(self, prepared: PreparedCandidate) -> object: ...
 
+    def preview_prepared(self, prepared: PreparedCandidate) -> object: ...
+
 
 @dataclass(frozen=True)
 class LiveLiberoEvidenceSessionConfig:
@@ -235,6 +237,26 @@ class LiveLiberoEvidenceSession:
         ):
             raise ValueError("prepared geometry evidence execution graph fingerprint does not match program")
         return self._execute_graph(prepared.materialized_graph)
+
+    def preview_prepared(self, prepared: PreparedCandidate) -> object:
+        """Return segment-level preview evidence without executing the robot."""
+
+        scene = self._require_decision_scene()
+        self._require_decision_version(prepared.context.candidate, scene)
+        if prepared.program.decision_scene_version != scene.scene_version:
+            raise ValueError("prepared program decision scene does not match retained decision scene")
+        if prepared.program.execution_graph_fingerprint != prepared.context.execution_graph_fingerprint:
+            raise ValueError("prepared program execution graph fingerprint does not match context")
+        if self._preview_backend is None:
+            self._preview_backend = _build_preview_backend()
+        preview_program = getattr(self._preview_backend, "preview_program", None)
+        if not callable(preview_program):
+            raise TypeError("motion preview backend does not support effective motion programs")
+        return preview_program(
+            prepared.program,
+            scene,
+            self._resources.geometry_local_map if self._resources is not None else None,
+        )
 
     def _collect_candidate_evidence(
         self,
@@ -495,10 +517,13 @@ def _execute_live_graph(
         episode_epoch=episode.handle.episode_epoch,
         task_id=getattr(runtime.backend, "task_id", episode.handle.task_id),
     )
+    final_scene = runtime.state_store.latest()
     return _execution_payload(
         result,
         grounded,
         evaluator_success=bool(runtime.backend.evaluator_success()),
+        scene_before=scene,
+        scene_after=final_scene,
     )
 
 
@@ -507,22 +532,20 @@ def _execution_payload(
     graph: MissionGraph,
     *,
     evaluator_success: bool,
+    scene_before: SceneSnapshot | None = None,
+    scene_after: SceneSnapshot | None = None,
 ) -> dict[str, object]:
     """Project graph telemetry into the physical outcome contract."""
 
-    from capmas.evaluation.labels import extract_horizon
+    from capmas.evaluation.physical_payload import physical_result_payload
 
-    failure = getattr(result, "failure", None)
-    return {
-        "completed": bool(getattr(result, "completed", False)),
-        "graph_completed": bool(getattr(result, "completed", False)),
-        "evaluator_success": evaluator_success,
-        "verifier_success": bool(getattr(result, "completed", False)),
-        "failure_class": getattr(failure, "failure_class", None),
-        "failure_reason": getattr(failure, "message", None),
-        "trace_count": len(getattr(result, "traces", ())),
-        "horizon": extract_horizon(graph, getattr(result, "events", ())).to_dict(),
-    }
+    return physical_result_payload(
+        result,
+        evaluator_success=evaluator_success,
+        graph=graph,
+        scene_before=scene_before,
+        scene_after=scene_after,
+    )
 
 
 __all__ = [

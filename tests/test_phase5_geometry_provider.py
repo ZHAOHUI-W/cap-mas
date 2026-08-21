@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 from capmas.contracts.candidates import GraphCandidate, subgraph_fingerprint
 from capmas.contracts.graph import CheckpointSpec, MotionIntent, SubgraphNodeSpec, SubgraphSpec
 from capmas.contracts.scene import ObjectTrack, SceneSnapshot
@@ -222,6 +224,12 @@ def test_program_preview_distinguishes_place_approach_lengths() -> None:
 
     assert short.by_segment("place_approach").collision_free is True
     assert long.by_segment("place_approach").collision_free is False
+    queries = long.by_segment("place_approach").map_queries
+    assert queries[-1].point_xyz == pytest.approx((0.6, 0.25, 0.04))
+    occupied = next(query for query in queries if query.occupied)
+    assert occupied.clearance_m == 0.0
+    assert occupied.map_version == 1
+    assert occupied.snapshot_timestamp_ns == 100
 
 
 def test_program_geometry_is_conservative_and_has_program_lineage() -> None:

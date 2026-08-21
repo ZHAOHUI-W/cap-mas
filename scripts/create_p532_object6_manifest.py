@@ -9,14 +9,18 @@ import sys
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Literal
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-SCHEMA_VERSION = "p532.collection.v1"
+LEGACY_SCHEMA_VERSION = "p532.collection.v1"
+SCHEMA_VERSION = "p532.collection.v2"
+SUPPORTED_SCHEMA_VERSIONS = frozenset((LEGACY_SCHEMA_VERSION, SCHEMA_VERSION))
 REQUIRED_SEED_COUNT = 10
 REQUIRED_GPU = "5"
+MOLMO_DEVICES = frozenset(("cpu", "cuda"))
 
 
 @dataclass(frozen=True)
@@ -44,6 +48,7 @@ class Object6Case:
     effective_motion_scope: str = "mission_suffix"
     max_restarts: int = 0
     gpu: str = REQUIRED_GPU
+    molmo_device: Literal["cpu", "cuda"] = "cuda"
     max_physical_executions: int = 1
 
 
@@ -63,7 +68,12 @@ def asset_sha256(path: str | Path) -> str:
     return digest.hexdigest()
 
 
-def build_object6_manifest(seeds: Iterable[int], assets: Object6Assets) -> P532Manifest:
+def build_object6_manifest(
+    seeds: Iterable[int],
+    assets: Object6Assets,
+    *,
+    molmo_device: Literal["cpu", "cuda"] = "cuda",
+) -> P532Manifest:
     cases = tuple(
         Object6Case(
             case_id=f"object-6-seed{seed}",
@@ -75,6 +85,7 @@ def build_object6_manifest(seeds: Iterable[int], assets: Object6Assets) -> P532M
             candidate_artifact_sha256=assets.candidate_artifact_sha256,
             object_name=assets.object_name,
             target_name=assets.target_name,
+            molmo_device=molmo_device,
         )
         for seed in seeds
     )
@@ -89,10 +100,11 @@ def validate_manifest(
     project_root: str | Path | None = None,
     check_asset_files: bool = True,
 ) -> None:
-    if manifest.schema_version != SCHEMA_VERSION:
+    if manifest.schema_version not in SUPPORTED_SCHEMA_VERSIONS:
         raise ValueError("unsupported P5.3.2 manifest schema")
     keys: set[tuple[str, int]] = set()
     case_ids: set[str] = set()
+    molmo_devices: set[str] = set()
     for case in manifest.cases:
         key = (case.task_id, case.seed)
         if key in keys:
@@ -109,6 +121,9 @@ def validate_manifest(
             raise ValueError("P5.3.2 cases require max_restarts=0")
         if case.gpu != REQUIRED_GPU:
             raise ValueError("P5.3.2 cases require GPU 5")
+        if case.molmo_device not in MOLMO_DEVICES:
+            raise ValueError("P5.3.2 cases require molmo_device cpu or cuda")
+        molmo_devices.add(case.molmo_device)
         if case.max_physical_executions != 1:
             raise ValueError("P5.3.2 cases allow one physical execution per case")
         for name, digest in (
@@ -126,6 +141,10 @@ def validate_manifest(
                 raise ValueError(f"candidate artifact digest mismatch for case {case.case_id}")
     if len(manifest.cases) != REQUIRED_SEED_COUNT:
         raise ValueError("P5.3.2 manifest must contain exactly ten cases")
+    if len(molmo_devices) != 1:
+        raise ValueError("P5.3.2 manifest must use one Molmo runtime profile")
+    if manifest.schema_version == LEGACY_SCHEMA_VERSION and molmo_devices != {"cuda"}:
+        raise ValueError("legacy P5.3.2 manifests support only the CUDA Molmo profile")
     expected = manifest_sha256(manifest)
     if manifest.manifest_sha256 and manifest.manifest_sha256 != expected:
         raise ValueError("manifest digest mismatch")
@@ -168,27 +187,30 @@ def _finalize(manifest: P532Manifest) -> P532Manifest:
 
 
 def _payload(manifest: P532Manifest) -> dict[str, object]:
+    cases = []
+    for case in manifest.cases:
+        payload = {
+            "case_id": case.case_id,
+            "task_id": case.task_id,
+            "seed": case.seed,
+            "config_path": case.config_path,
+            "config_sha256": case.config_sha256,
+            "candidate_artifact": case.candidate_artifact,
+            "candidate_artifact_sha256": case.candidate_artifact_sha256,
+            "object_name": case.object_name,
+            "target_name": case.target_name,
+            "effective_motion_scope": case.effective_motion_scope,
+            "max_restarts": case.max_restarts,
+            "gpu": case.gpu,
+            "max_physical_executions": case.max_physical_executions,
+        }
+        if manifest.schema_version == SCHEMA_VERSION:
+            payload["molmo_device"] = case.molmo_device
+        cases.append(payload)
     return {
         "manifest_id": manifest.manifest_id,
         "schema_version": manifest.schema_version,
-        "cases": [
-            {
-                "case_id": case.case_id,
-                "task_id": case.task_id,
-                "seed": case.seed,
-                "config_path": case.config_path,
-                "config_sha256": case.config_sha256,
-                "candidate_artifact": case.candidate_artifact,
-                "candidate_artifact_sha256": case.candidate_artifact_sha256,
-                "object_name": case.object_name,
-                "target_name": case.target_name,
-                "effective_motion_scope": case.effective_motion_scope,
-                "max_restarts": case.max_restarts,
-                "gpu": case.gpu,
-                "max_physical_executions": case.max_physical_executions,
-            }
-            for case in manifest.cases
-        ],
+        "cases": cases,
         "manifest_sha256": manifest.manifest_sha256,
     }
 
@@ -238,6 +260,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--object-name", default="butter")
     parser.add_argument("--target-name", default="basket")
     parser.add_argument("--start-seed", type=int, required=True)
+    parser.add_argument("--molmo-device", choices=sorted(MOLMO_DEVICES), default="cuda")
     parser.add_argument("--output", required=True)
     return parser.parse_args()
 
@@ -253,7 +276,11 @@ def main() -> None:
         object_name=args.object_name,
         target_name=args.target_name,
     )
-    manifest = build_object6_manifest(range(args.start_seed, args.start_seed + 10), assets)
+    manifest = build_object6_manifest(
+        range(args.start_seed, args.start_seed + 10),
+        assets,
+        molmo_device=args.molmo_device,
+    )
     path = write_manifest(args.output, manifest)
     print(f"wrote {path} sha256={manifest.manifest_sha256}")
 

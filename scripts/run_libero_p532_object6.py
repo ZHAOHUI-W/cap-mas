@@ -65,6 +65,7 @@ def run_capability(
         "case_count": len(manifest.cases),
         "effective_motion_scope": "mission_suffix",
         "gpu": "5",
+        "molmo_device": _molmo_device(manifest),
         "max_restarts": 0,
         "dry_run": dry_run,
     }
@@ -81,6 +82,8 @@ def _run_live(manifest: P532Manifest, run_dir: Phase5RunDirectory) -> P532RunRes
     """Execute serial cases once each behind the explicit CLI execute boundary."""
 
     os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+    os.environ["MOLMO_DEVICE"] = _molmo_device(manifest)
+    _setup_capx_paths()
     counts = {
         "live_session_count": 0,
         "physical_execution_count": 0,
@@ -95,6 +98,10 @@ def _run_live(manifest: P532Manifest, run_dir: Phase5RunDirectory) -> P532RunRes
     for case in manifest.cases:
         case_dir = run_dir.path / "cases" / case.case_id
         (case_dir / "logs").mkdir(parents=True, exist_ok=True)
+        (case_dir / "case.json").write_text(
+            json.dumps(_case_runtime_payload(case), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
         stdout_path = case_dir / "logs" / "stdout.log"
         stderr_path = case_dir / "logs" / "stderr.log"
         servers: list[object] = []
@@ -115,6 +122,7 @@ def _run_live(manifest: P532Manifest, run_dir: Phase5RunDirectory) -> P532RunRes
                 "\n".join(
                     (
                         "status=completed",
+                        f"molmo_device={case.molmo_device}",
                         f"physical_candidate_id={outcome.physical_candidate_id}",
                         f"online_run_dir={outcome.run_dir.path}",
                         "",
@@ -125,12 +133,20 @@ def _run_live(manifest: P532Manifest, run_dir: Phase5RunDirectory) -> P532RunRes
         except Exception as exc:  # noqa: BLE001 - gated runner records all infrastructure faults.
             counts["infrastructure_unknown_count"] += 1
             (case_dir / "logs" / "runner.log").write_text(
-                f"status=failed\nerror={type(exc).__name__}: {exc}\n",
+                (
+                    f"status=failed\n"
+                    f"molmo_device={case.molmo_device}\n"
+                    f"error={type(exc).__name__}: {exc}\n"
+                ),
                 encoding="utf-8",
             )
         finally:
             _terminate_servers(servers)
     run_dir.write_json("results/counts.json", counts)
+    run_config_path = run_dir.path / "run_config.json"
+    if run_config_path.is_file():
+        run_config = json.loads(run_config_path.read_text(encoding="utf-8"))
+        run_dir.write_json("run_config.json", {**run_config, "status": "completed"})
     run_dir.finalize_manifest()
     return P532RunResult(run_dir, len(manifest.cases), **counts)
 
@@ -220,12 +236,40 @@ def _outcome_payload(outcome: object) -> dict[str, object]:
     }
 
 
+def _molmo_device(manifest: P532Manifest) -> str:
+    devices = {case.molmo_device for case in manifest.cases}
+    if len(devices) != 1:
+        raise ValueError("P5.3.2 manifest must use one Molmo runtime profile")
+    return devices.pop()
+
+
+def _case_runtime_payload(case: Object6Case) -> dict[str, object]:
+    return {
+        "case_id": case.case_id,
+        "task_id": case.task_id,
+        "seed": case.seed,
+        "gpu": case.gpu,
+        "molmo_device": case.molmo_device,
+        "effective_motion_scope": case.effective_motion_scope,
+        "max_restarts": case.max_restarts,
+        "max_physical_executions": case.max_physical_executions,
+    }
+
+
 def _start_capx_api_servers(config_path: str) -> list[object]:
     from capx.envs.configs.loader import DictLoader
     from capx.envs.runner import _start_api_servers
 
     config = DictLoader.load(config_path)
     return list(_start_api_servers(config.get("api_servers")))
+
+
+def _setup_capx_paths() -> None:
+    """Make CAP-X importable before importing its API-server launcher."""
+
+    from scripts.run_libero_p53_online import _setup_capx_paths as setup
+
+    setup()
 
 
 def _terminate_servers(servers: list[object]) -> None:

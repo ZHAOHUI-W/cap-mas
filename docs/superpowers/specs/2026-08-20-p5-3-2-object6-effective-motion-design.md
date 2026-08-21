@@ -255,6 +255,17 @@ uses GPU 5 without disturbing other workers, and creates a separate output
 directory containing all logs and artifacts. It is not a replacement for the
 fixed P5.6D block.
 
+The gate manifest is versioned by runtime profile. The legacy
+`p532.collection.v1` GPU-Molmo manifest remains immutable and is verified with
+its original byte representation and SHA-256. New `p532.collection.v2`
+manifests include a required, single-valued `molmo_device` field in every case
+and in the manifest hash. A CPU-Molmo case still uses CUDA device 5 for the
+CAP-X API servers and LIBERO execution, but sets `MOLMO_DEVICE=cpu` before any
+CAP-X import. It retains the same Molmo model, prompts, and fallback semantics;
+only runtime placement and latency differ. Its preflight, top-level run config,
+case record, and case log all record that profile, so it cannot be confused
+with the historical GPU execution lane or P5.6D artifacts.
+
 The capability gate requires:
 
 1. zero infrastructure-unknown cases and typed provenance for every terminal
@@ -301,12 +312,82 @@ single physical submission. Its default subgraph route remains unchanged.
 
 The capability harness is implemented as a strict ten-case, SHA-256-bound
 manifest contract and a GPU-free dry-run. A live run requires the explicit
-`--execute` CLI flag and a future independently approved seed block. The
-P5.3.2 ten-seed capability gate is unrun. The P5.6D qualification rows remain
-immutable and cannot be used for new qualification, calibration, Shadow
-Arbiter, or canary conclusions.
+`--execute` CLI flag. The approved seeds 52--61 first produced two preserved
+GPU-Molmo infrastructure-only attempts: one CAP-X import-path failure and one
+GPU-5 Molmo allocation OOM. Neither reset LIBERO nor submitted a physical
+candidate, so no seed was consumed. The replacement CPU-Molmo manifest is a
+new v2 pre-registration for the same unconsumed seeds, rather than a rewrite
+of either failed attempt.
 
-## 10. Non-goals and Rollback
+The CPU-Molmo block completed at
+`outputs/phase5/P5.3.2_object6_capability/20260820_081203_3c028a8f/` with
+manifest SHA-256 `3c028a8f169e46f9992f0d1551809e12726127a83bd3cb250cf0a87beda9f508`.
+The P5.3.2 ten-seed capability gate is closed. The 2/10 infrastructure-unknown
+cases are seeds 54 and 58: both RGB-D cameras reported uniformly invalid depth,
+so the zero-unknown condition failed. The 4/10 physical-execution reach (also
+4/8 live sessions) is below the required 80 percent. One physical execution reached evaluator
+success, but its graph then failed the placement checkpoint; no completed graph
+was recorded. The bound-program provenance check passed with zero fingerprint
+mismatches. Decision accounting is three `evidence_score` selections, one
+`evidence_tie_break`, four safety abstentions, and zero semantic-equivalence
+abstentions. The finalized output manifest verifies cleanly with 118 entries.
+
+The original run's top-level `run_config.json` retains `status="running"`
+because the then-current runner did not write its normal terminal state after
+the case loop. Per-case terminal logs, `results/counts.json`, and the verified
+artifact manifest establish completion. The runner now writes `status="completed"`
+on a normal live completion, covered by a regression test; the historical
+artifact is not rewritten. The P5.6D qualification rows remain immutable and
+cannot be used for new qualification, calibration, Shadow Arbiter, or canary
+conclusions.
+
+## 10. P5.3.2.1 Diagnostic Observability (2026-08-21)
+
+P5.3.2.1 is a diagnostic-only follow-up to the closed ten-seed capability
+gate. It does not change policy prompts, typed-skill arguments, safety
+thresholds, calibration, Shadow Arbiter behavior, TSDF, semantic adapters, or
+the immutable P5.3.2/P5.6D artifacts. Every new run is placed below
+`outputs/phase5/P5.3.2.1_diagnostics/` with stdout/stderr logs,
+`results/diagnostic.json`, and a SHA-256 manifest. Its `run_config.json` must
+state `diagnostic_only=true`, `eligible_for_evaluation=false`, and its
+mode-specific `physical_execution_limit`. These artifacts are never calibration
+rows or formal P5.3.2 replacements.
+
+The lanes are intentionally disjoint:
+
+- seed 53 is one same-runtime `execute` reproduction of the evaluator/graph
+  disagreement, with at most one physical submission and rich trace,
+  predicate, graph-event, scene, robot-state, and tracked-pose telemetry;
+- seeds 54 and 58 use `depth`, which instantiates only the low-level CAP-X
+  environment under a reversible depth probe and permits zero physical
+  submissions; it records raw and converted depth ranges plus render
+  near/far/FOV metadata;
+- seed 57 is the initial `preview` geometry lane, and seeds 59--61 remain
+  follow-up no-submit geometry lanes if needed. They prepare every candidate
+  and record bound programs, per-segment endpoints, map-query occupancy,
+  clearance, map version, confidence, and timestamps, with zero physical
+  submissions.
+
+Promotion is fail-closed. A later repair design may begin only after a
+confirmed single root cause explains its assigned lane with retained evidence,
+and the diagnosis rules out preview/execution fingerprint mismatch for an
+execution claim. An unresolved or mixed result remains a diagnostic artifact;
+it cannot be hidden by a learned score or used to reopen the capability gate.
+
+The completed diagnostic lanes produced a mixed result. Seed 53 is a
+verifier/evaluator disagreement: LIBERO accepted the episode, while the
+post-action scene snapshot gave an object-target distance of `0.0694 m` and
+the current `0.06 m` predicate threshold rejected `object_at_target`. The pick
+postconditions, release predicate, skill traces, and physical execution were
+otherwise successful. Seeds 54 and 58 reproduced valid, non-uniform depth
+after bare reset, so the historical uniform-depth observation is not a
+confirmed low-level reset fault. Seed 57 showed different candidate-bound
+programs but identical occupied grasp/lift/transfer geometry outcomes. These
+observations are retained for future verifier/map/task-capability work; they
+do not change any threshold, policy, skill argument, calibration, TSDF, or
+semantic-adapter behavior and do not reopen the P5.3.2 gate.
+
+## 11. Non-goals and Rollback
 
 This design does not make rehearsal synchronous, loosen hard safety gates, or
 turn a policy-name tie into evidence. The single-intent P5.2 provider remains

@@ -869,11 +869,82 @@ artifacts. The default subgraph-only APIs remain compatible; only the explicit
 
 `scripts/create_p532_object6_manifest.py` defines the separate ten-case
 pre-registration contract and rejects non-GPU-5, restartable, duplicate-seed,
-or byte-different manifests. `scripts/run_libero_p532_object6.py` defaults to
-a dry-run that does not import CAP-X or allocate a GPU. The P5.3.2 ten-seed capability gate is unrun
-pending a separately approved seed range. The P5.6D
-qualification artifacts remain immutable; no P5.6 calibration, shadow, or
-canary behavior is changed by P5.3.2.
+or byte-different manifests. Version 2 adds a hash-bound `molmo_device`
+runtime profile; legacy v1 manifests retain their original hash and implicit
+CUDA profile for audit only. `scripts/run_libero_p532_object6.py` defaults to
+a dry-run that does not import CAP-X or allocate a GPU. Its approved CPU-Molmo
+lane sets `MOLMO_DEVICE=cpu` before CAP-X import while retaining GPU 5 for the
+API servers and LIBERO. The prior GPU-Molmo attempts for seeds 52--61 are
+infrastructure-only and did not consume a reset or submission, so the v2
+replacement manifest keeps those same seeds. The CPU-Molmo block completed at
+`outputs/phase5/P5.3.2_object6_capability/20260820_081203_3c028a8f/` under
+manifest SHA-256 `3c028a8f169e46f9992f0d1551809e12726127a83bd3cb250cf0a87beda9f508`.
+The P5.3.2 ten-seed capability gate is closed: the 2/10 infrastructure-unknown
+cases are seeds 54 and 58 because both depth cameras were uniformly invalid,
+and the 4/10 physical-execution reach is below the 80 percent gate. One of four
+physical submissions achieved evaluator success, but no graph completed; all
+four retained matching preview/execution program fingerprints. The result also
+records three evidence-score selections, one evidence tie-break, four safety
+abstentions, and zero semantic-equivalence abstentions. The final manifest
+verification covers 118 files. The first-run top-level status remains
+`running` only because the old runner did not record its normal terminal state;
+case logs and counts are terminal, the artifact is not rewritten, and the
+runner is now regression-tested to write `completed` for future runs. The
+P5.6D qualification artifacts remain immutable; no P5.6 calibration, shadow,
+or canary behavior is changed by P5.3.2.
+
+### P5.3.2.1 Diagnostic Observability (2026-08-21)
+
+The closed P5.3.2 gate now enters a non-evaluative observability lane, not a
+policy repair. New artifacts are isolated under
+`outputs/phase5/P5.3.2.1_diagnostics/`, each with logs,
+`results/diagnostic.json`, and a manifest. Every run explicitly records
+`diagnostic_only=true` and `eligible_for_evaluation=false`; it cannot replace
+the frozen 52--61 block or contribute a P5.6 calibration label.
+
+The seed-53 `execute` lane permits one same-runtime physical submission to
+reproduce evaluator/graph disagreement with predicate, trace, event, and
+scene diagnostics. The seeds 54 and 58 `depth` lanes reset only the low-level
+environment under a reversible CAP-X depth probe and allow zero submissions.
+The seed-57 `preview` lane prepares all candidates and retains segment/map
+query diagnostics without acting; seeds 59--61 are reserved for the same
+no-submit geometry lane if the first probe is insufficient. No lane changes
+the Arbiter, skill parameters, thresholds, TSDF, semantic adapters, or
+calibration state.
+
+Only a confirmed single root cause with retained lane-specific evidence may
+be promoted into a separate repair plan. Otherwise the result remains
+diagnostic-only and the P5.3.2 capability gate remains closed.
+
+#### P5.3.2.1 diagnostic outcome (2026-08-21)
+
+The seed-53 execute lane reproduced a verifier/evaluator disagreement, but did
+not establish a physical placement failure. The selected graph reached the
+LIBERO evaluator with `evaluator_success=true`; CAP-MAS rejected the same
+transition because `object_at_target(butter,basket)` measured `0.0694 m` while
+the current verifier threshold is `0.06 m`. `gripper_open()` passed, the pick
+subgraph passed both `object_in_gripper` and `gripper_closed`, and every skill
+trace reported completion. This is a confirmed verifier false negative for
+seed 53, not evidence that the placement threshold should be changed: the
+measurement is from a sensor-derived post-action snapshot and the diagnostic
+lane is not an evaluation lane.
+
+The reset-only depth lanes for seeds 54 and 58 both produced finite,
+non-uniform metric depth on `agentview` (`0.7385--2.7925 m`) and
+`robot0_eye_in_hand` (`0.0418--0.3667 m`). The historical uniform-depth fault
+therefore was not reproduced by a bare reset and remains a runtime-path or
+transient hypothesis, not a confirmed root cause. The seed-57 preview retained
+different bound program fingerprints, but both candidates had the same
+reachability/grasp/clearance/collision aggregate (`1/1/0/1`) and identical
+occupied grasp/lift/transfer corridors. This confirms candidate-indistinguish-
+able geometry for that scene, while not proving whether the map is treating the
+payload/target volume as collision occupancy.
+
+The combined result is mixed: one verifier false negative, one unresolved
+historical depth anomaly, and one candidate-geometry indistinguishability
+signal. P5.3.2 remains closed and no policy, skill argument, threshold,
+calibration, TSDF, or semantic-adapter repair is promoted from this diagnostic
+lane.
 
 ## Phase 6 — Memory Controller learning
 

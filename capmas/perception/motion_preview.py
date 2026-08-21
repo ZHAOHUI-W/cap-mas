@@ -28,6 +28,18 @@ class MotionPreview:
 
 
 @dataclass(frozen=True)
+class MapQueryDiagnostic:
+    """One sparse-map query retained for no-submit collision diagnosis."""
+
+    point_xyz: tuple[float, float, float]
+    map_version: int
+    occupied: bool
+    clearance_m: float | None
+    confidence: float
+    snapshot_timestamp_ns: int
+
+
+@dataclass(frozen=True)
 class SegmentMotionPreview:
     """Read-only map/IK result for one bound motion segment."""
 
@@ -41,6 +53,7 @@ class SegmentMotionPreview:
     end_pose_wxyz_xyz: tuple[float, ...] | None
     sampled_points_xyz: tuple[tuple[float, float, float], ...] = ()
     occupied_points_xyz: tuple[tuple[float, float, float], ...] = ()
+    map_queries: tuple[MapQueryDiagnostic, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -291,11 +304,22 @@ class ReferenceMotionPreview:
 
         minimum_clearance: float | None = None
         occupied: list[tuple[float, float, float]] = []
+        queries: list[MapQueryDiagnostic] = []
         for point in samples:
             result = local_map.query(
                 MapRegion(
                     center_xyz=point,
                     extents_xyz=(self.corridor_radius_m,) * 3,
+                )
+            )
+            queries.append(
+                MapQueryDiagnostic(
+                    point_xyz=point,
+                    map_version=result.map_version,
+                    occupied=result.occupied,
+                    clearance_m=0.0 if result.occupied else result.clearance_m,
+                    confidence=result.confidence,
+                    snapshot_timestamp_ns=result.snapshot_timestamp_ns,
                 )
             )
             if result.snapshot_timestamp_ns and result.snapshot_timestamp_ns < scene.sensor_timestamp_ns:
@@ -304,6 +328,7 @@ class ReferenceMotionPreview:
                     "local map is stale",
                     path_length=path_length,
                     samples=samples,
+                    map_queries=tuple(queries),
                 )
             if result.occupied:
                 occupied.append(point)
@@ -334,6 +359,7 @@ class ReferenceMotionPreview:
             segment.end_pose_wxyz_xyz,
             samples,
             tuple(occupied),
+            tuple(queries),
         )
 
     @staticmethod
@@ -343,6 +369,7 @@ class ReferenceMotionPreview:
         *,
         path_length: float | None = None,
         samples: tuple[tuple[float, float, float], ...] = (),
+        map_queries: tuple[MapQueryDiagnostic, ...] = (),
     ) -> SegmentMotionPreview:
         return SegmentMotionPreview(
             segment.segment_id,
@@ -354,6 +381,8 @@ class ReferenceMotionPreview:
             segment.start_pose_wxyz_xyz,
             segment.end_pose_wxyz_xyz,
             samples,
+            (),
+            map_queries,
         )
 
     def _in_workspace(self, position: tuple[float, float, float]) -> bool:

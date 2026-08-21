@@ -34,7 +34,6 @@ from capmas.evaluation.candidate_identity import (
 from capmas.evaluation.evidence_cache import VersionedEvidenceCache
 from capmas.evaluation.evidence_contracts import EvidenceRequestContext
 from capmas.evaluation.feature_snapshots import capture_feature_snapshot
-from capmas.evaluation.labels import extract_horizon
 from capmas.evaluation.libero_evidence_session import (
     EffectiveMotionEvidenceSession,
     PreExecutionEvidenceSession,
@@ -48,6 +47,15 @@ from capmas.evaluation.online_rehearsal import (
     select_with_rehearsal,
 )
 from capmas.evaluation.phase5_artifacts import Phase5RunDirectory
+from capmas.evaluation.physical_payload import (
+    execution_trace_payload as _shared_execution_trace_payload,
+)
+from capmas.evaluation.physical_payload import (
+    physical_result_payload as _shared_physical_result_payload,
+)
+from capmas.evaluation.physical_payload import (
+    scene_snapshot_payload as _shared_scene_snapshot_payload,
+)
 from capmas.evaluation.rehearsal import RehearsalResult
 from capmas.evaluation.rehearsal_evidence import (
     RehearsalPoolConfig,
@@ -811,24 +819,7 @@ def _winner_id(result: object | None) -> str | None:
 
 
 def _execution_trace_payload(trace: object) -> dict[str, object]:
-    return {
-        "trace_id": getattr(trace, "trace_id", None),
-        "status": getattr(trace, "status", None),
-        "failure_class": getattr(trace, "failure_class", None),
-        "skill_traces": [
-            {
-                "invocation_id": getattr(skill_trace, "invocation_id", None),
-                "skill_id": getattr(skill_trace, "skill_id", None),
-                "skill_version": getattr(skill_trace, "skill_version", None),
-                "args": dict(getattr(skill_trace, "args", {}) or {}),
-                "status": getattr(skill_trace, "status", None),
-                "error_type": getattr(skill_trace, "error_type", None),
-                "error_message": getattr(skill_trace, "error_message", None),
-                "output": dict(getattr(skill_trace, "output", {}) or {}),
-            }
-            for skill_trace in getattr(trace, "skill_traces", ())
-        ],
-    }
+    return _shared_execution_trace_payload(trace)
 
 
 def _physical_result_payload(
@@ -840,79 +831,13 @@ def _physical_result_payload(
     graph: MissionGraph | None = None,
 ) -> dict[str, object]:
     """Serialize graph execution failure context at the physical boundary."""
-    failure = getattr(result, "failure", None)
-    failure_payload: dict[str, object] | None = None
-    if failure is not None:
-        metadata = getattr(failure, "metadata", {})
-        evidence_refs = getattr(failure, "evidence_refs", ())
-        failure_payload = {
-            "failure_id": getattr(failure, "failure_id", None),
-            "failure_class": getattr(failure, "failure_class", None),
-            "message": getattr(failure, "message", None),
-            "scene_version": getattr(failure, "scene_version", None),
-            "source_agent": getattr(failure, "source_agent", None),
-            "node_id": getattr(failure, "node_id", None),
-            "subgraph_id": getattr(failure, "subgraph_id", None),
-            "recoverable": bool(getattr(failure, "recoverable", True)),
-            "retry_count": int(getattr(failure, "retry_count", 0)),
-            "recovery_policy": getattr(failure, "recovery_policy", None),
-            "evidence_refs": list(evidence_refs),
-            "metadata": dict(metadata),
-        }
-    completed = bool(getattr(result, "completed", False))
-    failure_class = failure_payload.get("failure_class") if failure_payload else None
-    failure_reason = failure_payload.get("message") if failure_payload else None
-    payload = {
-        "completed": completed,
-        "evaluator_success": bool(evaluator_success),
-        "success": bool(completed and evaluator_success),
-        "execution_valid": True,
-        "failure_class": failure_class,
-        "failure_reason": failure_reason,
-        "failure": failure_payload,
-        "trace_count": len(getattr(result, "traces", ())),
-        "traces": [
-            _execution_trace_payload(trace)
-            for trace in getattr(result, "traces", ())
-        ],
-        "terminal_subgraph": getattr(result, "terminal_subgraph", None),
-        "next_subgraph": getattr(result, "next_subgraph", None),
-        "layout_application": layout_report,
-        "scene_diagnostics": dict(scene_diagnostics or {}),
-    }
-    if graph is not None:
-        events = tuple(getattr(result, "events", ()))
-        payload["graph_events"] = [
-            {
-                "sequence": event.sequence,
-                "kind": event.kind,
-                "subgraph_id": event.subgraph_id,
-                "node_id": event.node_id,
-                "node_type": event.node_type,
-                "attempt": event.attempt,
-                "outcome": event.outcome,
-                "occurred_at_ns": event.occurred_at_ns,
-            }
-            for event in events
-        ]
-        payload["horizon"] = extract_horizon(graph, events).to_dict()
-    else:
-        payload["horizon"] = {
-            "planned_critical_path_actions": None,
-            "planned_critical_path_subgoals": None,
-            "planned_checkpoint_subgraphs": None,
-            "attempted_actions": None,
-            "completed_actions": None,
-            "attempted_subgoals": None,
-            "completed_subgoals": None,
-            "attempted_checkpoints": None,
-            "completed_checkpoints": None,
-            "planned_source": "unknown",
-            "realized_source": "unknown",
-            "planned_valid": False,
-            "realized_valid": False,
-        }
-    return payload
+    return _shared_physical_result_payload(
+        result,
+        evaluator_success=evaluator_success,
+        graph=graph,
+        layout_report=layout_report,
+        scene_diagnostics=scene_diagnostics,
+    )
 
 
 def _scene_debug_payload(
@@ -927,48 +852,7 @@ def _scene_debug_payload(
     the physical execution boundary without exposing image bytes.
     """
 
-    requested = {str(identifier).strip().lower() for identifier in object_ids}
-    tracks = []
-    for track in scene.objects:
-        identifiers = {
-            str(track.track_id).strip().lower(),
-            str(track.label).strip().lower(),
-        }
-        if requested and requested.isdisjoint(identifiers):
-            continue
-        tracks.append(
-            {
-                "track_id": track.track_id,
-                "label": track.label,
-                "pose_wxyz_xyz": tuple(track.pose_wxyz_xyz),
-                "placement_pose_wxyz_xyz": (
-                    tuple(track.placement_pose_wxyz_xyz)
-                    if track.placement_pose_wxyz_xyz is not None
-                    else None
-                ),
-                "placement_pose_source": track.placement_pose_source,
-                "placement_pose_reason": track.placement_pose_reason,
-                "confidence": track.confidence,
-                "last_seen_ns": track.last_seen_ns,
-            }
-        )
-    return {
-        "scene_version": scene.scene_version,
-        "sensor_timestamp_ns": scene.sensor_timestamp_ns,
-        "publish_timestamp_ns": scene.publish_timestamp_ns,
-        "freshness_ms": scene.freshness_ms,
-        "processing_latency_ms": scene.processing_latency_ms,
-        "robot": {
-            key: scene.robot.get(key)
-            for key in (
-                "ee_pose_wxyz_xyz",
-                "gripper_opening",
-                "gripper_commanded_fraction",
-            )
-            if key in scene.robot
-        },
-        "objects": tracks,
-    }
+    return _shared_scene_snapshot_payload(scene, object_ids=object_ids)
 
 
 def _physical_sim_debug_payload(
